@@ -1,5 +1,9 @@
 [
   {
+    "hexes": ["13,5", "13,4", "13,3", "13,2", "13,1", "13,0", "12,2", "12,3", "12,4", "12,2", "12,1", "12,0", "11,1", "11,0"],
+    "description": "<b>The Bleeding Mountains</b><br>The Red Falls<br><i>Iron oxide from the mountains freeze in the glacial lakes. As the snowy mountain caps melt, the waterfalls run red as though bleeding.</i>"
+  },
+  {
     "hexes": ["43,31", "44,31"],
     "description": "<b>The Candles (Eastern)</b><br><i>Sedimentary rock formations, worn by time into towering, candle-like spires that stretch into the sea.</i>"
   },
