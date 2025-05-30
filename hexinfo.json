@@ -1,5 +1,13 @@
 [
   {
+    "hexes": ["43,31", "44,31"],
+    "description": "<b>The Candles (Eastern)</b><br><i>Sedimentary rock formations, worn by time into towering, candle-like spires that stretch into the sea.</i>"
+  },
+  {
+    "hexes": ["17,47", "18,48"],
+    "description": "<b>The Candles (Southern)</b><br><i>Sedimentary rock formations, worn by time into towering, candle-like spires that stretch into the sea.</i>"
+  },
+  {
     "hexes": ["8,34"],
     "description": "<b>The Sea of Glass</b><br><i>The crater left where Celestia fell. The sand has turned to glass for miles in all directions.</i>"
   },
