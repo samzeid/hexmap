@@ -5,7 +5,7 @@
   },
   {
     "hexes": ["12,36", "11,36", "12,37", "12,38", "14,37", "14,38", "13,36"],
-    "description": "<b>The Godhold</b><br>The City of Rags<br><i>A sea of tents surrounds the Reliquary, a makeshift city born from countless pilgrims drawn by faith. Struggling under the overflowing masses and scarce resources, the city is ravaged by diseases like the deadly Scar Scale.</i>"
+    "description": "<b>The Godhold</b><br>The City of Rags<br><i>A sea of tents surrounds the Reliquary, a makeshift city born from countless pilgrims drawn by faith. Struggling under the overpopulation, the city is ravaged by diseases like the deadly Scar Scale.</i>"
   },
   {
     "hexes": ["13,37"],
@@ -13,10 +13,10 @@
   },
   {
     "hexes": ["13,38"],
-    "description": "<b>The Godhold</b><br>Dustmere"
+    "description": "<b>The Godhold</b><br>Dustmere<br><i>Dustmere is the old city's heart, where nobles and wealthy merchants remain. Those who couldn't adapt have fled or been swallowed by the city. Those who remain are amongst the richest in all of Nox.</i>"
   },
   {
     "hexes": ["12,36"],
-    "description": "<b>The Godhold</b><br>Tower"
+    "description": "<b>The Godhold</b><br>Tower<i>A tower built by the Custodiate to monitor the city and enforce law.</i>"
   }
 ]
