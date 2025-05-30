@@ -1,22 +1,22 @@
 [
   {
     "hexes": ["8,34"],
-    "description": "<b>The Sea of Glass<b>"
+    "description": "<b>The Sea of Glass</b>"
   },
   {
     "hexes": ["12,36", "11,36", "12,37", "12,38", "14,37", "14,38", "13,36"],
-    "description": "<b>Godhold<b><br><br>The City of Rags"
+    "description": "<b>Godhold</b><br>The City of Rags"
   },
   {
     "hexes": ["13,37"],
-    "description": "<b>Godhold<b><br><br>The Reliquary"
+    "description": "<b>Godhold</b><br>The Reliquary"
   },
   {
     "hexes": ["13,38"],
-    "description": "<b>Godhold<b><br><br>Dustmere"
+    "description": "<b>Godhold</b><br>Dustmere"
   },
   {
     "hexes": ["12,36"],
-    "description": "<b>Godhold<b><br><br>Tower"
+    "description": "<b>Godhold</b><br>Tower"
   }
 ]
