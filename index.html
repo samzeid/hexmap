@@ -81,7 +81,7 @@
 
     const hexInfoMap = new Map();
 
-    fetch('hexinfo.json')
+    fetch('https://samzeid.github.io/hexmap/hexinfo.json')
       .then(res => res.json())
       .then(data => {
         data.forEach(entry => {
