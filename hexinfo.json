@@ -5,11 +5,11 @@
   },
   {
     "hexes": ["12,36", "11,36", "12,37", "12,38", "14,37", "14,38", "13,36"],
-    "description": "<b>The Godhold</b><br>The City of Rags<br><i>A vast sea of tents surrounds the Godhold Reliquary, a makeshift city born from countless pilgrims drawn by unwavering faith. Struggling under the weight of overflowing masses and scarce resources, the city is ravaged by diseases like the deadly Scar Scale.</i>"
+    "description": "<b>The Godhold</b><br>The City of Rags<br><i>A sea of tents surrounds the Reliquary, a makeshift city born from countless pilgrims drawn by faith. Struggling under the overflowing masses and scarce resources, the city is ravaged by diseases like the deadly Scar Scale.</i>"
   },
   {
     "hexes": ["13,37"],
-    "description": "<b>The Godhold</b><br>The Reliquary<br>"
+    "description": "<b>The Godhold</b><br>The Reliquary<br><i>The Reliquary is the Custodiate's stronghold, encasing the sacred body of Celestia. Nearly impenetrable, it stands as both the main church and the heart of the Custodiate's power.</i>"
   },
   {
     "hexes": ["13,38"],
