@@ -1,5 +1,9 @@
 [
   {
+    "hexes": ["36,10"],
+    "description": "<b>Plunderer's Keep</b><br><i>A long-abandoned castle from before the Zenith of Day, stripped over time for stone and treasure. Now, little remains but a hollow and scattered ruin.</i>"
+  },
+  {
     "hexes": ["13,5", "13,4", "13,3", "13,2", "13,1", "13,0", "12,2", "12,3", "12,4", "12,2", "12,1", "12,0", "11,1", "11,0"],
     "description": "<b>The Bleeding Mountains</b><br>The Red Falls<br><i>Iron oxide from the mountains freeze in the glacial lakes. As the snowy mountain caps melt, the waterfalls run red as though bleeding.</i>"
   },
