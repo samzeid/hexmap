@@ -28,6 +28,10 @@
     "description": "<b>Solis</b><br><i>Once home to Celestia's original church. It has became the capital of the Second Light, remaining the heart of their power and belief.</i>"
   },
   {
+    "hexes": ["32,8", "30,8", "31,8", "30,9", "30,10", "30,11", "29,10", "28,10", "28,11", "29,11"],
+    "description": "<b>Furst Cradle</b><br><i>One of the oldest inhabited regions in Nox, this territory was among the first refuges of humankind.</i>"
+  },
+  {
     "hexes": ["28,7", "29,7", "29,6", "30,7", "31,6", "31,7", "32,7"],
     "description": "<b>Furst Cradle</b><br>Bashan Wall<br><i>An immense wall built by the Bastioners of Nox. It now begins to crumble.</i>"
   },
