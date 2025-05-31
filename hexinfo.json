@@ -1,9 +1,12 @@
 [
-
-{
-  "hexes": ["33,7", "33,8", "32,9", "31,9", "31,10", "31,11", "32,12"],
-  "description": "<b>Furst Cradle</b><br>Kraken's Tongue<br><i>This river wears at the eastern side of the Bashan Wall. But, its sheer cliff-face makes it nigh impenetrable.</i>"
-},
+  {
+    "hexes": ["34,10", "33,9", "33,10", "33,11", "34,11"],
+    "description": "<b>Furst Cradle</b><br>Kraken's Shame<br><i>The smallest river inlet to Kraken Loch. It is said to be a half tentacle, but many joke that it refers to another part of the Kraken's anatomy.</i>"
+  },
+  {
+    "hexes": ["33,7", "33,8", "32,9", "31,9", "31,10", "31,11", "32,12"],
+    "description": "<b>Furst Cradle</b><br>Kraken's Tongue<br><i>This river wears at the eastern side of the Bashan Wall. But, its sheer cliff-face makes it nigh impenetrable.</i>"
+  },
   {
     "hexes": ["27,11", "27,10", "26,10", "26,11", "27,9", "28,9", "28,8", "27,7", "27,8", "26,8", "26,9", "25,10", "24,10", "24,9", "25,8", "25,7", "24,7", "23,7", "23,6", "22,7", "21,6", "28,13", "29,12", "30,13", "31,12"],
     "description": "<b>Furst Cradle</b><br>The Noose<br><i>This river seperates Furst Cradle from the main territories of Nox. It wears at the western side of the Bashan Wall.</i>"
