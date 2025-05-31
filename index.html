@@ -13,7 +13,8 @@
       position: absolute;
       top: 0;
       left: 0;
-      pointer-events: none;
+      pointer-events: auto;
+      user-select: none;
     }
     #info {
       position: fixed;
@@ -26,8 +27,6 @@
       padding: 6px 10px;
       width: 200px;
       box-sizing: border-box;
-      
-      /* Make info a vertical flex container */
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -44,19 +43,16 @@
       height: 200px;
       border: 1px solid white;
       image-rendering: pixelated;
-      /* Remove any flex shrinking to keep consistent size */
       flex-shrink: 0;
-      /* margin-bottom instead of gap works well for spacing */
       margin-bottom: 6px;
     }
     #infoText {
-      margin-top:200px;
-      /* Make sure text flows below the canvas */
+      margin-top: 200px;
       text-align: center;
       white-space: normal;
-      /* Allow text to wrap and fill container width */
       width: 100%;
     }
+
   </style>
 </head>
 <body>
@@ -65,7 +61,7 @@
     <canvas id="canvas"></canvas>
   </div>
   <div id="info">
-    <div><canvas id="zoomPreview" width="200" height="200"></canvas></div>
+    <canvas id="zoomPreview" width="200" height="200"></canvas>
     <div id="infoText">Hover a hex</div>
   </div>
 
@@ -88,6 +84,7 @@
 
     const hexInfoMap = new Map();
 
+    // Load hex info JSON
     fetch('https://samzeid.github.io/hexmap/hexinfo.json')
       .then(res => res.json())
       .then(data => {
@@ -101,6 +98,9 @@
         console.error("Failed to load hex info JSON:", err);
       });
 
+    // Track selected hexes by string key "col,row"
+    const selectedHexes = new Set();
+
     image.onload = () => {
       canvas.width = image.naturalWidth;
       canvas.height = image.naturalHeight;
@@ -110,23 +110,37 @@
       drawGrid();
     };
 
-    function drawHex(x, y, color = 'rgba(0,0,0,0.0)', fill = null) {
+    function drawHex(x, y, options = {}) {
+      const {
+        strokeColor = 'rgba(0,0,0,0.0)',
+        fillColor = null,
+        lineWidth = 1,
+        opacity = 1,
+      } = options;
+
+      ctx.save();
+      ctx.globalAlpha = opacity;
       ctx.beginPath();
       for (let i = 0; i < 6; i++) {
         const angle = Math.PI / 3 * i;
         const px = x + hexSize * Math.cos(angle);
         const py = y + hexSize * Math.sin(angle);
-        ctx.lineTo(px, py);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
       }
       ctx.closePath();
-      if (fill) {
-        ctx.fillStyle = fill;
+
+      if (fillColor) {
+        ctx.fillStyle = fillColor;
         ctx.fill();
       }
-      ctx.strokeStyle = color;
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = lineWidth;
       ctx.stroke();
+      ctx.restore();
     }
 
+    // Draw the entire hex grid, optionally highlighting a hovered hex
     function drawGrid(hoveredHex = null) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -138,23 +152,49 @@
           const x = col * hexHorizSpacing + hexSize + offsetX;
           const y = row * hexVertSpacing + (col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
 
+          const key = `${col},${row}`;
           const isHovered = hoveredHex && hoveredHex.col === col && hoveredHex.row === row;
+          const isSelected = selectedHexes.has(key);
 
-          drawHex(x, y, isHovered ? 'rgba(255,255,255,1)' : 'rgba(0,0,0,0.0)', isHovered ? 'rgba(255,255,255,0.3)' : null);
-
+          // Draw fill for hovered
           if (isHovered) {
-            const key = `${col},${row}`;
-            const customText = hexInfoMap.get(key);
-            infoText.innerHTML = customText
-              ? `${customText}<br><br>(col=${col}, row=${row})`
-              : `Hex: col=${col}, row=${row}`;
-
-            drawZoomedHex(x, y);
+            drawHex(x, y, {
+              strokeColor: 'rgba(255,255,255,1)',
+              fillColor: 'rgba(255,255,255,0.3)',
+              lineWidth: 2,
+              opacity: 1
+            });
+          } else if (isSelected) {
+            // Draw fill for selected hexes with yellow stroke and some opacity
+            drawHex(x, y, {
+              strokeColor: 'yellow',
+              fillColor: 'rgba(255,255,0,0.3)',
+              lineWidth: 2,
+              opacity: 1
+            });
+          } else {
+            // Draw default transparent hex border (optional: remove if you want no grid lines)
+            drawHex(x, y, {
+              strokeColor: 'rgba(0,0,0,0.0)',
+              fillColor: null,
+              lineWidth: 1,
+              opacity: 1
+            });
           }
         }
       }
 
-      if (!hoveredHex) {
+      if (hoveredHex) {
+        const key = `${hoveredHex.col},${hoveredHex.row}`;
+        const customText = hexInfoMap.get(key);
+        infoText.innerHTML = customText
+          ? `${customText}<br><br>(col=${hoveredHex.col}, row=${hoveredHex.row})`
+          : `Hex: col=${hoveredHex.col}, row=${hoveredHex.row}`;
+
+        const x = hoveredHex.col * hexHorizSpacing + hexSize + offsetX;
+        const y = hoveredHex.row * hexVertSpacing + (hoveredHex.col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
+        drawZoomedHex(x, y);
+      } else {
         zoomCtx.clearRect(0, 0, zoomCanvas.width, zoomCanvas.height);
         infoText.textContent = 'Hover a hex';
       }
@@ -188,7 +228,8 @@
         const angle = Math.PI / 3 * i;
         const px = zoomCanvas.width / 2 + (hexSize * scale) * Math.cos(angle);
         const py = zoomCanvas.height / 2 + (hexSize * scale) * Math.sin(angle);
-        zoomCtx.lineTo(px, py);
+        if (i === 0) zoomCtx.moveTo(px, py);
+        else zoomCtx.lineTo(px, py);
       }
       zoomCtx.closePath();
       zoomCtx.strokeStyle = 'rgba(255,255,255,0.3)';
@@ -196,21 +237,86 @@
       zoomCtx.stroke();
     }
 
+    // Calculate which hex coordinates a given (x,y) on the canvas corresponds to
+    function getHexAtPosition(x, y) {
+      const col = Math.floor(x / hexHorizSpacing);
+      const colOffset = (col % 2 === 1) ? hexHeight / 2 : 0;
+      const row = Math.floor((y - colOffset) / hexVertSpacing);
+      return { col, row };
+    }
+
+    // Handle hover on mouse move
     canvas.addEventListener('mousemove', (e) => {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left - offsetX;
       const y = e.clientY - rect.top - offsetY;
 
-      const col = Math.floor(x / hexHorizSpacing);
-      const colOffset = (col % 2 === 1) ? hexHeight / 2 : 0;
-      const row = Math.floor((y - colOffset) / hexVertSpacing);
+      const hoveredHex = getHexAtPosition(x, y);
 
-      drawGrid({ col, row });
+      // Make sure the hovered hex is within grid bounds
+      if (hoveredHex.col >= 0 && hoveredHex.row >= 0) {
+        drawGrid(hoveredHex);
+      } else {
+        drawGrid();
+      }
     });
 
+    // Clear hover info when mouse leaves
     canvas.addEventListener('mouseleave', () => {
       drawGrid();
     });
+
+    // Handle click to toggle hex selection
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left - offsetX;
+      const y = e.clientY - rect.top - offsetY;
+
+      const { col, row } = getHexAtPosition(x, y);
+
+      if (col >= 0 && row >= 0) {
+        const key = `${col},${row}`;
+        if (selectedHexes.has(key)) {
+          selectedHexes.delete(key);
+        } else {
+          selectedHexes.add(key);
+        }
+        drawGrid({ col, row }); // redraw grid to update selection visuals
+      }
+    });
+
+    function copySelectedHexesToClipboard() {
+      const hexStrings = Array.from(selectedHexes).map(key => `"${key}"`);
+      const clipboardText = hexStrings.join(", ");
+      navigator.clipboard.writeText(clipboardText)
+        .then(() => {
+          console.log("Copied:", clipboardText);
+          showTemporaryMessage("Copied hex coordinates to clipboard!");
+        })
+        .catch(err => {
+          console.error("Failed to copy:", err);
+        });
+    }
+
+    // Optional: show a temporary message on copy
+    function showTemporaryMessage(msg) {
+      const prevText = infoText.textContent;
+      infoText.textContent = msg;
+      setTimeout(() => {
+        infoText.textContent = prevText;
+      }, 1500);
+    }
+
+    // Copy on Ctrl/Cmd+C
+    document.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+        if (selectedHexes.size > 0) {
+          copySelectedHexesToClipboard();
+          event.preventDefault();
+        }
+      }
+    });
+
   </script>
 </body>
 </html>
