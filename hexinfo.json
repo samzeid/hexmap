@@ -5,7 +5,7 @@
   },
   {
     "hexes": ["30,24", "30,25", "32,25", "32,24"],
-    "description": "<b>Solis</b><br><i>Once home to Celestia's original church. After her fall and the scattering of her faith, it became the capital of the Second Light, remaining the heart of their power and belief.</i>"
+    "description": "<b>Solis</b><br><i>Once home to Celestia's original church. It has became the capital of the Second Light, remaining the heart of their power and belief.</i>"
   },
   {
     "hexes": ["28,7", "29,7", "29,6", "30,7", "31,6", "31,7", "32,7"],
@@ -14,6 +14,10 @@
   {
     "hexes": ["29,9"],
     "description": "<b>Furst Cradle</b><br>Furstholm<br><i>One of the oldest cities in Nox. It was built during the First Light as a stronghold from monsters from the north.</i>"
+  },
+  {
+    "hexes": ["30,12"],
+    "description": "<b>Furst Cradle</b><br>Windmills<br><i>These mills serve both to grind grain into flour and to act as watchtowers against seafaring raiders.</i>"
   },
   {
     "hexes": ["29,32", "29,31"],
