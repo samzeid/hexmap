@@ -1,5 +1,9 @@
 [
   {
+    "hexes": ["30,14"],
+    "description": "<b>Old Watch</b><br><i>A watchtower that once defended against pirates and pillagers. It is now all but ruins.</i>"
+  },
+  {
     "hexes": ["31,24", "31,23"],
     "description": "<b>Solis</b><br>Sanctorum<br><i>The central church of Celestia, It now serves as the main church of the Second Light.</i>"
   },
@@ -10,6 +14,10 @@
   {
     "hexes": ["28,7", "29,7", "29,6", "30,7", "31,6", "31,7", "32,7"],
     "description": "<b>Furst Cradle</b><br>Bashan Wall<br><i>An immense wall built by the Bastioners of Nox. It now begins to crumble.</i>"
+  },
+  {
+    "hexes": ["27,12", "28,12"],
+    "description": "<b>Furst Cradle</b><br>Furstwey<br><i>A massive bridge built by the Bastioners of Nox. Tolls are collected from those crossing to help pay to maintaining it and the city.</i>"
   },
   {
     "hexes": ["29,9", "29,8"],
