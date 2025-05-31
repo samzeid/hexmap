@@ -1,11 +1,11 @@
 [
   {
     "hexes": ["28,7", "29,7", "29,6", "30,7", "31,6", "31,7", "32,7"],
-    "description": "<b>First Cradle</b><br>Bashan Wall<br><i>An immense wall built by the Bastioners of Nox. It now begins to crumble.</i>"
+    "description": "<b>Furst Cradle</b><br>Bashan Wall<br><i>An immense wall built by the Bastioners of Nox. It now begins to crumble.</i>"
   },
   {
     "hexes": ["29,9"],
-    "description": "<b>First Cradle</b><br>Furstholm<br><i>One of the oldest cities in Nox. It was built during the First Light as a stronghold from monsters from the north.</i>"
+    "description": "<b>Furst Cradle</b><br>Furstholm<br><i>One of the oldest cities in Nox. It was built during the First Light as a stronghold from monsters from the north.</i>"
   },
   {
     "hexes": ["29,32", "29,31"],
