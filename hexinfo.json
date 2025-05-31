@@ -1,7 +1,7 @@
 [
   {
-    "hexes": ["29,9"],
-    "description": "<b>Solis</b><i>The largest city in Nox, once home to Celestia’s original church. After her fall and the scattering of her faith, it became the capital of the Second Light, remaining the heart of their power and belief.</i>"
+    "hexes": ["30,24", "30,25", "32,25", "32,24"],
+    "description": "<b>Solis</b><i>Once home to Celestia's original church. After her fall and the scattering of her faith, it became the capital of the Second Light, remaining the heart of their power and belief.</i>"
   },
   {
     "hexes": ["28,7", "29,7", "29,6", "30,7", "31,6", "31,7", "32,7"],
