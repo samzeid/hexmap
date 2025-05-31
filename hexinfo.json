@@ -1,7 +1,11 @@
 [
   {
+    "hexes": ["31,24", "31,23"],
+    "description": "<b>Solis</b><br>Sanctorum<br><i>The central church of Celestia, It now serves as the main church of the Second Light.</i>"
+  },
+  {
     "hexes": ["30,24", "30,25", "32,25", "32,24"],
-    "description": "<b>Solis</b><i>Once home to Celestia's original church. After her fall and the scattering of her faith, it became the capital of the Second Light, remaining the heart of their power and belief.</i>"
+    "description": "<b>Solis</b><br><i>Once home to Celestia's original church. After her fall and the scattering of her faith, it became the capital of the Second Light, remaining the heart of their power and belief.</i>"
   },
   {
     "hexes": ["28,7", "29,7", "29,6", "30,7", "31,6", "31,7", "32,7"],
