@@ -1,5 +1,9 @@
 [
   {
+    "hexes": ["29,9"],
+    "description": "<b>Solis</b><i>The largest city in Nox, once home to Celestia’s original church. After her fall and the scattering of her faith, it became the capital of the Second Light, remaining the heart of their power and belief.</i>"
+  },
+  {
     "hexes": ["28,7", "29,7", "29,6", "30,7", "31,6", "31,7", "32,7"],
     "description": "<b>Furst Cradle</b><br>Bashan Wall<br><i>An immense wall built by the Bastioners of Nox. It now begins to crumble.</i>"
   },
