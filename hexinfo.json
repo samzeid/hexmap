@@ -41,33 +41,36 @@
   },
   {
     "hexes": ["32,8", "30,8", "31,8", "30,9", "30,10", "30,11", "29,10", "28,10", "28,11", "29,11"],
-    "description": "<b>Furst Cradle</b><br><i>One of the oldest inhabited regions in Nox, this territory was among the first refuges of humankind.</i>"
+    "description": "<b>Furst Cradle</b><br><i>One of the oldest inhabited regions in Nox, this territory was among the first refuges of humankind.</i>",
+    "color": "rgba(0,255,0,0.3)"
   },
   {
     "hexes": ["28,7", "29,7", "29,6", "30,7", "31,6", "31,7", "32,7"],
-    "description": "<b>Furst Cradle</b><br>Bashan Wall<br><i>An immense wall built by the Bastioners of Nox. It now begins to crumble.</i>"
+    "description": "<b>Furst Cradle</b><br>Bashan Wall<br><i>An immense wall built by the Bastioners of Nox. It now begins to crumble.</i>",
+    "color": "rgba(0,255,0,0.3)"
   },
   {
     "hexes": ["27,12", "28,12"],
-    "description": "<b>Furst Cradle</b><br>Furstwey<br><i>A massive bridge built by the Bastioners of Nox. Tolls are collected from those crossing to help pay to maintaining it and the city.</i>"
+    "description": "<b>Furst Cradle</b><br>Furstwey<br><i>A massive bridge built by the Bastioners of Nox. Tolls are collected from those crossing to help pay to maintaining it and the city.</i>",
+    "color": "rgba(0,255,0,0.3)"
   },
   {
     "hexes": ["29,9", "29,8"],
-    "description": "<b>Furst Cradle</b><br>Furstholm<br><i>One of the oldest cities in Nox. It was built during the First Light as a stronghold from monsters from the north.</i>"
+    "description": "<b>Furst Cradle</b><br>Furstholm<br><i>One of the oldest cities in Nox. It was built during the First Light as a stronghold from monsters from the north.</i>",
+    "color": "rgba(0,255,0,0.3)"
   },
   {
     "hexes": ["30,12"],
-    "description": "<b>Furst Cradle</b><br>Furst Cradle Windmills<br><i>These mills serve both to grind grain into flour and to act as watchtowers against seafaring raiders.</i>"
+    "description": "<b>Furst Cradle</b><br>Furst Cradle Windmills<br><i>These mills serve both to grind grain into flour and to act as watchtowers against seafaring raiders.</i>",
+    "color": "rgba(0,255,0,0.3)"
   },
   {
     "hexes": ["24,29", "24,30", "24,31", "24,32", "23,29", "25,29", "26,30", "27,29", "28,30", "29,30", "30,31", "30,32", "30,33", "30,34", "29,33", "28,33", "28,32", "28,31", "27,30", "27,31", "27,32", "27,33", "28,34", "29,34", "26,34", "26,33", "26,32", "26,31", "25,30", "25,31", "25,32"],
-    "description": "<b>Zalt Cove</b><br><i>Salt-heavy tides form brief crystalline pillars along the shore, reclaimed with each wave. Coastal caves exhale briny mist as the sea crashes within.</i>",
-    "color": "rgba(255,255,0,0.3)"
+    "description": "<b>Zalt Cove</b><br><i>Salt-heavy tides form brief crystalline pillars along the shore, reclaimed with each wave. Coastal caves exhale briny mist as the sea crashes within.</i>"
   },
   {
     "hexes": ["29,32", "29,31"],
-    "description": "<b>Zalt Cove</b><br>Zalt'Elm<br><i>An ancient tower-academy rising from a saltwater island, its stone soaked in sea-mist and crashing waves. Sanctioned by the old Church of Celestia, it remains the foremost authority on magic in Nox.</i>",
-    "color": "rgba(255,255,0,0.3)"
+    "description": "<b>Zalt Cove</b><br>Zalt'Elm<br><i>An ancient tower-academy rising from a saltwater island, its stone soaked in sea-mist and crashing waves. Sanctioned by the old Church of Celestia, it remains the foremost authority on magic in Nox.</i>"
   },
   {
     "hexes": ["36,10"],
