@@ -277,7 +277,7 @@
     });
 
     // Handle click to toggle hex selection
-    canvas.addEventListener('click', (e) => {
+    /*canvas.addEventListener('click', (e) => {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left - offsetX;
       const y = e.clientY - rect.top - offsetY;
@@ -288,12 +288,13 @@
         const key = `${col},${row}`;
         if (selectedHexes.has(key)) {
           selectedHexes.delete(key);
-        } else {
+        } else if(e.shiftKey) {
           selectedHexes.add(key);
         }
         drawGrid({ col, row }); // redraw grid to update selection visuals
       }
-    });
+    });*/
+
 
     function copySelectedHexesToClipboard() {
       const hexStrings = Array.from(selectedHexes).map(key => `"${key}"`);
@@ -331,6 +332,70 @@
           event.preventDefault();
         }
       }
+    });
+
+    // Selection drag code
+    let isDragging = false;
+    let shiftHeld = false;
+    let lastHex = null;
+
+    canvas.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  shiftHeld = e.shiftKey;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left - offsetX;
+  const y = e.clientY - rect.top - offsetY;
+  const { col, row } = getHexAtPosition(x, y);
+  const key = `${col},${row}`;
+
+  if (col >= 0 && row >= 0) {
+    if (shiftHeld) {
+      selectedHexes.add(key);
+    } else {
+      selectedHexes.delete(key);
+    }
+    drawGrid({ col, row });
+    lastHex = key;
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left - offsetX;
+  const y = e.clientY - rect.top - offsetY;
+  const { col, row } = getHexAtPosition(x, y);
+  const key = `${col},${row}`;
+
+  if (col >= 0 && row >= 0 && key !== lastHex) {
+    if (shiftHeld) {
+      if (!selectedHexes.has(key)) {
+        selectedHexes.add(key);
+        drawGrid({ col, row });
+      }
+    } else {
+      if (selectedHexes.has(key)) {
+        selectedHexes.delete(key);
+        drawGrid({ col, row });
+      }
+    }
+    lastHex = key;
+  }
+});
+
+    canvas.addEventListener('mouseup', () => {
+      isDragging = false;
+      shiftHeld = false;
+      lastHex = null;
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Shift') shiftHeld = true;
+    });
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'Shift') shiftHeld = false;
     });
 
 
