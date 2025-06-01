@@ -196,7 +196,8 @@
 
       if (hoveredHex) {
         const key = `${hoveredHex.col},${hoveredHex.row}`;
-        const customText = hexInfoMap.get(key).description;
+        const hexInfo = hexInfoMap.get(key)
+        const customText = hexInfo ? hexInfo.description : null;
         infoText.innerHTML = customText
           ? `${customText}<br><br>(col=${hoveredHex.col}, row=${hoveredHex.row})`
           : `Hex: col=${hoveredHex.col}, row=${hoveredHex.row}`;
@@ -264,7 +265,7 @@
       const hoveredHex = getHexAtPosition(x, y);
 
       // Make sure the hovered hex is within grid bounds
-      if (hoveredHex.col >= 0 && hoveredHex.row >= 0) {
+      if (hoveredHex && hoveredHex.col >= 0 && hoveredHex.row >= 0) {
         drawGrid(hoveredHex);
       } else {
         drawGrid();
