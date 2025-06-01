@@ -37,7 +37,7 @@
   },
   {
     "hexes": ["30,24", "30,25", "32,25", "32,24"],
-    "description": "<b>Solis</b><br><i>Once home to Celestia's original church. It has became the capital of the Second Light, remaining the heart of their power and belief.</i>"
+    "description": "<b>Solis</b><br>City of Solis<br><i>Once home to Celestia's original church. It has became the capital of the Second Light, remaining the heart of their power and belief.</i>"
   },
   {
     "hexes": ["32,8", "30,8", "31,8", "30,9", "30,10", "30,11", "29,10", "28,10", "28,11", "29,11"],
@@ -57,7 +57,7 @@
   },
   {
     "hexes": ["30,12"],
-    "description": "<b>Furst Cradle</b><br>Windmills<br><i>These mills serve both to grind grain into flour and to act as watchtowers against seafaring raiders.</i>"
+    "description": "<b>Furst Cradle</b><br>Furst Cradle Windmills<br><i>These mills serve both to grind grain into flour and to act as watchtowers against seafaring raiders.</i>"
   },
   {
     "hexes": ["24,29", "24,30", "24,31", "24,32", "23,29", "25,29", "26,30", "27,29", "28,30", "29,30", "30,31", "30,32", "30,33", "30,34", "29,33", "28,33", "28,32", "28,31", "27,30", "27,31", "27,32", "27,33", "28,34", "29,34", "26,34", "26,33", "26,32", "26,31", "25,30", "25,31", "25,32"],
