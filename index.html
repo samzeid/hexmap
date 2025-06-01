@@ -83,6 +83,8 @@
     let offsetX = -11;
     let offsetY = 1;
 
+    let isShowRegionOn = false;
+
     const hexInfoMap = new Map();
 
     // Load hex info JSON
@@ -91,7 +93,10 @@
       .then(data => {
         data.forEach(entry => {
           entry.hexes.forEach(hex => {
-            hexInfoMap.set(hex, entry.description);
+            hexInfoMap.set(hex, {
+              description: entry.description,
+              color: entry.color || null
+            });
           });
         });
       })
@@ -157,6 +162,18 @@
           const isHovered = hoveredHex && hoveredHex.col === col && hoveredHex.row === row;
           const isSelected = selectedHexes.has(key);
 
+          // Determine base fill color from hex info if coloring enabled
+          const hexInfo = hexInfoMap.get(key);
+
+          if(hexInfo && hexInfo.color && isShowRegionOn) {
+            drawHex(x, y, {
+              strokeColor: 'rgba(0,0,0,0.0)',
+              fillColor: hexInfo.color,
+              lineWidth: 0,
+              opacity: 1
+            });
+          }
+
           // Draw fill for hovered
           if (isHovered) {
             drawHex(x, y, {
@@ -173,21 +190,13 @@
               lineWidth: 2,
               opacity: 1
             });
-          } else {
-            // Draw default transparent hex border (optional: remove if you want no grid lines)
-            drawHex(x, y, {
-              strokeColor: 'rgba(0,0,0,0.0)',
-              fillColor: null,
-              lineWidth: 1,
-              opacity: 1
-            });
-          }
+          } 
         }
       }
 
       if (hoveredHex) {
         const key = `${hoveredHex.col},${hoveredHex.row}`;
-        const customText = hexInfoMap.get(key);
+        const customText = hexInfoMap.get(key).description;
         infoText.innerHTML = customText
           ? `${customText}<br><br>(col=${hoveredHex.col}, row=${hoveredHex.row})`
           : `Hex: col=${hoveredHex.col}, row=${hoveredHex.row}`;
@@ -310,6 +319,11 @@
 
     // Copy on Ctrl/Cmd+C
     document.addEventListener("keydown", (event) => {
+      if(event.ctrlKey) {
+        isShowRegionOn = !isShowRegionOn;
+        drawGrid();
+      }
+
       if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
         if (selectedHexes.size > 0) {
           copySelectedHexesToClipboard();
@@ -317,6 +331,32 @@
         }
       }
     });
+
+
+    // Blend two RGBA colors (simple alpha blend)
+    function blendColors(baseColor, overlayColor) {
+      // Parse colors like "rgba(r,g,b,a)"
+      const parseRGBA = (c) => {
+        const m = c.match(/rgba?\((\d+), ?(\d+), ?(\d+), ?([\d.]+)\)/);
+        if (!m) return null;
+        return {
+          r: +m[1],
+          g: +m[2],
+          b: +m[3],
+          a: +m[4]
+        };
+      };
+
+      const base = parseRGBA(baseColor);
+      const overlay = parseRGBA(overlayColor);
+      if (!base || !overlay) return baseColor;
+
+      const a = overlay.a + base.a * (1 - overlay.a);
+      const r = Math.round((overlay.r * overlay.a + base.r * base.a * (1 - overlay.a)) / a);
+      const g = Math.round((overlay.g * overlay.a + base.g * base.a * (1 - overlay.a)) / a);
+      const b = Math.round((overlay.b * overlay.a + base.b * base.a * (1 - overlay.a)) / a);
+      return `rgba(${r},${g},${b},${a.toFixed(2)})`;
+    }
 
   </script>
 </body>
