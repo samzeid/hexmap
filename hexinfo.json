@@ -1,5 +1,9 @@
 [
   {
+    "hexes": ["21,1", "21,0", "20,1", "20,0", "21,2", "21,3", "22,4", "21,4", "22,5", "21,5", "22,6", "22,1"],
+    "description": "<b>Glimmerfols</b><br><i>Snowmelt tumbles from the high peaks in a towering sheet of ice-cold water, veiling the cliffs below in glimmering mist.</i>"
+  },
+  {
     "hexes": ["39,9", "38,9", "40,9", "39,8"],
     "description": "<b>Grimholt Forest</b><br><i>Part of Grimholt Forest, this region grows sparser as the trees thin toward the salty shoreline.</i>"
   },
@@ -92,7 +96,7 @@
     "description": "<b>The Godhold</b><br>Dustmere<br><i>Dustmere is the old city's heart, where nobles and wealthy merchants remain. Those who couldn't adapt have fled or been swallowed by the city. Those who remain are amongst the richest in all of Nox.</i>"
   },
   {
-    "hexes": ["12,36"],
+    "hexes": ["12,36", "12,35"],
     "description": "<b>The Godhold</b><br>Godhold Tower<br><i>A tower built by the Custodiate to monitor the city and enforce law.</i>"
   }
 ]
