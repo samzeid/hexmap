@@ -66,11 +66,13 @@
   },
   {
     "hexes": ["24,29", "24,30", "24,31", "24,32", "23,29", "25,29", "26,30", "27,29", "28,30", "29,30", "30,31", "30,32", "30,33", "30,34", "29,33", "28,33", "28,32", "28,31", "27,30", "27,31", "27,32", "27,33", "28,34", "29,34", "26,34", "26,33", "26,32", "26,31", "25,30", "25,31", "25,32"],
-    "description": "<b>Zalt Cove</b><br><i>Salt-heavy tides form brief crystalline pillars along the shore, reclaimed with each wave. Coastal caves exhale briny mist as the sea crashes within.</i>"
+    "description": "<b>Zalt Cove</b><br><i>Salt-heavy tides form brief crystalline pillars along the shore, reclaimed with each wave. Coastal caves exhale briny mist as the sea crashes within.</i>",
+    "color": "rgba(124,0,124,0.3)"
   },
   {
     "hexes": ["29,32", "29,31"],
-    "description": "<b>Zalt Cove</b><br>Zalt'Elm<br><i>An ancient tower-academy rising from a saltwater island, its stone soaked in sea-mist and crashing waves. Sanctioned by the old Church of Celestia, it remains the foremost authority on magic in Nox.</i>"
+    "description": "<b>Zalt Cove</b><br>Zalt'Elm<br><i>An ancient tower-academy rising from a saltwater island, its stone soaked in sea-mist and crashing waves. Sanctioned by the old Church of Celestia, it remains the foremost authority on magic in Nox.</i>",
+    "color": "rgba(124,0,122,0.3)"
   },
   {
     "hexes": ["36,10"],

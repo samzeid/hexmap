@@ -319,6 +319,7 @@
 
     // Copy on Ctrl/Cmd+C
     document.addEventListener("keydown", (event) => {
+      // toggle region display.
       if(event.ctrlKey) {
         isShowRegionOn = !isShowRegionOn;
         drawGrid();
