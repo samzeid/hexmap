@@ -2,12 +2,12 @@
   
   {
     "hexes": ["20,26", "20,25"],
-    "description": "<b>Noxis</b><br>The Fangs (Northern)<br><i>These twin watchtowers were originally built to guard against monsters from the nearby swamplands. Now, they also serve to control travel and trade between Calis and Noxis.</i>",
+    "description": "<b>Noxis</b><br>The Fangs (Northern)<br><i>Once built to guard against monsters from the nearby swamplands, these twin watchtowers now also regulate travel and trade between Calis and Noxis as political tensions continue to rise.</i>",
     "color": "rgba(255,0,255,0.3)"
   },
   {
     "hexes": ["21,28", "21,27"],
-    "description": "<b>Noxis</b><br>The Fangs (Southern)<br><i>These twin watchtowers were originally built to guard against monsters from the nearby swamplands. Now, they also serve to control travel and trade between Calis and Noxis.</i>",
+    "description": "<b>Noxis</b><br>The Fangs (Southern)<br><i>Once built to guard against monsters from the nearby swamplands, these twin watchtowers now also regulate travel and trade between Calis and Noxis as political tensions continue to rise.</i>",
     "color": "rgba(255,0,255,0.3)"
   },
   {
