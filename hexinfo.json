@@ -99,7 +99,7 @@
   {
     "hexes": ["29,32", "29,31"],
     "description": "<b>Zalt Cove</b><br>Zalt'Elm<br><i>An ancient tower-academy rising from a saltwater island, its stone soaked in sea-mist and crashing waves. Sanctioned by the old Church of Celestia, it remains the foremost authority on magic in Nox.</i>",
-    "color": "rgba(0,127,127,0.3)"
+    "color": "rgba(64,192,192,0.3)"
   },
   {
     "hexes": ["36,10"],
