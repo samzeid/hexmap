@@ -1,6 +1,17 @@
 [
+  
   {
-    "hexes": ["18,10", "19,9", "18,9", "20,10", "19,10", "21,10", "22,11", "22,12", "26,14", "28,15", "29,14", "29,21", "32,23", "33,25", "34,25", "35,23", "35,25", "36,26", "34,29", "33,29", "35,29", "34,30", "35,30", "36,30", "37,23", "37,24", "26,12", "21,13", "32,22", "33,22", "20,21", "19,20", "28,28", "29,28", "30,29", "31,29", "30,30", "29,29", "28,29", "27,28", "26,29", "28,20", "24,17", "17,12", "16,13"],
+    "hexes": ["20,26", "20,25"],
+    "description": "<b>Noxis</b><br>The Fangs (Northern)<br><i>These twin watchtowers were originally built to guard against monsters from the nearby swamplands. Now, they also serve to control travel and trade between Calis and Noxis.</i>",
+    "color": "rgba(255,0,255,0.3)"
+  },
+  {
+    "hexes": ["21,28", "21,27"],
+    "description": "<b>Noxis</b><br>The Fangs (Southern)<br><i>These twin watchtowers were originally built to guard against monsters from the nearby swamplands. Now, they also serve to control travel and trade between Calis and Noxis.</i>",
+    "color": "rgba(255,0,255,0.3)"
+  },
+  {
+    "hexes": ["18,10", "19,9", "18,9", "20,10", "19,10", "21,10", "22,11", "22,12", "26,14", "28,15", "29,14", "29,21", "32,23", "33,25", "34,25", "35,23", "35,25", "36,26", "34,29", "33,29", "35,29", "34,30", "35,30", "36,30", "37,23", "37,24", "26,12", "21,13", "32,22", "33,22", "20,21", "19,20", "28,28", "29,28", "30,29", "31,29", "30,30", "29,29", "28,29", "27,28", "26,29", "28,20", "24,17", "17,12", "16,13", "22,12"],
     "description": "<b>Noxis</b><br><i>The largest region of Nox, Noxis's authority over the surrounding lands has waned since the fall of Celestia and the scattering of her church.</i>",
     "color": "rgba(255,0,255,0.3)"
   },
