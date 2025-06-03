@@ -66,7 +66,37 @@
     <div id="infoText">Hover a hex</div>
   </div>
 
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
   <script>
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyAOXPGwEFekK9tRauXOVVWtPLGT7WZf668", // Find this in Project Settings -> General
+      authDomain: "hexcrawl-650cd.firebaseapp.com",
+      projectId: "hexcrawl-650cd",
+      storageBucket: "hexcrawl-650cd.appspot.com",
+      appId: "1:95939330375:web:69b0c546db5b00d996cc62", // Find this in Project Settings -> General (Web App)
+      databaseURL: "https://hexcrawl-650cd-default-rtdb.firebaseio.com" // This is your database URL!
+    };
+
+    // Initialize Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+
+    //
+    const auth = firebase.auth();
+
+    // Get a reference to the database service
+    const database = app.database();
+
+    // Get a reference to the specific location for our "selectedHexes" set
+    const selectedHexesRef = database.ref('selectedHexes');
+
+    // attempt to authenticate.
+    authenticateFromUrl();
+
     const image = document.getElementById('mapImage');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
@@ -107,15 +137,6 @@
     // Track selected hexes by string key "col,row"
     const selectedHexes = new Set();
 
-    image.onload = () => {
-      canvas.width = image.naturalWidth;
-      canvas.height = image.naturalHeight;
-      canvas.style.width = image.width + 'px';
-      canvas.style.height = image.height + 'px';
-      canvas.style.pointerEvents = 'auto';
-      drawGrid();
-    };
-
     function drawHex(x, y, options = {}) {
       const {
         strokeColor = 'rgba(0,0,0,0.0)',
@@ -148,6 +169,12 @@
 
     // Draw the entire hex grid, optionally highlighting a hovered hex
     function drawGrid(hoveredHex = null) {
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      canvas.style.width = image.width + 'px';
+      canvas.style.height = image.height + 'px';
+      canvas.style.pointerEvents = 'auto';
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const cols = Math.ceil(canvas.width / hexHorizSpacing);
@@ -302,9 +329,8 @@
 
     // Copy on Ctrl/Cmd+C
     document.addEventListener("keydown", (event) => {
-      if(event.key === "Escape") {
-        selectedHexes.clear();
-        drawGrid();
+      if(event.key == "Escape") {
+        clearHexSelected();
       }
 
       // toggle region display.
@@ -406,21 +432,109 @@ canvas.addEventListener('mousemove', (e) => {
     }
 
     function setHexSelected(key, value) {
-      if(value) {
-        if(selectedHexes.has(key))
-          return;
-
-        selectedHexes.add(key);
-      } else {
-        if(!selectedHexes.has(key))
-          return;
-        
-        selectedHexes.delete(key);
-      }
-
-      drawGrid({ col, row });
+      selectedHexesRef.update({
+        [key]: value ? true : null
+      })
+      .then(() => {
+        console.log("Hex ${key} set!");
+      })
+      .catch((error) => {
+        console.error("Error setting hex ${key}:", error);
+      });
     }
 
+    function clearHexSelected(){
+      selectedHexesRef.remove()
+      .then(() => {
+        console.log("All selected hexes successfully removed from the database!");
+      })
+      .catch((error) => {
+        console.error("Error removing all selected hexes:", error);
+      });
+    }
+
+    // listener for when selections change.
+    selectedHexesRef.on('value', (snapshot) => {
+      const hexesData = snapshot.val(); // Get the data snapshot
+      selectedHexes.clear();
+
+      if (hexesData) {
+        const hexKeys = Object.keys(hexesData);
+        hexKeys.forEach(hexId => {
+          selectedHexes.add(hexId);
+        });
+      }
+
+      drawGrid();
+      
+      console.log("Current selected hexes data received:", hexesData);
+      console.log("Selected hexes Set contents:", Array.from(selectedHexes)); // Convert Set to Array for logging
+
+    }, (error) => {
+      console.error("Error fetching selected hexes:", error);
+      document.getElementById('currentSet').innerText = "Error loading data.";
+    });
+
+
+    function authenticateFromUrl() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const email = urlParams.get('email');
+      const password = urlParams.get('password');
+
+      const authStatusElement = document.getElementById('authStatus');
+
+      if (email && password) {
+        if (authStatusElement) authStatusElement.innerText = "Attempting sign in...";
+        console.log("Found email and password in URL. Attempting sign in...");
+
+        // Use the compat signInWithEmailAndPassword
+        auth.signInWithEmailAndPassword(email, password)
+          .then((userCredential) => {
+            // Signed in successfully
+            console.log("Sign in successful with shared credentials.");
+            // The onAuthStateChanged listener will handle the UI update
+          })
+          .catch((error) => {
+            const errorCode = error.code;
+            const errorMessage = error.message;
+            console.error("Authentication Error:", errorCode, errorMessage);
+            if (authStatusElement) authStatusElement.innerText = `Sign in failed: ${errorMessage}`;
+            // You might want to clear the URL parameters here for security
+            // window.history.replaceState({}, document.title, window.location.pathname);
+          });
+      } else {
+        // No credentials in URL, user remains unauthenticated.
+        console.log("No email or password found in URL. User will remain unauthenticated for writes.");
+        if (authStatusElement) authStatusElement.innerText = "Unauthenticated (no credentials in URL)";
+        // The onAuthStateChanged listener will handle the initial 'signed out' state
+      }
+    }
+
+    auth.onAuthStateChanged((user) => {
+      const authStatusElement = document.getElementById('authStatus');
+      const signOutButton = document.getElementById('signOutButton');
+
+      if (user) {
+        // User is signed in. auth != null
+        console.log("Auth state changed: User is signed in (UID:", user.uid, ")");
+        if (authStatusElement) authStatusElement.innerText = `Signed in as ${user.email || 'shared user'}`;
+        if (signOutButton) signOutButton.style.display = 'block';
+
+        // User is now authenticated. Your ".write": "auth != null" rule allows writes.
+        // Enable write-related UI elements here if you have them.
+
+      } else {
+        // User is signed out. auth is null
+        console.log("Auth state changed: User is signed out.");
+        if (authStatusElement) authStatusElement.innerText = "Signed out";
+        if (signOutButton) signOutButton.style.display = 'none';
+
+        // User is not authenticated. Your ".write": "auth != null" rule will deny writes.
+        // Disable write-related UI elements here.
+      }
+
+      drawGrid(); // Make sure drawGrid can handle selectedHexes being empty
+    });
   </script>
 </body>
 </html>
