@@ -66,26 +66,6 @@
     <div id="infoText">Hover a hex</div>
   </div>
 
-  <script type="module">
-    // Import the functions you need from the SDKs you need
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
-    // TODO: Add SDKs for Firebase products that you want to use
-    // https://firebase.google.com/docs/web/setup#available-libraries
-  
-    // Your web app's Firebase configuration
-    const firebaseConfig = {
-      apiKey: "AIzaSyAOXPGwEFekK9tRauXOVVWtPLGT7WZf668",
-      authDomain: "hexcrawl-650cd.firebaseapp.com",
-      projectId: "hexcrawl-650cd",
-      storageBucket: "hexcrawl-650cd.firebasestorage.app",
-      messagingSenderId: "95939330375",
-      appId: "1:95939330375:web:69b0c546db5b00d996cc62"
-    };
-  
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-  </script>
-
   <script>
     const image = document.getElementById('mapImage');
     const canvas = document.getElementById('canvas');
@@ -372,13 +352,11 @@
 
   if (col >= 0 && row >= 0) {
     if (shiftHeld) {
-      //selectedHexes.add(key);
-      updateSelectedHexInFirebase(key, true);
+      selectedHexes.add(key);
     } else {
-      //selectedHexes.delete(key);
-      updateSelectedHexInFirebase(key, false);
+      selectedHexes.delete(key);
     }
-    //drawGrid({ col, row });
+    drawGrid({ col, row });
     lastHex = key;
   }
 });
@@ -395,13 +373,13 @@ canvas.addEventListener('mousemove', (e) => {
   if (col >= 0 && row >= 0 && key !== lastHex) {
     if (shiftHeld) {
       if (!selectedHexes.has(key)) {
-        updateSelectedHexInFirebase(key, true);
-        //drawGrid({ col, row });
+        selectedHexes.add(key);
+        drawGrid({ col, row });
       }
     } else {
       if (selectedHexes.has(key)) {
-        updateSelectedHexInFirebase(key, false);
-        //drawGrid({ col, row });
+        selectedHexes.delete(key);
+        drawGrid({ col, row });
       }
     }
     lastHex = key;
@@ -447,23 +425,6 @@ canvas.addEventListener('mousemove', (e) => {
       return `rgba(${r},${g},${b},${a.toFixed(2)})`;
     }
 
-
-    // Keep local Set in sync with Firebase Realtime DB
-
-    // On database value change, update local selection and redraw grid
-    selectedHexesRef.on('value', (snapshot) => {
-      const data = snapshot.val() || {};
-      selectedHexes.clear();
-      Object.keys(data).forEach(key => {
-        if (data[key] === true) selectedHexes.add(key);
-      });
-      drawGrid(); // redraw to update selections on screen
-    });
-
-    // Function to update selection in Firebase when local changes happen
-    function updateSelectedHexInFirebase(key, selected) {
-      selectedHexesRef.child(key).set(selected ? true : null);
-    }
   </script>
 </body>
 </html>
