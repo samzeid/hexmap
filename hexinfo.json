@@ -43,6 +43,13 @@
       "color": "rgba(192,128,255,0.3)",
       "type": "political"
     },
+    {
+      "hexes":["28,32", "28,33", "29,31", "29,32", "29,33", "30,32", "30,33"],
+      "name": "Zalt",
+      "description": "",
+      "color": "rgba(255,0,255,0.3)",
+      "type": "political"
+    },  
     
     {
       "hexes":[],
