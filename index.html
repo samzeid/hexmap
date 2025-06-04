@@ -122,7 +122,12 @@
       .then(res => res.json())
       .then(data => {
         const { regions, locations } = data;
-        locations.forEach(entry => { entry.hexes.forEach(hex => { hexLocations.set(hex, { location: entry.location }); }); });
+        locations.forEach(entry => {
+          entry.hexes.forEach(hex => {
+            hexLocations.set(hex, { name: entry.name, description: entry.description });
+            console.log(entry);
+          });
+        });
       })
       .catch(err => {
         console.error("Failed to load hex data JSON:", err);
@@ -218,9 +223,10 @@
       if (hoveredHex) {
         const key = `${hoveredHex.col},${hoveredHex.row}`;
         const hexInfo = hexLocations.get(key)
-        const customText = hexInfo ? hexInfo.location : null;
-        infoText.innerHTML = customText
-          ? `${customText}<br><br>(col=${hoveredHex.col}, row=${hoveredHex.row})`
+        const nameText = hexInfo ? hexInfo.name : null;
+        const descriptionText = hexInfo ? hexInfo.description : null;
+        infoText.innerHTML = descriptionText
+          ? `<b>${nameText}</b><br>${descriptionText}<br><br>(col=${hoveredHex.col}, row=${hoveredHex.row})`
           : `Hex: col=${hoveredHex.col}, row=${hoveredHex.row}`;
 
         const x = hoveredHex.col * hexHorizSpacing + hexSize + offsetX;
