@@ -18,7 +18,8 @@ const selectedHexesRef = database.ref("selectedHexes");
 authenticateFromUrl();
 
 // Get elements
-const image = document.getElementById("mapImage");
+const image = new Image();
+image.src = "https://lh3.googleusercontent.com/d/1fySy_aXhOZHiJGMw6B2xon_8nMiVeyK6?authuser=0";
 const canvas = document.getElementById("canvas");
 const canvasContext = canvas.getContext("2d");
 const zoomCanvas = document.getElementById("zoomPreview");
@@ -33,16 +34,46 @@ const hexHeight = Math.sqrt(3) * hexSize;
 const hexVertSpacing = hexHeight;
 const hexHorizSpacing = (3 / 4) * hexWidth;
 
+const maxZoomScale = 3;
+
 let offsetX = -11;
 let offsetY = 1;
 
 let lastHex = null;
 
 let isShowRegionOn = false;
-let isDragging = false;
+
 let isShiftHeld = false;
+let isDragging = false;
+let isPanning = false;
+let startDragX = 0;
+let startDragY = 0;
+let startPanX = 0;
+let startPanY = 0;
+
+let minZoom = 1; // this will be calculated after the image loads.
+let maxZoom = 1; // this will be calculated after the image loads using maxZoomScale.
+
+let zoom = 1;
+let panX = 0;
+let panY = 0;
 
 const hexData = new Map();
+
+image.onload = () => {
+    // Calculate minimum zoom to fit image to canvas
+    const zoomX = canvas.width / image.naturalWidth;
+    const zoomY = canvas.height / image.naturalHeight;
+    minZoom = Math.max(zoomX, zoomY);
+    maxZoom = minZoom * maxZoomScale;
+
+    // Set initial zoom and reset pan
+    zoom = minZoom;
+    panX = (canvas.width - image.naturalWidth * zoom) / 2;
+    panY = (canvas.height - image.naturalHeight * zoom) / 2;
+
+    drawGrid();
+};
 
 // Load hex info json
 fetch('https://samzeid.github.io/hexmap/hexinfo.json')
@@ -114,18 +145,33 @@ function drawHex(x, y, options = {}) {
     canvasContext.restore();
 }
 
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const zoomX = canvas.width / image.naturalWidth;
+    const zoomY = canvas.height / image.naturalHeight;
+    minZoom = Math.max(zoomX, zoomY);
+    maxZoom = minZoom * maxZoomScale;
+
+    zoom = clamp(zoom, minZoom, maxZoom);
+    setPan(panX, panY);
+
+    drawGrid();
+}
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
 // Draw the entire hex grid, optionally highlighting a hovered hex
 function drawGrid(hoveredHex = null) {
-    canvas.width = image.naturalWidth;
-    canvas.height = image.naturalHeight;
-    canvas.style.width = image.width + "px";
-    canvas.style.height = image.height + "px";
-    canvas.style.pointerEvents = "auto";
-
+    canvasContext.setTransform(1, 0, 0, 1, 0, 0);
     canvasContext.clearRect(0, 0, canvas.width, canvas.height);
+    canvasContext.setTransform(zoom, 0, 0, zoom, panX, panY);
+    canvasContext.drawImage(image, 0, 0, image.naturalWidth, image.naturalHeight);
 
-    const cols = Math.ceil(canvas.width / hexHorizSpacing);
-    const rows = Math.ceil(canvas.height / hexHeight);
+    const cols = Math.ceil(image.width / hexHorizSpacing);
+    const rows = Math.ceil(image.height / hexHeight);
 
     for (let col = 0; col < cols; col++) {
         for (let row = 0; row < rows; row++) {
@@ -179,11 +225,11 @@ function drawGrid(hoveredHex = null) {
             const { region, location } = hexInfo;
 
             if (region && location) {
-                text = `<i>Region: ${region.name}</i><br><b>${location.name}</b><br><i>${location.description}</i><br><br>${text}`;
+                text = `${text}<br><br><i>Region: ${region.name}</i><br><b>${location.name}</b><br><i>${location.description}</i>`;
             } else if (location) {
-                text = `<b>${location.name}</b><br><i>${location.description}</i><br><br>${text}`;
+                text = `${text}<br><br><b>${location.name}</b><br><i>${location.description}</i>`;
             } else if (region) {
-                text = `<i>Region: ${region.name}</i><br><i>${region.description}</i><br><br>${text}`;
+                text = `${text}<br><br><i>Region: ${region.name}</i><br><i>${region.description}</i>`;
             }
         }
 
@@ -236,34 +282,17 @@ function drawZoomedHex(centerX, centerY) {
 }
 
 // Calculate which hex coordinates a given (x,y) on the canvas corresponds to
-function getHexAtPosition(x, y) {
+function getHexAtPosition(screenX, screenY) {
+    // Convert screen coords to world coords (account for pan/zoom)
+    const x = (screenX - panX) / zoom;
+    const y = (screenY - panY) / zoom;
+
     const col = Math.floor(x / hexHorizSpacing);
     const colOffset = (col % 2 === 1) ? hexHeight / 2 : 0;
     const row = Math.floor((y - colOffset) / hexVertSpacing);
+
     return { col, row };
 }
-
-// Handle hover on mouse move
-canvas.addEventListener("mousemove", (event) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left - offsetX;
-    const y = event.clientY - rect.top - offsetY;
-
-    const hoveredHex = getHexAtPosition(x, y);
-
-    // Make sure the hovered hex is within grid bounds
-    if (hoveredHex && hoveredHex.col >= 0 && hoveredHex.row >= 0) {
-        drawGrid(hoveredHex);
-    } else {
-        drawGrid();
-    }
-});
-
-// Clear hover info when mouse leaves
-canvas.addEventListener("mouseleave", () => {
-    drawGrid();
-});
-
 
 function copySelectedHexesToClipboard() {
     const hexStrings = Array.from(selectedHexes).map(key => `"${key}"`);
@@ -303,9 +332,12 @@ document.addEventListener("keyup", (event) => {
     if (event.key === "Shift") isShiftHeld = false;
 });
 
+let isSelecting = true;
+
 canvas.addEventListener("mousedown", (event) => {
     isDragging = true;
     isShiftHeld = event.shiftKey;
+    isRightButton = event.button == 2;
 
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left - offsetX;
@@ -313,28 +345,66 @@ canvas.addEventListener("mousedown", (event) => {
     const { col, row } = getHexAtPosition(x, y);
     const key = `${col},${row}`;
 
+    startDragX = event.clientX;
+    startDragY = event.clientY;
+
     if (col >= 0 && row >= 0) {
-        if (isShiftHeld) {
+        if (isShiftHeld && !isRightButton) {
+            isSelecting = true;
             setHexSelected(key, true);
-        } else {
+            drawGrid({ col, row });
+            lastHex = key;
+            return;
+        } else if(isRightButton) {
+            isSelecting = false;
             setHexSelected(key, false);
+            drawGrid({ col, row });
+            lastHex = key;
+            return;
         }
         drawGrid({ col, row });
         lastHex = key;
     }
+
+    isPanning = true;
+    startPanX = panX;
+    startPanY = panY;
 });
 
 canvas.addEventListener("mousemove", (event) => {
-    if (!isDragging) return;
+    if (isPanning) {
+        const dx = (event.clientX - startDragX);
+        const dy = (event.clientY - startDragY);
 
+        setPan(startPanX + dx, startPanY + dy)
+
+        drawGrid();
+        return;
+    }
+
+    
+    // Select the hovered hex.
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left - offsetX;
     const y = event.clientY - rect.top - offsetY;
+
+    const hoveredHex = getHexAtPosition(x, y);
+
+    // Make sure the hovered hex is within grid bounds
+    if (hoveredHex && hoveredHex.col >= 0 && hoveredHex.row >= 0) {
+        drawGrid(hoveredHex);
+    } else {
+        drawGrid();
+    }
+    
+    // Handle selection.
+    if (!isDragging) return;
+
     const { col, row } = getHexAtPosition(x, y);
     const key = `${col},${row}`;
 
     if (col >= 0 && row >= 0 && key !== lastHex) {
-        if (isShiftHeld) {
+        if (isSelecting) {
             setHexSelected(key, true);
         } else {
             setHexSelected(key,false);
@@ -343,9 +413,41 @@ canvas.addEventListener("mousemove", (event) => {
     }
 });
 
+canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+
+    const zoomFactor = 1.05;
+    const direction = e.deltaY > 0 ? 1 : -1;
+    const scale = direction > 0 ? 1 / zoomFactor : zoomFactor;
+
+    if((direction > 0 && zoom <= minZoom) || (direction < 0 && zoom >= maxZoom))
+        return;
+
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left - panX) / zoom;
+    const mouseY = (e.clientY - rect.top - panY) / zoom;
+
+    const prevZoom = zoom;
+    zoom *= scale;
+    zoom = clamp(zoom, minZoom, maxZoom);
+
+    // Corrected pan logic:
+    panX -= (mouseX * zoom - mouseX * prevZoom);
+    panY -= (mouseY * zoom - mouseY * prevZoom);
+
+    setPan(panX, panY);
+    drawGrid();
+}, { passive: false });
+
 canvas.addEventListener("mouseup", () => {
+    isPanning = false;
     isDragging = false;
-    isShiftHeld = false;
+    lastHex = null;
+});
+
+canvas.addEventListener("mouseleave", () => {
+    isPanning = false;
+    isDragging = false;
     lastHex = null;
 });
 
@@ -424,3 +526,25 @@ auth.onAuthStateChanged((user) => {
 
     drawGrid();
 });
+
+canvas.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+});
+
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function setPan(x, y) {
+    // Clamp pan to image boundaries
+    const imageWidth = image.naturalWidth * zoom;
+    const imageHeight = image.naturalHeight * zoom;
+
+    const maxPanX = 0;
+    const maxPanY = 0;
+    const minPanX = canvas.width - imageWidth;
+    const minPanY = canvas.height - imageHeight;
+
+    panX = clamp(x, minPanX, maxPanX);
+    panY = clamp(y, minPanY, maxPanY);
+}
