@@ -226,7 +226,7 @@
         const nameText = hexInfo ? hexInfo.name : null;
         const descriptionText = hexInfo ? hexInfo.description : null;
         infoText.innerHTML = descriptionText
-          ? `<b>${nameText}</b><br>${descriptionText}<br><br>(col=${hoveredHex.col}, row=${hoveredHex.row})`
+          ? `<b>${nameText}</b><br><i>${descriptionText}</i><br><br>(col=${hoveredHex.col}, row=${hoveredHex.row})`
           : `Hex: col=${hoveredHex.col}, row=${hoveredHex.row}`;
 
         const x = hoveredHex.col * hexHorizSpacing + hexSize + offsetX;
