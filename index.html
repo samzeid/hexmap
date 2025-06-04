@@ -115,19 +115,44 @@
 
     let isShowRegionOn = false;
 
-    const hexLocations = new Map();
+    const hexData = new Map();
 
     // Load hex info JSON
     fetch('https://samzeid.github.io/hexmap/hexinfo.json')
       .then(res => res.json())
       .then(data => {
         const { regions, locations } = data;
-        locations.forEach(entry => {
-          entry.hexes.forEach(hex => {
-            hexLocations.set(hex, { name: entry.name, description: entry.description });
-            console.log(entry);
+
+        // First, map regions
+        regions.forEach(region => {
+          region.hexes.forEach(hex => {
+            if (!hexData.has(hex)) {
+              hexData.set(hex, { region: null, location: null });
+            }
+            hexData.get(hex).region = {
+              name: region.name,
+              description: region.description,
+              color: region.color,
+              type: region.type || null
+            };
           });
         });
+
+        // Then, map locations (which might overlap)
+        locations.forEach(location => {
+          location.hexes.forEach(hex => {
+            if (!hexData.has(hex)) {
+              hexData.set(hex, { region: null, location: null });
+            }
+            hexData.get(hex).location = {
+              name: location.name,
+              description: location.description,
+              color: location.color || null
+            };
+          });
+        });
+
+        console.log("Hex data loaded:", hexData);
       })
       .catch(err => {
         console.error("Failed to load hex data JSON:", err);
@@ -189,12 +214,12 @@
           const isSelected = selectedHexes.has(key);
 
           // Determine base fill color from hex info if coloring enabled
-          const hexInfo = hexLocations.get(key);
+          const hexInfo = hexData.get(key);
 
           if(hexInfo && hexInfo.region && isShowRegionOn) {
             drawHex(x, y, {
               strokeColor: 'rgba(0,0,0,0.0)',
-              fillColor: hexInfo.region,
+              fillColor: hexInfo.region.color,
               lineWidth: 0,
               opacity: 1
             });
@@ -222,12 +247,23 @@
 
       if (hoveredHex) {
         const key = `${hoveredHex.col},${hoveredHex.row}`;
-        const hexInfo = hexLocations.get(key)
-        const nameText = hexInfo ? hexInfo.name : null;
-        const descriptionText = hexInfo ? hexInfo.description : null;
-        infoText.innerHTML = descriptionText
-          ? `<b>${nameText}</b><br><i>${descriptionText}</i><br><br>(col=${hoveredHex.col}, row=${hoveredHex.row})`
-          : `Hex: col=${hoveredHex.col}, row=${hoveredHex.row}`;
+        const hexInfo = hexData.get(key);
+
+        let text = `Hex: col=${hoveredHex.col}, row=${hoveredHex.row}`;
+
+        if (hexInfo) {
+          const { region, location } = hexInfo;
+
+          if (region && location) {
+            text = `<i>Region: ${region.name}</i><br><b>${location.name}</b><br><i>${location.description}</i><br><br>${text}`;
+          } else if (location) {
+            text = `<b>${location.name}</b><br><i>${location.description}</i><br><br>${text}`;
+          } else if (region) {
+            text = `<i>${region.name}</i><br><i>${region.description}</i><br><br>${text}`;
+          }
+        }
+
+        infoText.innerHTML = text;
 
         const x = hoveredHex.col * hexHorizSpacing + hexSize + offsetX;
         const y = hoveredHex.row * hexVertSpacing + (hoveredHex.col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
