@@ -188,22 +188,22 @@
     },
     {
       "hexes": ["12,36", "11,36", "12,37", "12,38", "14,37", "14,38", "13,36"],
-      "name": "Godhold - The City of Rags",
+      "name": "The City of Rags",
       "description": "A sea of tents surrounds the Reliquary, a makeshift city born from countless pilgrims drawn by faith. Struggling under the overpopulation, the city is ravaged by diseases like the deadly Scar Scale."
     },
     {
       "hexes": ["13,37"],
-      "name": "Godhold - The Reliquary",
+      "name": "The Reliquary",
       "description": "The Reliquary is the Custodiate's stronghold, encasing the sacred body of Celestia. Nearly impenetrable, it stands as both the main church and the heart of the Custodiate's power."
     },
     {
       "hexes": ["13,38"],
-      "name": "Godhold - Dustmere",
+      "name": "Dustmere",
       "description": "Dustmere is the original city of the Godhold, where nobles and wealthy merchants remain. Those who couldn't adapt have fled or been swallowed by the city. Those who remain are amongst the richest in all of Nox."
     },
     {
       "hexes": ["12,36", "12,35"],
-      "name": "Godhold - Faithguard Tower",
+      "name": "Faithguard Tower",
       "description": "A tower built by the Custodiate to monitor the city and enforce law."
     }
   ]
