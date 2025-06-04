@@ -69,8 +69,8 @@ image.onload = () => {
 
     // Set initial zoom and reset pan
     zoom = minZoom;
-    panX = (canvas.width - image.naturalWidth * zoom) / 2;
-    panY = (canvas.height - image.naturalHeight * zoom) / 2;
+    panX = 0;//(canvas.width - image.naturalWidth * zoom) / 2;
+    panY = 0;//(canvas.height - image.naturalHeight * zoom) / 2;
 
     drawGrid();
 };
@@ -548,3 +548,31 @@ function setPan(x, y) {
     panX = clamp(x, minPanX, maxPanX);
     panY = clamp(y, minPanY, maxPanY);
 }
+
+// allow draging of info panel.
+
+function makeDraggable(element) {
+    let isDragging = false;
+    let offsetX, offsetY;
+  
+    element.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return; // Only left click
+      isDragging = true;
+      offsetX = e.clientX - element.offsetLeft;
+      offsetY = e.clientY - element.offsetTop;
+      e.preventDefault(); // Prevent text selection
+    });
+  
+    document.addEventListener("mousemove", (e) => {
+      if (isDragging) {
+        element.style.left = `${e.clientX - offsetX}px`;
+        element.style.top = `${e.clientY - offsetY}px`;
+      }
+    });
+  
+    document.addEventListener("mouseup", () => {
+      isDragging = false;
+    });
+  }
+  
+  makeDraggable(document.getElementById("info"));
