@@ -115,22 +115,14 @@
 
     let isShowRegionOn = false;
 
-    const hexInfoMap = new Map();
+    const hexLocations = new Map();
 
     // Load hex info JSON
-    fetch('https://samzeid.github.io/hexmap/hexdata.json')
+    fetch('https://samzeid.github.io/hexmap/hexinfo.json')
       .then(res => res.json())
       .then(data => {
         const { regions, locations } = data;
-
-        descriptions.forEach(entry => {
-          entry.hexes.forEach(hex => {
-            hexInfoMap.set(hex, {
-              description: entry.locations,
-              color: regions[hex] || null
-            });
-          });
-        });
+        locations.forEach(entry => { entry.hexes.forEach(hex => { hexLocations.set(hex, { location: entry.location }); }); });
       })
       .catch(err => {
         console.error("Failed to load hex data JSON:", err);
@@ -192,12 +184,12 @@
           const isSelected = selectedHexes.has(key);
 
           // Determine base fill color from hex info if coloring enabled
-          const hexInfo = hexInfoMap.get(key);
+          const hexInfo = hexLocations.get(key);
 
-          if(hexInfo && hexInfo.color && isShowRegionOn) {
+          if(hexInfo && hexInfo.region && isShowRegionOn) {
             drawHex(x, y, {
               strokeColor: 'rgba(0,0,0,0.0)',
-              fillColor: hexInfo.color,
+              fillColor: hexInfo.region,
               lineWidth: 0,
               opacity: 1
             });
@@ -225,8 +217,8 @@
 
       if (hoveredHex) {
         const key = `${hoveredHex.col},${hoveredHex.row}`;
-        const hexInfo = hexInfoMap.get(key)
-        const customText = hexInfo ? hexInfo.description : null;
+        const hexInfo = hexLocations.get(key)
+        const customText = hexInfo ? hexInfo.location : null;
         infoText.innerHTML = customText
           ? `${customText}<br><br>(col=${hoveredHex.col}, row=${hoveredHex.row})`
           : `Hex: col=${hoveredHex.col}, row=${hoveredHex.row}`;
