@@ -118,20 +118,22 @@
     const hexInfoMap = new Map();
 
     // Load hex info JSON
-    fetch('https://samzeid.github.io/hexmap/hexinfo.json')
+    fetch('https://samzeid.github.io/hexmap/hexdata.json')
       .then(res => res.json())
       .then(data => {
-        data.forEach(entry => {
+        const { regions, locations } = data;
+
+        descriptions.forEach(entry => {
           entry.hexes.forEach(hex => {
             hexInfoMap.set(hex, {
-              description: entry.description,
-              color: entry.color || null
+              description: entry.locations,
+              color: regions[hex] || null
             });
           });
         });
       })
       .catch(err => {
-        console.error("Failed to load hex info JSON:", err);
+        console.error("Failed to load hex data JSON:", err);
       });
 
     // Track selected hexes by string key "col,row"
