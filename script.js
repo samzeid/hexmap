@@ -553,25 +553,48 @@ function setPan(x, y) {
 
 function makeDraggable(element) {
     let isDragging = false;
-    let offsetX, offsetY;
-  
+    let offsetX = 0;
+    let offsetY = 0;
+
+    // Mouse Events
     element.addEventListener("mousedown", (e) => {
-      if (e.button !== 0) return; // Only left click
-      isDragging = true;
-      offsetX = e.clientX - element.offsetLeft;
-      offsetY = e.clientY - element.offsetTop;
-      e.preventDefault(); // Prevent text selection
+        if (e.button !== 0) return; // Only left click
+        isDragging = true;
+        offsetX = e.clientX - element.offsetLeft;
+        offsetY = e.clientY - element.offsetTop;
+        e.preventDefault();
     });
-  
+
     document.addEventListener("mousemove", (e) => {
-      if (isDragging) {
+        if (!isDragging) return;
         element.style.left = `${e.clientX - offsetX}px`;
         element.style.top = `${e.clientY - offsetY}px`;
-      }
     });
-  
+
     document.addEventListener("mouseup", () => {
-      isDragging = false;
+        isDragging = false;
+    });
+
+    // Touch Events
+    element.addEventListener("touchstart", (e) => {
+        if (e.touches.length !== 1) return; // Only single-finger drag
+        const touch = e.touches[0];
+        isDragging = true;
+        offsetX = touch.clientX - element.offsetLeft;
+        offsetY = touch.clientY - element.offsetTop;
+        e.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener("touchmove", (e) => {
+        if (!isDragging || e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        element.style.left = `${touch.clientX - offsetX}px`;
+        element.style.top = `${touch.clientY - offsetY}px`;
+        e.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener("touchend", () => {
+        isDragging = false;
     });
 }
   
