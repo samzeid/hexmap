@@ -573,6 +573,89 @@ function makeDraggable(element) {
     document.addEventListener("mouseup", () => {
       isDragging = false;
     });
-  }
+}
   
-  makeDraggable(document.getElementById("info"));
+makeDraggable(document.getElementById("info"));
+
+// Touch support
+
+let touchStartX, touchStartY;
+let touchStartTime = 0;
+let isTouchDragging = false;
+let longPressTimeout = null;
+let touchSelecting = true;
+
+canvas.addEventListener("touchstart", (e) => {
+    if (e.touches.length > 1) return; // Ignore multi-touch
+
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const x = touch.clientX - rect.left - offsetX;
+    const y = touch.clientY - rect.top - offsetY;
+
+    const { col, row } = getHexAtPosition(x, y);
+    const key = `${col},${row}`;
+
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    startPanX = panX;
+    startPanY = panY;
+    isTouchDragging = false;
+    touchSelecting = true;
+
+    // Simulate right-click (deselect) with long press
+    longPressTimeout = setTimeout(() => {
+        if (col >= 0 && row >= 0) {
+            setHexSelected(key, false);
+            drawGrid({ col, row });
+            touchSelecting = false;
+        }
+    }, 500); // 500ms hold triggers deselection
+
+    if (col >= 0 && row >= 0) {
+        setHexSelected(key, true);
+        drawGrid({ col, row });
+        lastHex = key;
+    }
+
+    e.preventDefault();
+});
+
+canvas.addEventListener("touchmove", (e) => {
+    if (e.touches.length > 1) return;
+
+    const touch = e.touches[0];
+
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        clearTimeout(longPressTimeout);
+        isTouchDragging = true;
+        isPanning = true;
+
+        setPan(startPanX + dx, startPanY + dy);
+        drawGrid();
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const x = touch.clientX - rect.left - offsetX;
+    const y = touch.clientY - rect.top - offsetY;
+    const { col, row } = getHexAtPosition(x, y);
+    const key = `${col},${row}`;
+
+    if (!isTouchDragging && col >= 0 && row >= 0 && key !== lastHex) {
+        setHexSelected(key, touchSelecting);
+        drawGrid({ col, row });
+        lastHex = key;
+    }
+
+    e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener("touchend", () => {
+    isTouchDragging = false;
+    isPanning = false;
+    lastHex = null;
+    clearTimeout(longPressTimeout);
+});
