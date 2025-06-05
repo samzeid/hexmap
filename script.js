@@ -60,6 +60,29 @@ let panY = 0;
 
 const hexData = new Map();
 
+function resetInfoPanelSize() {
+    const info = document.getElementById("info");
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+
+    // Use a fraction of the smaller dimension to maintain consistent scale
+    const base = Math.min(screenW, screenH);
+
+    const width = base * 0.25;
+    const height = width * 2;
+
+    info.style.width = `${Math.round(width)}px`;
+    info.style.height = `${Math.round(height)}px`;
+
+    info.style.right = "10px";
+    info.style.bottom = "10px";
+}
+
+
+window.addEventListener("resize", resetInfoPanelSize);
+window.addEventListener("orientationchange", resetInfoPanelSize);
+window.addEventListener("load", resetInfoPanelSize);
+
 image.onload = () => {
     // Calculate minimum zoom to fit image to canvas
     const zoomX = canvas.width / image.naturalWidth;
