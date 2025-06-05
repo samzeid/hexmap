@@ -60,7 +60,51 @@
     }
   ],
   "locations": [ 
-
+    {
+      "hexes": [],
+      "name": "",
+      "description": "."
+    },
+    {
+      "hexes": [],
+      "name": "",
+      "description": "."
+    },
+    {
+      "hexes": [],
+      "name": "",
+      "description": "."
+    },
+    {
+      "hexes": [],
+      "name": "",
+      "description": "."
+    },
+    {
+      "hexes": ["27,14"],
+      "name": "Wrenfold",
+      "description": "A forest lodging settlement where travelers rest and recover."
+    },
+    {
+      "hexes": ["25,12"],
+      "name": "Drav",
+      "description": "A crossroad town on the Noxis-Furst Cradle border, it offers trade and shelter to weary travelers."
+    },
+    {
+      "hexes": [],
+      "name": "",
+      "description": "."
+    },
+    {
+      "hexes": ["32,20"],
+      "name": "Halwin",
+      "description": "A small hilltop settlement near a well-traveled forest, known for abundant wild game. Travelers stop here to hunt, rest, and resupply on fresh meat."
+    },
+    {
+      "hexes": ["28,21"],
+      "name": "Mireport",
+      "description": "This port fishing village is surrounded by fertile farms. It provides food and resources to Solis."
+    },
     {
       "hexes": ["20,11"],
       "name": "Hewden",
