@@ -59,7 +59,18 @@
       "type": "environmental"
     }
   ],
-  "locations": [
+  "locations": [ 
+
+    {
+      "hexes": ["20,11"],
+      "name": "Hewden",
+      "description": "This timber town is centered around a busy woodmill. It supplies lumber to Noxis, sending it downstream along the River Blest."
+    },
+    {
+      "hexes": ["16,12"],
+      "name": "Bracken",
+      "description": "An isolated mining town built beside rich iron veins. It is reachable only by ferry."
+    },
     {
       "hexes": ["20,26", "20,25"],
       "name": "The Fangs (Northern)",
