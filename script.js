@@ -646,7 +646,7 @@ canvas.addEventListener("touchstart", (e) => {
 }, { passive: false });
 
 canvas.addEventListener("touchmove", (e) => {
-    if (e.touches.length === 1) {
+    if (e.touches.length === 1 && initialPinchDistance === null) {
         const touch = e.touches[0];
         const dx = touch.clientX - touchStartX;
         const dy = touch.clientY - touchStartY;
