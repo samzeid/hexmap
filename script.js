@@ -68,7 +68,7 @@ function resetInfoPanelSize() {
     // Use a fraction of the smaller dimension to maintain consistent scale
     const base = Math.min(screenW, screenH);
 
-    const width = base * 0.25;
+    const width = base * 0.2;
     const height = width * 2;
 
     info.style.width = `${Math.round(width)}px`;
