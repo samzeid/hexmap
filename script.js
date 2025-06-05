@@ -578,84 +578,68 @@ function makeDraggable(element) {
 makeDraggable(document.getElementById("info"));
 
 // Touch support
+let touchStartX = 0;
+let touchStartY = 0;
 
-let touchStartX, touchStartY;
-let touchStartTime = 0;
-let isTouchDragging = false;
-let longPressTimeout = null;
-let touchSelecting = true;
+let initialPinchDistance = null;
+let initialZoom = zoom;
 
 canvas.addEventListener("touchstart", (e) => {
-    if (e.touches.length > 1) return; // Ignore multi-touch
-
-    const touch = e.touches[0];
-    const rect = canvas.getBoundingClientRect();
-    const x = touch.clientX - rect.left - offsetX;
-    const y = touch.clientY - rect.top - offsetY;
-
-    const { col, row } = getHexAtPosition(x, y);
-    const key = `${col},${row}`;
-
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-    startPanX = panX;
-    startPanY = panY;
-    isTouchDragging = false;
-    touchSelecting = true;
-
-    // Simulate right-click (deselect) with long press
-    longPressTimeout = setTimeout(() => {
-        if (col >= 0 && row >= 0) {
-            setHexSelected(key, false);
-            drawGrid({ col, row });
-            touchSelecting = false;
-        }
-    }, 500); // 500ms hold triggers deselection
-
-    if (col >= 0 && row >= 0) {
-        setHexSelected(key, true);
-        drawGrid({ col, row });
-        lastHex = key;
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+        startPanX = panX;
+        startPanY = panY;
+    } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        initialPinchDistance = Math.hypot(dx, dy);
+        initialZoom = zoom;
     }
-
-    e.preventDefault();
-});
+}, { passive: false });
 
 canvas.addEventListener("touchmove", (e) => {
-    if (e.touches.length > 1) return;
-
-    const touch = e.touches[0];
-
-    const dx = touch.clientX - touchStartX;
-    const dy = touch.clientY - touchStartY;
-
-    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-        clearTimeout(longPressTimeout);
-        isTouchDragging = true;
-        isPanning = true;
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const dx = touch.clientX - touchStartX;
+        const dy = touch.clientY - touchStartY;
 
         setPan(startPanX + dx, startPanY + dy);
         drawGrid();
-    }
+    } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const newDistance = Math.hypot(dx, dy);
 
-    const rect = canvas.getBoundingClientRect();
-    const x = touch.clientX - rect.left - offsetX;
-    const y = touch.clientY - rect.top - offsetY;
-    const { col, row } = getHexAtPosition(x, y);
-    const key = `${col},${row}`;
+        if (initialPinchDistance != null) {
+            let scale = newDistance / initialPinchDistance;
+            let newZoom = clamp(initialZoom * scale, minZoom, maxZoom);
 
-    if (!isTouchDragging && col >= 0 && row >= 0 && key !== lastHex) {
-        setHexSelected(key, touchSelecting);
-        drawGrid({ col, row });
-        lastHex = key;
+            // Center zoom on midpoint between fingers
+            const rect = canvas.getBoundingClientRect();
+            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left - panX;
+            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top - panY;
+
+            const mouseX = midX / zoom;
+            const mouseY = midY / zoom;
+
+            const prevZoom = zoom;
+            zoom = newZoom;
+
+            panX -= (mouseX * zoom - mouseX * prevZoom);
+            panY -= (mouseY * zoom - mouseY * prevZoom);
+
+            setPan(panX, panY);
+            drawGrid();
+        }
     }
 
     e.preventDefault();
 }, { passive: false });
 
-canvas.addEventListener("touchend", () => {
-    isTouchDragging = false;
-    isPanning = false;
-    lastHex = null;
-    clearTimeout(longPressTimeout);
+canvas.addEventListener("touchend", (e) => {
+    if (e.touches.length < 2) {
+        initialPinchDistance = null;
+    }
 });
