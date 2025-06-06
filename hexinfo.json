@@ -101,6 +101,21 @@
       "description": "A small hilltop settlement near a well-traveled forest, known for abundant wild game. Travelers stop here to hunt, rest, and resupply on fresh meat."
     },
     {
+      "hexes": ["22,14"],
+      "name": "Netter's Reach",
+      "description": "A long, narrow settlement along the bend of the River Blest, where fishers cast wide nets and trade with passing ferries."
+    },
+    {
+      "hexes": ["42,28"],
+      "name": "Hooksend",
+      "description": "This fishing village along Hook Cove was sacked by pirates. Now, only ghosts and rubble remain."
+    },
+    {
+      "hexes": ["24,25"],
+      "name": "Catchside",
+      "description": "The main supplier of fish on the eastern bank of the River Blest. Once a modest trade hub, its influence has waned as the border between Calis and Noxis draws tight."
+    },
+    {
       "hexes": ["28,21"],
       "name": "Mireport",
       "description": "This port fishing village is surrounded by fertile farms. It provides food and resources to Solis."
