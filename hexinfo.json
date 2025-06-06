@@ -63,7 +63,17 @@
     {
       "hexes": [],
       "name": "",
-      "description": "."
+      "description": ""
+    },
+    {
+      "hexes": ["31,26", "32,26"],
+      "name": "Blestgate",
+      "description": "Spanning the River Blest, This bridge is both a vital crossing and a formidable defense. Its massive gates can be raised to block the river's mouth, with ballistas and fortifications ready to repel attack."
+    },
+    {
+      "hexes": ["32,27"],
+      "name": "Starsong Tower",
+      "description": "This watchtower doubles as a lighthouse, its beacon singing through the night to guide trade ships safely to Noxis's harbors."
     },
     {
       "hexes": ["41,29", "42,29", "42,30"],
@@ -78,7 +88,7 @@
     {
       "hexes": ["36,23"],
       "name": "Winden Peak",
-      "description": "Winden Peak sits high above Lake Kraken, where relentless winds turn its old mill and dry hillside grain. Windharps strung across rooftops sing at all hours, their eerie tones echoing through the forested ridge."
+      "description": "High above Lake Kraken, Winden Peak catches the relentless wind. Its hillside mill grinds grain and imports from Vorsan Rest. Minerals, roots, and clays are used to produce rare pigments prized across Noxis."
     },
     {
       "hexes": ["27,14"],
