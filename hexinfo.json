@@ -71,14 +71,14 @@
       "description": "."
     },
     {
-      "hexes": [],
-      "name": "",
-      "description": "."
+      "hexes": ["36,27"],
+      "name": "Bellmare",
+      "description": "Set among the rolling hills near a quiet offshoot of the River Blest, Bellmare is known for its sun-drenched vineyards and lake-cooled cellars. Its wines are light, fragrant, and are a beloved export from Noxis."
     },
     {
-      "hexes": [],
-      "name": "",
-      "description": "."
+      "hexes": ["36,23"],
+      "name": "Winden Peak",
+      "description": "Winden Peak sits high above Lake Kraken, where relentless winds turn its old mill and dry hillside grain. Windharps strung across rooftops sing at all hours, their eerie tones echoing through the forested ridge."
     },
     {
       "hexes": ["27,14"],
