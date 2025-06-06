@@ -66,9 +66,9 @@
       "description": "."
     },
     {
-      "hexes": [],
-      "name": "",
-      "description": "."
+      "hexes": ["41,29", "42,29", "42,30"],
+      "name": "Hook Cove",
+      "description": "Bio-luminescent jellyfish fill the cove's waters each late spring to early summer, making The Candles rock formation appear to glow as though lit with a turquoise flame when seen from certain angles."
     },
     {
       "hexes": ["36,27"],
