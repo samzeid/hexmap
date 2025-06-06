@@ -91,9 +91,9 @@
       "description": "A crossroad town on the Noxis-Furst Cradle border, it offers trade and shelter to weary travelers."
     },
     {
-      "hexes": [],
-      "name": "",
-      "description": "."
+      "hexes": ["23,17"],
+      "name": "Vernholt",
+      "description": "Once the refuge of a forest hermit who worshipped the old gods, Vernholt has grown into a quiet hamlet of farmland and leatherwork. Its hunters still follow game trails worn smooth the ages.."
     },
     {
       "hexes": ["32,20"],
@@ -128,7 +128,12 @@
     {
       "hexes": ["16,12"],
       "name": "Bracken",
-      "description": "An isolated mining town built beside rich iron veins. It is reachable only by ferry."
+      "description": "An isolated mining town built beside rich iron and coal veins. It is reachable only by ferry."
+    },
+    {
+      "hexes": ["16,12"],
+      "name": "Galden",
+      "description": "Commonly known as Coin Bed, this well-established mining city exports copper and tin by the ton. Small veins of silver, gold, and lead still run beneath its hills."
     },
     {
       "hexes": ["20,26", "20,25"],
