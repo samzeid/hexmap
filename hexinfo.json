@@ -66,6 +66,16 @@
       "description": ""
     },
     {
+      "hexes": [],
+      "name": "",
+      "description": ""
+    },
+    {
+      "hexes": ["23,28"],
+      "name": "Zaltcrest",
+      "description": "Perched above Zalt Cove, Zaltcrest's windmill grinds minerals, desert clays, and dried herbs brought from Calis, though trade supplies have since diminished in recent times."
+    },
+    {
       "hexes": ["31,26", "32,26"],
       "name": "Blestgate",
       "description": "Spanning the River Blest, This bridge is both a vital crossing and a formidable defense. Its massive gates can be raised to block the river's mouth, with ballistas and fortifications ready to repel attack."
