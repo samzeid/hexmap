@@ -128,10 +128,10 @@
     {
       "hexes": ["16,12"],
       "name": "Bracken",
-      "description": "An isolated mining town built beside rich iron and coal veins. It is reachable only by ferry."
+      "description": "An isolated mining settlement built beside rich iron and coal veins. It is reachable only by ferry."
     },
     {
-      "hexes": ["19,21"],
+      "hexes": ["19,21", "18,21"],
       "name": "Galden",
       "description": "Commonly known as Coin Bed, this well-established mining city exports copper and tin by the ton. Small veins of silver, gold, and lead still run beneath its hills."
     },
