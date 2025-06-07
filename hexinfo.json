@@ -61,14 +61,14 @@
   ],
   "locations": [ 
     {
-      "hexes": [],
-      "name": "",
-      "description": ""
+      "hexes": ["18,39", "19,39", "19,40", "20,38", "20,41", "21,38", "21,40", "22,39", "22,40", "23,40", "24,41", "24,43", "24,44", "25,41", "25,42", "25,44", "26,42", "26,43", "26,44", "26,45", "27,43", "27,44", "28,43", "28,44", "29,42", "29,43"],
+      "name": "Fork River",
+      "description": "The Fork River once carried trade deep into Calis. Now, bandits exploit its winding course and steep cliffs to stage ambushes, forcing most ships to avoid it entirely."
     },
     {
-      "hexes": [],
-      "name": "",
-      "description": ""
+      "hexes": ["30,44"],
+      "name": "Forkmouth",
+      "description": "A vital trade hub at the river's mouth, Forkmouth sits far from the Godhold. With bandits thick along the Fork River, goods from Vorsan Rest arrive by sea and move inland under guard."
     },
     {
       "hexes": ["23,28"],
