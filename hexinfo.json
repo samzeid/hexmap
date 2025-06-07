@@ -71,6 +71,11 @@
       "description": "A vital trade hub at the river's mouth, Forkmouth sits far from the Godhold. With bandits thick along the Fork River, goods from Vorsan Rest arrive by sea and move inland under guard."
     },
     {
+      "hexes": ["23,44"],
+      "name": "Grimhold",
+      "description": "Once a bandit outpost, Grimhold was purged and secured by the Custodiate. Now it serves as a guarded refuge for those moving between Forkmouth and the settlements of Calis."
+    },
+    {
       "hexes": ["23,28"],
       "name": "Zaltcrest",
       "description": "Perched above Zalt Cove, Zaltcrest's windmill grinds minerals, desert clays, and dried herbs brought from Calis, though trade supplies have since diminished in recent times."
