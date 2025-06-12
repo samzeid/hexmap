@@ -61,6 +61,9 @@ let startDragY = 0;
 let startPanX = 0;
 let startPanY = 0;
 
+let startRow = 0;
+let startCol = 0;
+
 let minZoom = 1; // this will be calculated after the image loads.
 let maxZoom = 1; // this will be calculated after the image loads using maxZoomScale.
 
@@ -380,6 +383,8 @@ canvas.addEventListener("mousedown", (event) => {
     const x = event.clientX - rect.left - offsetX;
     const y = event.clientY - rect.top - offsetY;
     const { col, row } = getHexAtPosition(x, y);
+    startRow = row;
+    startCol = col;
     const key = `${col},${row}`;
 
     startDragX = event.clientX;
@@ -414,8 +419,8 @@ canvas.addEventListener("mousemove", (event) => {
         const dy = (event.clientY - startDragY);
 
         setPan(startPanX + dx, startPanY + dy)
-
-        drawGrid();
+        
+        drawGrid({ col: startCol, row: startRow });
         return;
     }
 
@@ -654,6 +659,8 @@ canvas.addEventListener("touchstart", (e) => {
         const x = touch.clientX - rect.left - offsetX;
         const y = touch.clientY - rect.top - offsetY;
         const { col, row } = getHexAtPosition(x, y);
+        startRow = row;
+        startCol = col;
         const key = `${col},${row}`;
 
         if (col >= 0 && row >= 0) {
@@ -705,7 +712,7 @@ canvas.addEventListener("touchmove", (e) => {
             const dx = touch.clientX - touchStartX;
             const dy = touch.clientY - touchStartY;
             setPan(startPanX + dx, startPanY + dy);
-            drawGrid();
+            drawGrid({ col: startCol, row: startRow });
         }
     } else if (e.touches.length === 2) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
