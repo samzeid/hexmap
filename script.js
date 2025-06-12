@@ -495,13 +495,13 @@ canvas.addEventListener("mouseleave", () => {
 
 function setHexSelected(key, value) {
     selectedHexesRef.update({
-        [key]: value ? true : null
+        [key]: value ? Date.now() : null
     })
     .then(() => {
-        console.log("Hex ${key} selected.");
+        console.log(`Hex ${key} selected.`);
     })
     .catch((error) => {
-        console.error("Error setting hex ${key}:", error);
+        console.error(`Error setting hex ${key}:`, error);
     });
 }
 
@@ -517,17 +517,31 @@ function clearHexSelected(){
 
 // listener for when selections change.
 selectedHexesRef.on("value", (snapshot) => {
+    let lastHex = null;
+
     const hexesData = snapshot.val(); // Get the data snapshot
     selectedHexes.clear();
 
     if (hexesData) {
-        const hexKeys = Object.keys(hexesData);
-        hexKeys.forEach(hexId => {
+        const hexEntries = Object.entries(hexesData)
+            .filter(([_, timestamp]) => typeof timestamp === "number" && !isNaN(timestamp))
+            .sort((a, b) => b[1] - a[1]); // Most recent first
+
+        for (const [hexId] of hexEntries) {
             selectedHexes.add(hexId);
-        });
+        }
+
+        if (hexEntries.length > 0) {
+            lastHex = hexEntries[0][0]; // key = "col,row"
+        }
     }
 
-    drawGrid();
+    if (lastHex) {
+        const [col, row] = lastHex.split(',').map(Number);
+        drawGrid({ col, row }); // Draw with highlight
+    } else {
+        drawGrid(); // Draw full grid with no focus
+    }
 
     console.log("Current selected hexes data received:", hexesData);
     console.log("Selected hexes Set contents:", Array.from(selectedHexes)); // Convert Set to Array for logging
