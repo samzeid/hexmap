@@ -4,8 +4,19 @@
   <meta charset="UTF-8" />
   <title>Hex Grid Overlay</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
+  <div id="controls">
+    <i class="symbol fa-brands fa-d-and-d"></i>
+    <button id="scaleUpBtn"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+    <button id="scaleDownBtn"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+    <button id="resetPositionBtn"><i class="fas fa-undo"></i></button>
+    <i class="symbol fa-solid fa-ellipsis-vertical"></i>
+    <button id="togglePanBtn"><i class="fa-solid fa-arrows-up-down-left-right"></i></button>
+    <button id="toggleSelectBtn"><i class="fa-solid fa-paintbrush"></i></button>
+    <button id="toggleEraseBtn"><i class="fa-solid fa-eraser"></i></button>
+  </div>
   <div id="container">
     <canvas id="canvas"></canvas>
   </div>

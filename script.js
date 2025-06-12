@@ -25,7 +25,18 @@ const canvasContext = canvas.getContext("2d");
 const zoomCanvas = document.getElementById("zoomPreview");
 const zoomCanvasContext = zoomCanvas.getContext("2d");
 
+const info = document.getElementById("info");
 const infoText = document.getElementById("infoText");
+
+
+const scaleUpBtn = document.getElementById('scaleUpBtn');
+const scaleDownBtn = document.getElementById('scaleDownBtn');
+const resetPositionBtn = document.getElementById('resetPositionBtn');
+
+const togglePanBtn = document.getElementById('togglePanBtn');
+const toggleSelectBtn = document.getElementById('toggleSelectBtn');
+const toggleEraseBtn = document.getElementById('toggleEraseBtn');
+
 const selectedHexes = new Set();
 
 const hexSize = 13.525;
@@ -43,7 +54,6 @@ let lastHex = null;
 
 let isShowRegionOn = false;
 
-let isShiftHeld = false;
 let isDragging = false;
 let isPanning = false;
 let startDragX = 0;
@@ -58,10 +68,14 @@ let zoom = 1;
 let panX = 0;
 let panY = 0;
 
+let currentInfoScale = 1;
+const minInfoScale = 0.5;
+const maxInfoScale = 2;
+
 const hexData = new Map();
 
 function resetInfoPanelSize() {
-    const info = document.getElementById("info");
+    currentInfoScale = 1;
     const screenW = window.innerWidth;
     const screenH = window.innerHeight;
 
@@ -74,8 +88,17 @@ function resetInfoPanelSize() {
     info.style.width = `${Math.round(width)}px`;
     info.style.height = `${Math.round(height)}px`;
 
-    info.style.right = "10px";
-    info.style.bottom = "10px";
+    //info.style.left = "10px";
+    //info.style.top = "10px";
+    const rect = info.getBoundingClientRect();
+
+    const newLeft = window.innerWidth - width - 100;   // mimics right:10px
+    const newTop = window.innerHeight - height - 100;  // mimics bottom:10px
+
+    info.style.left = `${newLeft}px`;
+    info.style.top = `${newTop}px`;
+    
+    applyScale();
 }
 
 
@@ -339,10 +362,6 @@ document.addEventListener("keydown", (event) => {
         drawGrid();
     }
 
-    if (event.key === "Shift") {
-        isShiftHeld = true;
-    }
-
     if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
         if (selectedHexes.size > 0) {
             copySelectedHexesToClipboard();
@@ -351,15 +370,10 @@ document.addEventListener("keydown", (event) => {
     }
 });
 
-document.addEventListener("keyup", (event) => {
-    if (event.key === "Shift") isShiftHeld = false;
-});
-
 let isSelecting = true;
 
 canvas.addEventListener("mousedown", (event) => {
     isDragging = true;
-    isShiftHeld = event.shiftKey;
     isRightButton = event.button == 2;
 
     const rect = canvas.getBoundingClientRect();
@@ -372,13 +386,13 @@ canvas.addEventListener("mousedown", (event) => {
     startDragY = event.clientY;
 
     if (col >= 0 && row >= 0) {
-        if (isShiftHeld && !isRightButton) {
+        if (activeTool == 'select') {
             isSelecting = true;
             setHexSelected(key, true);
             drawGrid({ col, row });
             lastHex = key;
             return;
-        } else if(isRightButton) {
+        } else if(activeTool=='erase') {
             isSelecting = false;
             setHexSelected(key, false);
             drawGrid({ col, row });
@@ -689,3 +703,63 @@ canvas.addEventListener("touchend", (e) => {
         initialPinchDistance = null;
     }
 });
+
+
+// Scale handling
+function applyScale() {
+    info.style.transform = `scale(${currentInfoScale})`;
+    info.style.transformOrigin = 'bottom right';
+}
+  
+scaleUpBtn.addEventListener('click', () => {
+    currentInfoScale = Math.min(currentInfoScale * 1.2, maxInfoScale);
+    applyScale();
+});
+  
+scaleDownBtn.addEventListener('click', () => {
+    currentInfoScale = Math.max(currentInfoScale / 1.2, minInfoScale);
+    applyScale();
+});
+  
+// Reset scale and position
+resetPositionBtn.addEventListener('click', () => {
+    resetInfoPanelSize();
+});
+
+// Tool toggles
+const toolButtons = {
+    select: document.getElementById('toggleSelectBtn'),
+    erase: document.getElementById('toggleEraseBtn'),
+    pan: document.getElementById('togglePanBtn'),
+  };
+  
+let activeTool = null; // Set a default active tool
+  
+function setActiveTool(toolName) {
+    if (activeTool === toolName) return; // Do nothing if it's already active
+  
+    // Deactivate all tools
+    for (const [name, btn] of Object.entries(toolButtons)) {
+      btn.classList.remove('active');
+    }
+  
+    // Activate the chosen one
+    toolButtons[toolName].classList.add('active');
+    activeTool = toolName;
+  
+    console.log("Active tool:", activeTool);
+}
+
+toggleSelectBtn.addEventListener('click', () => {
+    setActiveTool('select');
+});
+
+toggleEraseBtn.addEventListener('click', () => {
+    setActiveTool('erase');
+});
+
+togglePanBtn.addEventListener('click', () => {
+    setActiveTool('pan');
+});
+
+setActiveTool('pan');
