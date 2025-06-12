@@ -37,6 +37,8 @@ const togglePanBtn = document.getElementById('togglePanBtn');
 const toggleSelectBtn = document.getElementById('toggleSelectBtn');
 const toggleEraseBtn = document.getElementById('toggleEraseBtn');
 
+const toggleFactionBtn = document.getElementById('toggleFactionBtn');
+
 const selectedHexes = new Set();
 
 const hexSize = 13.525;
@@ -358,11 +360,6 @@ function copySelectedHexesToClipboard() {
 document.addEventListener("keydown", (event) => {
     if(event.key == "Escape") {
         clearHexSelected();
-    }
-
-    if(event.ctrlKey) {
-        isShowRegionOn = !isShowRegionOn;
-        drawGrid();
     }
 
     if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
@@ -823,6 +820,16 @@ toggleEraseBtn.addEventListener('click', () => {
 
 togglePanBtn.addEventListener('click', () => {
     setActiveTool('pan');
+});
+
+toggleFactionBtn.addEventListener('click', () => {
+    isShowRegionOn = !isShowRegionOn;
+    if(isShowRegionOn){
+        toggleFactionBtn.classList.add('active');
+    } else {
+        toggleFactionBtn.classList.remove('active');
+    }
+    drawGrid();
 });
 
 setActiveTool('pan');
