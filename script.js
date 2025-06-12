@@ -651,22 +651,66 @@ canvas.addEventListener("touchstart", (e) => {
         touchStartY = touch.clientY;
         startPanX = panX;
         startPanY = panY;
+
+        const rect = canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left - offsetX;
+        const y = touch.clientY - rect.top - offsetY;
+        const { col, row } = getHexAtPosition(x, y);
+        const key = `${col},${row}`;
+
+        if (col >= 0 && row >= 0) {
+            if (activeTool === 'select') {
+                isDragging = true;
+                isSelecting = true;
+                setHexSelected(key, true);
+                drawGrid({ col, row });
+                lastHex = key;
+            } else if (activeTool === 'erase') {
+                isDragging = true;
+                isSelecting = false;
+                setHexSelected(key, false);
+                drawGrid({ col, row });
+                lastHex = key;
+            } else if (activeTool === 'pan') {
+                isDragging = false;
+                isPanning = true;
+            }
+        }
     } else if (e.touches.length === 2) {
+        isDragging = false;
+        isPanning = false;
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         initialPinchDistance = Math.hypot(dx, dy);
         initialZoom = zoom;
     }
+
+    e.preventDefault();
 }, { passive: false });
 
 canvas.addEventListener("touchmove", (e) => {
     if (e.touches.length === 1 && initialPinchDistance === null) {
         const touch = e.touches[0];
-        const dx = touch.clientX - touchStartX;
-        const dy = touch.clientY - touchStartY;
 
-        setPan(startPanX + dx, startPanY + dy);
-        drawGrid();
+        if (activeTool === 'pan' || isPanning) {
+            const dx = touch.clientX - touchStartX;
+            const dy = touch.clientY - touchStartY;
+
+            setPan(startPanX + dx, startPanY + dy);
+            drawGrid();
+        } else if (activeTool === 'select' || activeTool === 'erase') {
+            const rect = canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left - offsetX;
+            const y = touch.clientY - rect.top - offsetY;
+            const { col, row } = getHexAtPosition(x, y);
+            const key = `${col},${row}`;
+
+            if (col >= 0 && row >= 0 && key !== lastHex) {
+                setHexSelected(key, isSelecting);
+                lastHex = key;
+                drawGrid({ col, row });
+            }
+        }
     } else if (e.touches.length === 2) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -676,7 +720,7 @@ canvas.addEventListener("touchmove", (e) => {
             let scale = newDistance / initialPinchDistance;
             let newZoom = clamp(initialZoom * scale, minZoom, maxZoom);
 
-            // Center zoom on midpoint between fingers
+            // Zoom center logic
             const rect = canvas.getBoundingClientRect();
             const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left - panX;
             const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top - panY;
@@ -702,6 +746,10 @@ canvas.addEventListener("touchend", (e) => {
     if (e.touches.length < 2) {
         initialPinchDistance = null;
     }
+
+    isDragging = false;
+    isPanning = false;
+    lastHex = null;
 });
 
 
