@@ -660,20 +660,19 @@ canvas.addEventListener("touchstart", (e) => {
             if (activeTool === 'select') {
                 isDragging = true;
                 isSelecting = true;
-                setHexSelected(key, true);
-                drawGrid({ col, row });
-                lastHex = key;
             } else if (activeTool === 'erase') {
                 isDragging = true;
                 isSelecting = false;
-                setHexSelected(key, false);
-                drawGrid({ col, row });
-                lastHex = key;
             } else if (activeTool === 'pan') {
                 isPanning = true;
                 startPanX = panX;
                 startPanY = panY;
             }
+
+            setHexSelected(key, true);
+            drawGrid({ col, row });
+            lastHex = key;
+            
         }
     } else if (e.touches.length === 2) {
         isDragging = false;
