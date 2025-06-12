@@ -52,7 +52,7 @@ body {
 
 #controls .symbol {
   font-size: 2.6rem;
-  padding: 12px;
+  padding: 12px 4px;
   color: rgba(255, 255, 255, 0.2);
   
 }
