@@ -51,9 +51,9 @@ body {
 }
 
 #controls .symbol {
-  font-size: 2.2rem;
+  font-size: 1.8rem;
   padding: 2px 8px;
-  color: white;
+  color: rgba(255, 255, 255, 0.2);
   
 }
 
