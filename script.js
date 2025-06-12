@@ -649,8 +649,6 @@ canvas.addEventListener("touchstart", (e) => {
         const touch = e.touches[0];
         touchStartX = touch.clientX;
         touchStartY = touch.clientY;
-        startPanX = panX;
-        startPanY = panY;
 
         const rect = canvas.getBoundingClientRect();
         const x = touch.clientX - rect.left - offsetX;
@@ -672,8 +670,9 @@ canvas.addEventListener("touchstart", (e) => {
                 drawGrid({ col, row });
                 lastHex = key;
             } else if (activeTool === 'pan') {
-                isDragging = false;
                 isPanning = true;
+                startPanX = panX;
+                startPanY = panY;
             }
         }
     } else if (e.touches.length === 2) {
@@ -692,24 +691,23 @@ canvas.addEventListener("touchmove", (e) => {
     if (e.touches.length === 1 && initialPinchDistance === null) {
         const touch = e.touches[0];
 
-        if (activeTool === 'pan' || isPanning) {
-            const dx = touch.clientX - touchStartX;
-            const dy = touch.clientY - touchStartY;
+        const rect = canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left - offsetX;
+        const y = touch.clientY - rect.top - offsetY;
+        const { col, row } = getHexAtPosition(x, y);
+        const key = `${col},${row}`;
 
-            setPan(startPanX + dx, startPanY + dy);
-            drawGrid();
-        } else if (activeTool === 'select' || activeTool === 'erase') {
-            const rect = canvas.getBoundingClientRect();
-            const x = touch.clientX - rect.left - offsetX;
-            const y = touch.clientY - rect.top - offsetY;
-            const { col, row } = getHexAtPosition(x, y);
-            const key = `${col},${row}`;
-
-            if (col >= 0 && row >= 0 && key !== lastHex) {
+        if (activeTool === 'select' || activeTool === 'erase') {
+            if (isDragging && col >= 0 && row >= 0 && key !== lastHex) {
                 setHexSelected(key, isSelecting);
                 lastHex = key;
                 drawGrid({ col, row });
             }
+        } else if (activeTool === 'pan' && isPanning) {
+            const dx = touch.clientX - touchStartX;
+            const dy = touch.clientY - touchStartY;
+            setPan(startPanX + dx, startPanY + dy);
+            drawGrid();
         }
     } else if (e.touches.length === 2) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -720,7 +718,6 @@ canvas.addEventListener("touchmove", (e) => {
             let scale = newDistance / initialPinchDistance;
             let newZoom = clamp(initialZoom * scale, minZoom, maxZoom);
 
-            // Zoom center logic
             const rect = canvas.getBoundingClientRect();
             const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left - panX;
             const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top - panY;
@@ -751,7 +748,6 @@ canvas.addEventListener("touchend", (e) => {
     isPanning = false;
     lastHex = null;
 });
-
 
 // Scale handling
 function applyScale() {
