@@ -155,12 +155,12 @@
     {
       "hexes": ["50,41"],
       "name": "East Chapel",
-      "description": "Originally founded around a chapel established to uphold the rule of faith, East Chappel grew into a bustling mining city following the discovery of gold, silver, and rare gemstones."
+      "description": "Originally founded around a chapel established to uphold the rule of faith, East Chappel grew into a bustling mining city following the discovery of rare gemstones and metals."
     },  
     {
       "hexes": ["49,40", "49,41"],
       "name": "East Chapel Mine",
-      "description": "Prized for its veins of gold and silver. Rubies, sapphires, and quartz-hosted gemstones add to its rare and valuable bounty, making it a crucial source of wealth for the region."
+      "description": "Gemstones and trace amounts of exotic metals such as adamantine and mythril make it a crucial source of wealth for the region."
     },
     {
       "hexes": ["30,44"],
