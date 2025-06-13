@@ -36,8 +36,10 @@ const resetPositionBtn = document.getElementById('resetPositionBtn');
 const togglePanBtn = document.getElementById('togglePanBtn');
 const toggleSelectBtn = document.getElementById('toggleSelectBtn');
 const toggleEraseBtn = document.getElementById('toggleEraseBtn');
+const clearBtn = document.getElementById('clearBtn');
 
 const toggleFactionBtn = document.getElementById('toggleFactionBtn');
+const toggleEnvironmentBtn = document.getElementById('toggleEnvironmentBtn');
 
 const selectedHexes = new Set();
 
@@ -54,7 +56,8 @@ let offsetY = 1;
 
 let lastHex = null;
 
-let isShowRegionOn = false;
+//let isShowRegionOn = false;
+let showRegion = null;
 
 let isDragging = false;
 let isPanning = false;
@@ -65,6 +68,9 @@ let startPanY = 0;
 
 let startRow = 0;
 let startCol = 0;
+
+let latestActiveHexRow = null;
+let latestActiveHexCol = null;
 
 let minZoom = 1; // this will be calculated after the image loads.
 let maxZoom = 1; // this will be calculated after the image loads using maxZoomScale.
@@ -123,7 +129,7 @@ image.onload = () => {
     panX = 0;//(canvas.width - image.naturalWidth * zoom) / 2;
     panY = 0;//(canvas.height - image.naturalHeight * zoom) / 2;
 
-    drawGrid();
+    drawGridLatestActive();
 };
 
 // Load hex info json
@@ -208,7 +214,7 @@ function resizeCanvas() {
     zoom = clamp(zoom, minZoom, maxZoom);
     setPan(panX, panY);
 
-    drawGrid();
+    drawGridLatestActive();
 }
 
 window.addEventListener('resize', resizeCanvas);
@@ -236,7 +242,7 @@ function drawGrid(hoveredHex = null) {
             const hexInfo = hexData.get(key);
 
             // Draw regions if it is on.
-            if(hexInfo && hexInfo.region && isShowRegionOn) {
+            if(hexInfo && hexInfo.region && showRegion == hexInfo.region.type) {
                 drawHex(x, y, {
                     strokeColor: "rgba(0,0,0,0.0)",
                     fillColor: hexInfo.region.color,
@@ -408,6 +414,8 @@ canvas.addEventListener("mousedown", (event) => {
     isPanning = true;
     startPanX = panX;
     startPanY = panY;
+
+    event.preventDefault();
 });
 
 canvas.addEventListener("mousemove", (event) => {
@@ -433,7 +441,7 @@ canvas.addEventListener("mousemove", (event) => {
     if (hoveredHex && hoveredHex.col >= 0 && hoveredHex.row >= 0) {
         drawGrid(hoveredHex);
     } else {
-        drawGrid();
+        drawGridLatestActive();
     }
     
     // Handle selection.
@@ -450,6 +458,8 @@ canvas.addEventListener("mousemove", (event) => {
         }
         lastHex = key;
     }
+
+    event.preventDefault();
 });
 
 canvas.addEventListener("wheel", (e) => {
@@ -475,19 +485,24 @@ canvas.addEventListener("wheel", (e) => {
     panY -= (mouseY * zoom - mouseY * prevZoom);
 
     setPan(panX, panY);
-    drawGrid();
+    drawGridLatestActive();
 }, { passive: false });
 
 canvas.addEventListener("mouseup", () => {
     isPanning = false;
     isDragging = false;
     lastHex = null;
+
+    event.preventDefault();
 });
 
 canvas.addEventListener("mouseleave", () => {
     isPanning = false;
     isDragging = false;
     lastHex = null;
+    drawGridLatestActive();
+
+    event.preventDefault();
 });
 
 function setHexSelected(key, value) {
@@ -535,9 +550,13 @@ selectedHexesRef.on("value", (snapshot) => {
 
     if (lastHex) {
         const [col, row] = lastHex.split(',').map(Number);
+        latestActiveHexCol = col;
+        latestActiveHexRow = row;
         drawGrid({ col, row }); // Draw with highlight
     } else {
-        drawGrid(); // Draw full grid with no focus
+        latestActiveHexCol = null;
+        latestActiveHexRow = null;
+        drawGridLatestActive();
     }
 
     console.log("Current selected hexes data received:", hexesData);
@@ -577,7 +596,7 @@ auth.onAuthStateChanged((user) => {
         console.log("Auth state changed: User is signed out.");
     }
 
-    drawGrid();
+    drawGridLatestActive();
 });
 
 canvas.addEventListener("contextmenu", (e) => {
@@ -748,7 +767,7 @@ canvas.addEventListener("touchmove", (e) => {
             panY -= (mouseY * zoom - mouseY * prevZoom);
 
             setPan(panX, panY);
-            drawGrid();
+            drawGridLatestActive();
         }
     }
 
@@ -822,14 +841,42 @@ togglePanBtn.addEventListener('click', () => {
     setActiveTool('pan');
 });
 
+const overlayButtons = {
+    political : document.getElementById('toggleFactionBtn'),
+    environmental : document.getElementById('toggleEnvironmentBtn'),
+};
+
 toggleFactionBtn.addEventListener('click', () => {
-    isShowRegionOn = !isShowRegionOn;
-    if(isShowRegionOn){
-        toggleFactionBtn.classList.add('active');
-    } else {
-        toggleFactionBtn.classList.remove('active');
+    setOverlay('political');
+});
+
+toggleEnvironmentBtn.addEventListener('click', () => {
+    setOverlay('environmental');
+});
+
+function setOverlay(overlay) {
+    for (const [name, btn] of Object.entries(overlayButtons)) {
+        btn.classList.remove('active');
     }
-    drawGrid();
+
+    showRegion = showRegion == overlay ? null : overlay;
+
+    if(showRegion != null) {
+        overlayButtons[overlay].classList.add('active');
+    }
+
+    drawGridLatestActive();
+}
+
+clearBtn.addEventListener('click', ()=> {
+    clearHexSelected();
 });
 
 setActiveTool('pan');
+
+function drawGridLatestActive(){
+    if(latestActiveHexCol != null && latestActiveHexRow != null)
+        drawGrid({col: latestActiveHexCol, row: latestActiveHexRow});
+    else
+        drawGrid();
+}
