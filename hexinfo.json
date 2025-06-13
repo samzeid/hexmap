@@ -70,6 +70,20 @@
       "description": "",
       "color": "rgba(128,64,64,0.3)",
       "type": "environmental"
+    },
+    {
+      "hexes": ["41,29", "42,29", "42,30"],
+      "name": "Hook Cove",
+      "description": "Bio-luminescent jellyfish fill the cove's waters each late spring to early summer, making The Candles rock formation appear to glow as though lit with a turquoise flame when seen from certain angles.",
+      "color": "rgba(0,255,255,0.3)",
+      "type": "environmental"
+    },
+    {
+      "hexes": ["24,29", "24,30", "24,31", "24,32", "23,29", "25,29", "26,30", "27,29", "28,30", "29,30", "30,31", "30,32", "30,33", "30,34", "29,33", "28,33", "28,32", "28,31", "27,30", "27,31", "27,32", "27,33", "28,34", "29,34", "26,34", "26,33", "26,32", "26,31", "25,30", "25,31", "25,32"],
+      "name": "Zalt Cove",
+      "description": "Salt-heavy tides form brief crystalline pillars along the shore, reclaimed with each wave. Coastal caves exhale briny mist as the sea crashes within.",
+      "color": "rgba(0,128,255,0.3)",
+      "type": "environmental"
     }
   ],
   "locations": [ 
@@ -112,11 +126,6 @@
       "hexes": ["32,27"],
       "name": "Starsong Tower",
       "description": "This watchtower doubles as a lighthouse, its beacon singing through the night to guide trade ships safely to Noxis's harbors."
-    },
-    {
-      "hexes": ["41,29", "42,29", "42,30"],
-      "name": "Hook Cove",
-      "description": "Bio-luminescent jellyfish fill the cove's waters each late spring to early summer, making The Candles rock formation appear to glow as though lit with a turquoise flame when seen from certain angles."
     },
     {
       "hexes": ["36,27"],
@@ -273,11 +282,6 @@
       "hexes": ["30,12"],
       "name": "Furst Cradle Windmills",
       "description": "These mills serve both to grind grain into flour and to act as watchtowers against seafaring raiders."
-    },
-    {
-      "hexes": ["24,29", "24,30", "24,31", "24,32", "23,29", "25,29", "26,30", "27,29", "28,30", "29,30", "30,31", "30,32", "30,33", "30,34", "29,33", "28,33", "28,32", "28,31", "27,30", "27,31", "27,32", "27,33", "28,34", "29,34", "26,34", "26,33", "26,32", "26,31", "25,30", "25,31", "25,32"],
-      "name": "Zalt Cove",
-      "description": "Salt-heavy tides form brief crystalline pillars along the shore, reclaimed with each wave. Coastal caves exhale briny mist as the sea crashes within."
     },
     {
       "hexes": ["29,32", "29,31"],
