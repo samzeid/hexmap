@@ -36,20 +36,6 @@ body {
   padding: 2%;
 }
 
-#controls {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  padding: 8px;
-  border-radius: 10px;
-  backdrop-filter: blur(8px); /* Glassy effect */
-  background-color: rgba(30, 30, 30, 0.4); /* Dark semi-transparent */
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-  display: flex;
-  gap: 6px;
-}
-
 #controls .symbol {
   font-size: 2.6rem;
   padding: 12px 4px;
@@ -83,4 +69,73 @@ body {
 #controls button.active {
   background-color: rgba(255, 255, 255, 0.3);
   border: 1px solid white;
+}
+
+
+
+#controls {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  background-color: rgba(30, 30, 30, 0.4);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  display: flex;
+  gap: 6px;
+  transform-origin: right center;
+  transition:
+    transform 0.3s ease 0.15s,
+    max-width 0.3s ease 0.15s,
+    padding 0.3s ease 0.15s;
+  max-width: 1000px;
+}
+
+#controls.collapsed {
+  transform: scaleX(1);
+  max-width: 60px;
+  padding-right: 6px;
+  transition:
+    transform 0.3s ease,
+    max-width 0.3s ease,
+    padding 0.3s ease;
+}
+
+/* All non-collapse buttons default to visible */
+#controls .symbol,
+#controls button:not(#collapseBtn) {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    transform 0.2s ease 0.3s,
+    opacity 0.2s ease 0.3s; /* appears AFTER container expands */
+}
+
+/* Hide them immediately when collapsing */
+#controls.collapsed .symbol,
+#controls.collapsed button:not(#collapseBtn) {
+  opacity: 0;
+  transform: scale(0);
+  transition:
+    transform 0.1s ease,
+    opacity 0.1s ease;
+}
+
+/* Collapse button always visible */
+#collapseBtn {
+  z-index: 2;
+}
+
+/* Rotate arrow icon when collapsed */
+#controls.collapsed #collapseBtn i {
+  transform: rotate(180deg);
+  transition: transform 0.5s ease;
+}
+
+/* Rotate arrow icon when collapsed */
+#controls #collapseBtn i {
+  transform: rotate(0deg);
+  transition: transform 0.5s ease;
 }

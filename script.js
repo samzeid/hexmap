@@ -880,3 +880,19 @@ function drawGridLatestActive(){
     else
         drawGrid();
 }
+
+const controls = document.getElementById("controls");
+const collapseBtn = document.getElementById("collapseBtn");
+
+collapseBtn.addEventListener("click", () => {
+    controls.classList.toggle("collapsed");
+
+    const icon = collapseBtn.querySelector("i");
+    if (controls.classList.contains("collapsed")) {
+        icon.classList.remove("collapsed");
+        // set toggle to pan mode.
+        setActiveTool('pan')
+    } else {
+        icon.classList.add("collapsed");
+    }
+});
