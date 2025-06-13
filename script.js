@@ -141,22 +141,42 @@ fetch('https://samzeid.github.io/hexmap/hexinfo.json')
     regions.forEach(region => {
         region.hexes.forEach(hex => {
             if (!hexData.has(hex)) {
-                hexData.set(hex, { region: null, location: null });
+                hexData.set(hex, {
+                    politicalRegion: null,
+                    environmentalRegion: null,
+                    location: null
+                });
             }
-                hexData.get(hex).region = {
+
+            const hexEntry = hexData.get(hex);
+
+            const regionData = {
                 name: region.name,
                 description: region.description,
                 color: region.color,
                 type: region.type || null
             };
+
+            if (region.type === 'political') {
+                hexEntry.politicalRegion = regionData;
+            } else if (region.type === 'environmental') {
+                hexEntry.environmentalRegion = regionData;
+            } else {
+                console.warn(`Region with unknown type at hex ${hex}:`, region);
+            }
         });
     });
 
     locations.forEach(location => {
         location.hexes.forEach(hex => {
             if (!hexData.has(hex)) {
-                hexData.set(hex, { region: null, location: null });
+                hexData.set(hex, {
+                    politicalRegion: null,
+                    environmentalRegion: null,
+                    location: null
+                });
             }
+
             hexData.get(hex).location = {
                 name: location.name,
                 description: location.description,
@@ -242,10 +262,17 @@ function drawGrid(hoveredHex = null) {
             const hexInfo = hexData.get(key);
 
             // Draw regions if it is on.
-            if(hexInfo && hexInfo.region && showRegion == hexInfo.region.type) {
+            if(hexInfo && hexInfo.politicalRegion && showRegion == 'political') {
                 drawHex(x, y, {
                     strokeColor: "rgba(0,0,0,0.0)",
-                    fillColor: hexInfo.region.color,
+                    fillColor: hexInfo.politicalRegion.color,
+                    lineWidth: 0,
+                    opacity: 1
+                });
+            } else if(hexInfo && hexInfo.environmentalRegion && showRegion == 'environmental') {
+                drawHex(x, y, {
+                    strokeColor: "rgba(0,0,0,0.0)",
+                    fillColor: hexInfo.environmentalRegion.color,
                     lineWidth: 0,
                     opacity: 1
                 });
@@ -279,7 +306,10 @@ function drawGrid(hoveredHex = null) {
         let text = `Hex: col=${hoveredHex.col}, row=${hoveredHex.row}`;
 
         if (hexInfo) {
-            const { region, location } = hexInfo;
+            const { politicalRegion, environmentalRegion, location } = hexInfo;
+            let region = politicalRegion;
+
+            region = region == null ? environmentalRegion : region;
 
             if (region && location) {
                 text = `${text}<br><br><i>Region: ${region.name}</i><br><b>${location.name}</b><br><i>${location.description}</i>`;
