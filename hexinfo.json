@@ -268,10 +268,11 @@
       "description": "The walled capital of Vorsan Rest, known for its colorful markets and unique exotic architecture. The Merchant Guild rules from its heart, where wealth holds more power than faith."
     },
     {
-      "hexes": ["21,1", "21,0", "20,1", "20,0", "21,2", "21,3", "22,4", "21,4", "22,5", "21,5", "22,6", "22,1"],
-      "name": "Glimmerfols",
-      "description": "Snowmelt tumbles from the high peaks in a towering sheet of ice-cold water, veiling the cliffs below in glimmering mist."
+      "hexes": ["61,33", "60,34"],
+      "name": "Vessan Colonies",
+      "description": "The Vessan Colonies are far-flung holdings established by the Collective to secure resources, and influence beyond Vorsan Rest."
     },
+    
     {
       "hexes": ["39,9", "38,9", "40,9", "39,8"],
       "name": "Woadwood Forest",
@@ -296,6 +297,16 @@
       "hexes": ["30,24", "30,25", "32,25", "32,24"],
       "name": "City of Solis",
       "description": "Once home to Celestia's original church. It has became the capital of the Second Light, remaining the heart of their power and belief."
+    },
+    {
+      "hexes": ["31,28"],
+      "name": "Blestmouth",
+      "description": "Perched above the River Blest, this windmill town sits too high for ships to dock, but oversees trade routes below."
+    },
+    {
+      "hexes": ["31,28"],
+      "name": "Sauntholm",
+      "description": "Originally founded to watch for wine smugglers, it has since turned into a small town where nobles travel to enjoy the coast."
     },
     {
       "hexes": ["28,7", "29,7", "29,6", "30,7", "31,6", "31,7", "32,7"],
@@ -331,6 +342,11 @@
       "hexes": ["13,5", "13,4", "13,3", "13,2", "13,1", "13,0", "12,2", "12,3", "12,4", "12,2", "12,1", "12,0", "11,1", "11,0"],
       "name": "The Red Falls",
       "description": "Iron oxide from the mountains freeze in the glacial lakes. As the snowy mountain caps melt, the waterfalls run red as though bleeding."
+    },
+    {
+      "hexes": ["21,1", "21,0", "20,1", "20,0", "21,2", "21,3", "22,4", "21,4", "22,5", "21,5", "22,6", "22,1"],
+      "name": "Glimmerfols",
+      "description": "Snowmelt tumbles from the high peaks in a towering sheet of ice-cold water, veiling the cliffs below in glimmering mist."
     },
     {
       "hexes": ["43,31", "44,31"],
