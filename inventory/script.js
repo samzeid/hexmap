@@ -9,27 +9,38 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 const Bulk = {
-  PACKABLE: { width: 1, height: 1 },
-  HANDHELD: { width: 1, height: 1 },
-  BULKY: { width: 2, height: 1 },
+  PACKABLE: { id: 'packable', width: 1, height: 1 },
+  HANDHELD: { id: 'handheld', width: 1, height: 1 },
+  BULKY: { id: 'bulky', width: 2, height: 1 },
 };
 
-// --- Add unique ID counter here
 let idCounter = 0;
 
 class InventoryItem {
   constructor({ name = "", bulk = Bulk.HANDHELD, container = null }) {
-    this.id = `item-${++idCounter}`; // Unique ID for each item
+    this.id = `item-${++idCounter}`;
     this.name = name;
     this.size = bulk;
     if (container) {
       this.innerContainer = new InventoryContainer(container);
-      this.innerContainer.ownerId = this.id; // Track parent item ID for the container
+      this.innerContainer.ownerId = this.id;
     }
   }
 
   isContainer() {
     return !!this.innerContainer;
+  }
+
+  isPackable() {
+    return this.size.id === Bulk.PACKABLE.id;
+  }
+
+  // New method: returns display text, multiline support
+  getDisplayText() {
+    if (typeof this.displayText === "function") {
+      return this.displayText();
+    }
+    return this.name;
   }
 }
 
@@ -70,12 +81,57 @@ class InventoryContainer {
     }
   }
 
-  addItem(item, x, y) {
+  addItem(item, x, y, skipPouchAuto = false) {
+    // If item is packable and container is NOT a pouch, and we are NOT skipping pouch auto-creation:
+    if (item.isPackable() && !isContainerPouch(this) && !skipPouchAuto) {
+      const pouch = new InventoryItem({
+        name: "Pouch",
+        bulk: Bulk.HANDHELD,
+        container: { col: 1, row: 5 }
+      });
+  
+      for (let dx = 0; dx < pouch.size.width; dx++) {
+        for (let dy = 0; dy < pouch.size.height; dy++) {
+          this.items[`${x + dx},${y + dy}`] = pouch;
+        }
+      }
+  
+      // Put the packable inside the pouch's inner container at (0, 0)
+      pouch.innerContainer.addItem(item, 0, 0);
+  
+      return true;
+    }
+  
+    // Normal add for other items and packables inside pouch
     for (let dx = 0; dx < item.size.width; dx++) {
       for (let dy = 0; dy < item.size.height; dy++) {
         this.items[`${x + dx},${y + dy}`] = item;
       }
     }
+  
+    return true;
+  }
+
+  findPouch() {
+    for (const key in this.items) {
+      const item = this.items[key];
+      if (item.name === "Pouch" && item.innerContainer) return item;
+    }
+    return null;
+  }
+
+  addToPouch(item) {
+    // Only packables allowed in pouch
+    if (!item.isPackable()) return false;
+    for (let y = 0; y < this.row; y++) {
+      for (let x = 0; x < this.col; x++) {
+        if (!this.getItem(x, y)) {
+          this.addItem(item, x, y);
+          return true;
+        }
+      }
+    }
+    return false;
   }
 }
 
@@ -97,6 +153,118 @@ function drawInventory(inventory) {
     inventoryDiv.appendChild(containerDiv);
     updateItemPositions(container, containerDiv);
   }
+}
+
+function handleDrop(e, dropX, dropY, containerId) {
+  e.preventDefault();
+  const target = getCellCoordinatesFromMouseEvent(e);
+  if (!target) return;
+
+  const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+  const src = inventory.containers[data.sourceContainerId] || dynamicContainers[data.sourceContainerId];
+  const dst = inventory.containers[containerId] || dynamicContainers[containerId];
+  const item = data.fromSearch ? new InventoryItem(data) : src.getItem(data.originX, data.originY);
+  if (!item || !dst) return;
+
+  const ox = target.x - data.offsetX;
+  const oy = target.y - data.offsetY;
+
+  if (ox < 0 || oy < 0 || ox + item.size.width > dst.col || oy + item.size.height > dst.row) return;
+
+  // Prevent illegal overlap
+  for (let dx = 0; dx < item.size.width; dx++) {
+    for (let dy = 0; dy < item.size.height; dy++) {
+      const occ = dst.getItem(ox + dx, oy + dy);
+      if (occ && occ !== item) return;
+    }
+  }
+
+  // Special case: dropping into a pouch — only allow packables
+  if (isContainerPouch(dst)) {
+    if (!item.isPackable()) return; // disallowed — bail out, do NOT remove item
+    if (!dst.addItem(item, ox, oy)) return; // could not add — bail
+    if (!data.fromSearch) src.removeItem(item); // now safe to remove
+    drawInventory(inventory);
+  } 
+  // Special case: dropping a packable into a non-pouch — create pouch and insert
+  else if (item.isPackable()) {
+    const pouch = new InventoryItem({
+      name: "Pouch",
+      bulk: Bulk.HANDHELD,
+      container: { col: 5, row: 1 }
+    });
+
+    // Assign displayText to pouch here as well
+    pouch.displayText = () => {
+      const innerItems = Object.values(pouch.innerContainer.items);
+      if (innerItems.length === 0) return pouch.name;
+      const lines = ["<div class='pouch-title'>" + pouch.name + "</div>"];
+
+      const listed = new Set();
+      for (const item of innerItems) {
+        if (!listed.has(item)) {
+          lines.push(" • " + item.name);
+          listed.add(item);
+        }
+      }
+      return lines.join("<br>");
+    };
+
+    // Check pouch placement validity
+    for (let dx = 0; dx < pouch.size.width; dx++) {
+      for (let dy = 0; dy < pouch.size.height; dy++) {
+        const occ = dst.getItem(ox + dx, oy + dy);
+        if (occ && occ !== item) return; // can't place pouch
+      }
+    }
+
+    dst.addItem(pouch, ox, oy);
+    pouch.innerContainer.addItem(item, 0, 0);
+    if (!data.fromSearch) src.removeItem(item);
+    drawInventory(inventory);
+  } 
+  // General item placement
+  else {
+    if (!dst.addItem(item, ox, oy, true)) return;
+    if (!data.fromSearch) src.removeItem(item);
+    drawInventory(inventory);
+  }
+
+  // === Cleanup any empty pouches ===
+  let didDelete = false;
+  const allContainers = { ...inventory.containers, ...dynamicContainers };
+  for (const container of Object.values(allContainers)) {
+    for (const key in container.items) {
+      const candidate = container.items[key];
+      if (candidate?.name === "Pouch" && candidate.innerContainer) {
+        if (Object.keys(candidate.innerContainer.items).length === 0) {
+          container.removeItem(candidate);
+          itemDivCache.delete(candidate);
+          delete dynamicContainers[candidate.id];
+          didDelete = true;
+          break; // Avoid mutating during iteration
+        }
+      }
+    }
+  }
+  if(didDelete) drawInventory(inventory);
+}
+
+
+function isContainerPouch(container) {
+  if (!container.ownerId) return false;
+  const pouchItem = findItemById(container.ownerId);
+  return pouchItem?.name === "Pouch";
+}
+
+function findItemById(id) {
+  const allContainers = { ...inventory.containers, ...dynamicContainers };
+  for (const container of Object.values(allContainers)) {
+    for (const item of Object.values(container.items)) {
+      if (item.id === id) return item;
+    }
+  }
+  return null;
 }
 
 function drawContainer(container, containerId) {
@@ -146,65 +314,15 @@ function updateItemPositions(container, containerDiv) {
   }
 }
 
-function handleDrop(e, dropX, dropY, containerId) {
-  e.preventDefault();
-  const target = getCellCoordinatesFromMouseEvent(e);
-  if (!target) return;
-
-  const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-  const src = inventory.containers[data.sourceContainerId] || dynamicContainers[data.sourceContainerId];
-  const dst = inventory.containers[containerId] || dynamicContainers[containerId];
-  const item = data.fromSearch ? new InventoryItem(data) : src.getItem(data.originX, data.originY);
-  if (!item || !dst) return;
-
-  // Pass actual container object instead of container ID for better nesting check
-  if (item.isContainer && isIllegalContainerPlacement(item, dst)) return;
-
-  const ox = target.x - data.offsetX;
-  const oy = target.y - data.offsetY;
-  if (ox < 0 || oy < 0 || ox + item.size.width > dst.col || oy + item.size.height > dst.row) return;
-
-  for (let dx = 0; dx < item.size.width; dx++) {
-    for (let dy = 0; dy < item.size.height; dy++) {
-      const occ = dst.getItem(ox + dx, oy + dy);
-      if (occ && occ !== item) return;
-    }
-  }
-
-  if (!data.fromSearch) src.removeItem(item);
-  dst.addItem(item, ox, oy);
-  drawInventory(inventory);
-}
-
-function isIllegalContainerPlacement(item, targetContainer) {
-  if (!item.innerContainer) return false;
-
-  // Can't place container into itself
-  if (item.innerContainer === targetContainer) return true;
-
-  // DFS to check if targetContainer is a descendant of the item.innerContainer
-  const visited = new Set();
-  const stack = [item.innerContainer];
-
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (current === targetContainer) return true;
-    for (const key in current.items) {
-      const child = current.items[key];
-      if (child?.isContainer() && child.innerContainer && !visited.has(child.innerContainer)) {
-        visited.add(child.innerContainer);
-        stack.push(child.innerContainer);
-      }
-    }
-  }
-
-  return false;
-}
-
 function drawItem(item, x, y, containerId, staticMode = false) {
   const div = document.createElement("div");
   div.classList.add("item");
-  div.textContent = item.name;
+
+  if (item.name === "Pouch") div.classList.add("pouch");
+
+  // Use the displayText function if it exists, otherwise fallback to name
+  div.innerHTML = item.getDisplayText();
+
   div.draggable = true;
 
   if (item._isOpen) {
@@ -260,7 +378,6 @@ function drawItem(item, x, y, containerId, staticMode = false) {
 
 function toggleContainerView(item) {
   if (item._isOpen) {
-    // Closing: recursively close all nested containers
     const stack = [item];
     while (stack.length > 0) {
       const current = stack.pop();
@@ -335,6 +452,7 @@ inventory.containers.base.addItem(new InventoryItem({
 }), 0, 3);
 
 const ITEM_LIBRARY = [
+  //{ name: "Pouch", bulk: Bulk.HANDHELD, container: { col: 1, row: 5 } }, // do not delete
   { name: "Dagger", bulk: Bulk.HANDHELD },
   { name: "Sword", bulk: Bulk.HANDHELD },
   { name: "Great Axe", bulk: Bulk.BULKY },
@@ -342,9 +460,9 @@ const ITEM_LIBRARY = [
   { name: "Potion", bulk: Bulk.PACKABLE },
   { name: "Scroll", bulk: Bulk.PACKABLE },
   { name: "Bow", bulk: Bulk.BULKY },
-  { name: "Chest", bulk: Bulk.BULKY, container: { col: 3, row: 2 }},
+  { name: "Chest", bulk: Bulk.BULKY, container: { col: 3, row: 2 } },
 ];
-
+  
 const input = document.getElementById("search-input");
 const results = document.getElementById("search-results");
 results.style.display = "flex";

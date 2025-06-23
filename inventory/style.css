@@ -48,6 +48,24 @@ body {
     border-color: rgba(255, 255, 255, 0.3);
 }
 
+/* Different background color for Pouch items */
+.item.pouch {
+  background-color: rgba(85, 119, 170, 0.5);
+  border-color: rgba(100, 140, 200, 0.7);
+  font-size: 0.6rem;
+  line-height: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pouch-title {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  font-style: italic;
+}
+
 .open-container {
     background-color: rgba(255, 255, 255, 0.5);
 }
