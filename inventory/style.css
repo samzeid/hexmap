@@ -1,0 +1,107 @@
+:root {
+    --cell-width: 64px;
+    --cell-height: 64px;
+}
+
+body {
+    background: #1a1a1a;
+    color: white;
+    font-family: sans-serif;
+    padding: 1rem;
+}
+
+.container {
+    position: relative; /* Added for absolute positioning of items */
+    display: inline-flex;
+    flex-direction: column;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+}
+
+.row {
+    display: flex;
+}
+
+.item {
+    background: rgba(128, 128, 128, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(2px);
+
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    cursor: grab;
+    user-select: none;
+    
+    z-index: 10;
+    position: absolute; /* Important for positioning */
+    width: calc(var(--item-width, 1) * var(--cell-width, 1));
+    height: calc(var(--item-height, 1) * var(--cell-height, 1));
+    box-sizing: border-box;
+
+    /*transition: top 0.2s ease, left 0.2s ease; */
+}
+
+.item:hover {
+    background: rgba(25, 118, 210, 0.35);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.open-container {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+.cell {
+    position: relative;
+    width: var(--cell-width);
+    height: var(--cell-height);
+
+    background: rgba(58, 58, 58, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    box-sizing: border-box;
+
+}
+
+#item-search {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    background: #222;
+    color: white;
+    padding: 0.5rem;
+    border: 1px solid #555;
+    width: 200px;
+  }
+  #search-results .item {
+    cursor: grab;
+    margin: 0.25rem 0;
+  }
+  
+  #delete-bin {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: #440000;
+    color: white;
+    padding: 0.5rem 1rem;
+    border: 2px solid red;
+    font-weight: bold;
+  }
+
+  #search-results .item {
+    border: 1px solid #888;
+    background: #333;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+  }
+  
+  .search-item {
+    margin-bottom: 0.5rem;
+  }
+
