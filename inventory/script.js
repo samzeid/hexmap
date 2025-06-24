@@ -12,18 +12,61 @@ const Bulk = {
   PACKABLE: { id: 'packable', width: 1, height: 1 },
   HANDHELD: { id: 'handheld', width: 1, height: 1 },
   BULKY: { id: 'bulky', width: 2, height: 1 },
+  VERYBULKY: { id: 'verybulky', width: 2, height: 2}
 };
 
 let idCounter = 0;
 
+function containerDisplayText() {
+  const itemName = `<div class='container-title'>${this.name}</div>`;
+
+  if (!this.innerContainer) return itemName;
+
+  const innerItems = Object.values(this.innerContainer.items);
+  if (innerItems.length === 0) return itemName;
+
+  const listed = [];
+  const seen = new Set();
+  for (const item of innerItems) {
+    if (!seen.has(item)) {
+      listed.push(item.name);
+      seen.add(item);
+    }
+  }
+
+  // If 5 or fewer items, show as single column list
+  if (listed.length <= 5) {
+    const lines = listed.map(name => `• ${name}`).join("<br>");
+    return `${itemName}<br>${lines}`;
+  }
+
+  // Otherwise, divide into two roughly even columns
+  const mid = Math.ceil(listed.length / 2);
+  const col1 = listed.slice(0, mid);
+  const col2 = listed.slice(mid);
+
+  const colHTML = `
+    <div class="container-columns">
+      <ul>${col1.map(name => `<li>• ${name}</li>`).join("")}</ul>
+      <ul>${col2.map(name => `<li>• ${name}</li>`).join("")}</ul>
+    </div>
+  `;
+
+  return itemName + colHTML;
+}
+
+
 class InventoryItem {
-  constructor({ name = "", bulk = Bulk.HANDHELD, container = null }) {
+  constructor({ name = "", bulk = Bulk.HANDHELD, container = null, displayText = null }) {
     this.id = `item-${++idCounter}`;
     this.name = name;
     this.size = bulk;
     if (container) {
       this.innerContainer = new InventoryContainer(container);
       this.innerContainer.ownerId = this.id;
+    }
+    if(displayText){
+      this.displayText = displayText;
     }
   }
 
@@ -84,11 +127,7 @@ class InventoryContainer {
   addItem(item, x, y, skipPouchAuto = false) {
     // If item is packable and container is NOT a pouch, and we are NOT skipping pouch auto-creation:
     if (item.isPackable() && !isContainerPouch(this) && !skipPouchAuto) {
-      const pouch = new InventoryItem({
-        name: "Pouch",
-        bulk: Bulk.HANDHELD,
-        container: { col: 1, row: 5 }
-      });
+      const pouch = createPouch();
   
       for (let dx = 0; dx < pouch.size.width; dx++) {
         for (let dy = 0; dy < pouch.size.height; dy++) {
@@ -111,33 +150,11 @@ class InventoryContainer {
   
     return true;
   }
-
-  findPouch() {
-    for (const key in this.items) {
-      const item = this.items[key];
-      if (item.name === "Pouch" && item.innerContainer) return item;
-    }
-    return null;
-  }
-
-  addToPouch(item) {
-    // Only packables allowed in pouch
-    if (!item.isPackable()) return false;
-    for (let y = 0; y < this.row; y++) {
-      for (let x = 0; x < this.col; x++) {
-        if (!this.getItem(x, y)) {
-          this.addItem(item, x, y);
-          return true;
-        }
-      }
-    }
-    return false;
-  }
 }
 
 class Inventory {
   containers = {
-    base: new InventoryContainer({ col: 4, row: 4 }),
+    base: new InventoryContainer({ col: 2, row: 2 }),
   };
 }
 
@@ -161,95 +178,105 @@ function handleDrop(e, dropX, dropY, containerId) {
   if (!target) return;
 
   const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-  const src = inventory.containers[data.sourceContainerId] || dynamicContainers[data.sourceContainerId];
-  const dst = inventory.containers[containerId] || dynamicContainers[containerId];
-  const item = data.fromSearch ? new InventoryItem(data) : src.getItem(data.originX, data.originY);
+  const src = getContainerById(data.sourceContainerId);
+  const dst = getContainerById(containerId);
+
+  const item = getItemFromData(data, src);
   if (!item || !dst) return;
 
   const ox = target.x - data.offsetX;
   const oy = target.y - data.offsetY;
 
-  if (ox < 0 || oy < 0 || ox + item.size.width > dst.col || oy + item.size.height > dst.row) return;
+  if (!isWithinBounds(item, dst, ox, oy)) return;
 
-  // Prevent illegal overlap
+  const conflict = collidesWith(item, dst, ox, oy);
+  if (conflict) return; // Customize this later if needed
+
+  if (handlePouchDrop(item, dst, data, ox, oy)) return;
+  if (handlePackableAutoPouch(item, dst, src, data, ox, oy)) return;
+
+  // Standard drop
+  dst.addItem(item, ox, oy, true);
+  if (!data.fromSearch) src.removeItem(item);
+
+  cleanupEmptyPouches();
+}
+
+function getContainerById(id) {
+  return inventory.containers[id] || dynamicContainers[id];
+}
+
+function getItemFromData(data, src) {
+  if (data.fromSearch) {
+    const item = new InventoryItem(data);
+    const baseItem = ITEM_LIBRARY.find(i => i.name === data.name);
+    if (baseItem?.displayText) item.displayText = baseItem.displayText;
+    return item;
+  } else {
+    return src.getItem(data.originX, data.originY);
+  }
+}
+
+function isWithinBounds(item, container, x, y) {
+  return x >= 0 && y >= 0 &&
+    x + item.size.width <= container.col &&
+    y + item.size.height <= container.row;
+}
+
+function collidesWith(item, container, x, y) {
   for (let dx = 0; dx < item.size.width; dx++) {
     for (let dy = 0; dy < item.size.height; dy++) {
-      const occ = dst.getItem(ox + dx, oy + dy);
-      if (occ && occ !== item) return;
+      const existing = container.getItem(x + dx, y + dy);
+      if (existing && existing !== item) return existing;
     }
   }
+  return null;
+}
 
-  // Special case: dropping into a pouch — only allow packables
-  if (isContainerPouch(dst)) {
-    if (!item.isPackable()) return; // disallowed — bail out, do NOT remove item
-    if (!dst.addItem(item, ox, oy)) return; // could not add — bail
-    if (!data.fromSearch) src.removeItem(item); // now safe to remove
-    drawInventory(inventory);
-  } 
-  // Special case: dropping a packable into a non-pouch — create pouch and insert
-  else if (item.isPackable()) {
-    const pouch = new InventoryItem({
-      name: "Pouch",
-      bulk: Bulk.HANDHELD,
-      container: { col: 5, row: 1 }
-    });
+function handlePouchDrop(item, dst, data, x, y) {
+  if (!isContainerPouch(dst)) return false;
+  if (!item.isPackable()) return true;
 
-    // Assign displayText to pouch here as well
-    pouch.displayText = () => {
-      const innerItems = Object.values(pouch.innerContainer.items);
-      if (innerItems.length === 0) return pouch.name;
-      const lines = ["<div class='pouch-title'>" + pouch.name + "</div>"];
-
-      const listed = new Set();
-      for (const item of innerItems) {
-        if (!listed.has(item)) {
-          lines.push(" • " + item.name);
-          listed.add(item);
-        }
-      }
-      return lines.join("<br>");
-    };
-
-    // Check pouch placement validity
-    for (let dx = 0; dx < pouch.size.width; dx++) {
-      for (let dy = 0; dy < pouch.size.height; dy++) {
-        const occ = dst.getItem(ox + dx, oy + dy);
-        if (occ && occ !== item) return; // can't place pouch
-      }
-    }
-
-    dst.addItem(pouch, ox, oy);
-    pouch.innerContainer.addItem(item, 0, 0);
-    if (!data.fromSearch) src.removeItem(item);
-    drawInventory(inventory);
-  } 
-  // General item placement
-  else {
-    if (!dst.addItem(item, ox, oy, true)) return;
-    if (!data.fromSearch) src.removeItem(item);
-    drawInventory(inventory);
+  const success = dst.addItem(item, x, y);
+  if (success && !data.fromSearch) {
+    const src = getContainerById(data.sourceContainerId);
+    src.removeItem(item);
   }
 
-  // === Cleanup any empty pouches ===
-  let didDelete = false;
+  return true;
+}
+
+function handlePackableAutoPouch(item, dst, src, data, x, y) {
+  if (!item.isPackable()) return false;
+
+  const pouch = createPouch();
+  pouch.displayText = containerDisplayText;
+
+  if (collidesWith(pouch, dst, x, y)) return true;
+
+  dst.addItem(pouch, x, y);
+  pouch.innerContainer.addItem(item, 0, 0);
+
+  if (!data.fromSearch)
+    src.removeItem(item);
+  
+  return true;
+}
+
+function cleanupEmptyPouches() {
   const allContainers = { ...inventory.containers, ...dynamicContainers };
   for (const container of Object.values(allContainers)) {
     for (const key in container.items) {
-      const candidate = container.items[key];
-      if (candidate?.name === "Pouch" && candidate.innerContainer) {
-        if (Object.keys(candidate.innerContainer.items).length === 0) {
-          container.removeItem(candidate);
-          itemDivCache.delete(candidate);
-          delete dynamicContainers[candidate.id];
-          didDelete = true;
-          break; // Avoid mutating during iteration
-        }
+      const item = container.items[key];
+      if (item?.name === "Pouch" && item.innerContainer && Object.keys(item.innerContainer.items).length === 0) {
+        container.removeItem(item);
+        itemDivCache.delete(item);
+        delete dynamicContainers[item.id];
+        break;
       }
     }
   }
-  if(didDelete) drawInventory(inventory);
 }
-
 
 function isContainerPouch(container) {
   if (!container.ownerId) return false;
@@ -273,6 +300,11 @@ function drawContainer(container, containerId) {
   containerDiv.dataset.containerId = containerId;
   containerDiv.style.position = "relative";
 
+  if (isContainerPouch(container)) {
+    containerDiv.classList.add("pouch-container");
+  }
+  
+
   for (let y = 0; y < container.row; y++) {
     const rowDiv = document.createElement("div");
     rowDiv.classList.add("row");
@@ -282,7 +314,10 @@ function drawContainer(container, containerId) {
       cellDiv.dataset.x = x;
       cellDiv.dataset.y = y;
       cellDiv.addEventListener("dragover", e => e.preventDefault());
-      cellDiv.addEventListener("drop", e => handleDrop(e, x, y, containerId));
+      cellDiv.addEventListener("drop", e => {
+        handleDrop(e, x, y, containerId);
+        drawInventory(inventory);
+      });
       rowDiv.appendChild(cellDiv);
     }
     containerDiv.appendChild(rowDiv);
@@ -318,7 +353,9 @@ function drawItem(item, x, y, containerId, staticMode = false) {
   const div = document.createElement("div");
   div.classList.add("item");
 
-  if (item.name === "Pouch") div.classList.add("pouch");
+  if (item.isContainer()) div.classList.add("container");
+
+  if (item.isPackable()) div.classList.add("packable");
 
   // Use the displayText function if it exists, otherwise fallback to name
   div.innerHTML = item.getDisplayText();
@@ -343,7 +380,7 @@ function drawItem(item, x, y, containerId, staticMode = false) {
   }
 
   div.addEventListener("dragstart", e => {
-    if (item.isContainer && item._isOpen) {
+    if (item.isContainer() && item._isOpen) {
       toggleContainerView(item);
     }
   
@@ -369,7 +406,7 @@ function drawItem(item, x, y, containerId, staticMode = false) {
     }));
   });
 
-  if (!staticMode && item.isContainer && item.isContainer()) {
+  if (!staticMode && item.isContainer()) {
     div.addEventListener("click", () => toggleContainerView(item));
   }
 
@@ -423,10 +460,10 @@ document.getElementById("delete-bin").addEventListener("drop", e => {
   e.preventDefault();
   const data = JSON.parse(e.dataTransfer.getData("text/plain"));
   if (data.fromSearch) return;
-  const container = inventory.containers[data.sourceContainerId] || dynamicContainers[data.sourceContainerId];
+  const container = getContainerById(data.sourceContainerId);
   const item = container?.getItem(data.originX, data.originY);
   if (item) {
-    if (item.isContainer && item.innerContainer) {
+    if (item.isContainer() && item.innerContainer) {
       for (const key in item.innerContainer.items) {
         const innerItem = item.innerContainer.items[key];
         itemDivCache.delete(innerItem);
@@ -441,28 +478,150 @@ document.getElementById("delete-bin").addEventListener("drop", e => {
 });
 
 const inventory = new Inventory();
-inventory.containers.base.addItem(new InventoryItem({ name: "Dagger" }), 0, 0);
-inventory.containers.base.addItem(new InventoryItem({ name: "Sword" }), 0, 1);
-inventory.containers.base.addItem(new InventoryItem({ name: "Great Axe", bulk: Bulk.BULKY }), 1, 0);
-inventory.containers.base.addItem(new InventoryItem({ name: "Great Sword", bulk: Bulk.BULKY }), 2, 1);
-inventory.containers.base.addItem(new InventoryItem({
-  name: "Chest",
-  bulk: Bulk.BULKY,
-  container: { col: 3, row: 2 }
-}), 0, 3);
 
 const ITEM_LIBRARY = [
-  //{ name: "Pouch", bulk: Bulk.HANDHELD, container: { col: 1, row: 5 } }, // do not delete
+  // Instrument
+  { name: "Bagpipes", bulk: Bulk.BULKY },
+  { name: "Drum", bulk: Bulk.HANDHELD },
+  { name: "Dulcimer", bulk: Bulk.BULKY },
+  { name: "Flute", bulk: Bulk.HANDHELD },
+  { name: "Lute", bulk: Bulk.BULKY },
+  { name: "Lyre", bulk: Bulk.HANDHELD },
+  { name: "Horn", bulk: Bulk.HANDHELD },
+  { name: "Pan Flute", bulk: Bulk.HANDHELD },
+  { name: "Shawm", bulk: Bulk.HANDHELD },
+  { name: "Viol", bulk: Bulk.BULKY },
+
+  // Simple Melee Weapons
+  { name: "Club", bulk: Bulk.HANDHELD },
   { name: "Dagger", bulk: Bulk.HANDHELD },
-  { name: "Sword", bulk: Bulk.HANDHELD },
-  { name: "Great Axe", bulk: Bulk.BULKY },
-  { name: "Great Sword", bulk: Bulk.BULKY },
-  { name: "Potion", bulk: Bulk.PACKABLE },
-  { name: "Scroll", bulk: Bulk.PACKABLE },
-  { name: "Bow", bulk: Bulk.BULKY },
-  { name: "Chest", bulk: Bulk.BULKY, container: { col: 3, row: 2 } },
-];
+  { name: "Greatclub", bulk: Bulk.BULKY },
+  { name: "Handaxe", bulk: Bulk.HANDHELD },
+  { name: "Javelin", bulk: Bulk.HANDHELD },
+  { name: "Light Hammer", bulk: Bulk.HANDHELD },
+  { name: "Mace", bulk: Bulk.HANDHELD },
+  { name: "Quarterstaff", bulk: Bulk.BULKY },
+  { name: "Sickle", bulk: Bulk.HANDHELD },
+  { name: "Spear", bulk: Bulk.HANDHELD },
+
+  // Simple Ranged Weapons
+  { name: "Light Crossbow", bulk: Bulk.HANDHELD },
+  { name: "Dart", bulk: Bulk.HANDHELD },
+  { name: "Shortbow", bulk: Bulk.HANDHELD },
+  { name: "Sling", bulk: Bulk.HANDHELD },
+
+  // Martial Melee Weapons
+  { name: "Battleaxe", bulk: Bulk.HANDHELD },
+  { name: "Flail", bulk: Bulk.HANDHELD },
+  { name: "Glaive", bulk: Bulk.BULKY },
+  { name: "Greataxe", bulk: Bulk.BULKY },
+  { name: "Greatsword", bulk: Bulk.BULKY },
+  { name: "Halberd", bulk: Bulk.BULKY },
+  { name: "Lance", bulk: Bulk.BULKY },
+  { name: "Longsword", bulk: Bulk.HANDHELD },
+  { name: "Maul", bulk: Bulk.BULKY },
+  { name: "Morningstar", bulk: Bulk.HANDHELD },
+  { name: "Pike", bulk: Bulk.BULKY },
+  { name: "Rapier", bulk: Bulk.HANDHELD },
+  { name: "Scimitar", bulk: Bulk.HANDHELD },
+  { name: "Shortsword", bulk: Bulk.HANDHELD },
+  { name: "Trident", bulk: Bulk.HANDHELD },
+  { name: "War Pick", bulk: Bulk.HANDHELD },
+  { name: "Warhammer", bulk: Bulk.HANDHELD },
+  { name: "Whip", bulk: Bulk.HANDHELD },
+
+  // Martial Ranged Weapons
+  { name: "Blowgun", bulk: Bulk.HANDHELD },
+  { name: "Hand Crossbow", bulk: Bulk.HANDHELD },
+  { name: "Heavy Crossbow", bulk: Bulk.BULKY },
+  { name: "Longbow", bulk: Bulk.BULKY },
+  { name: "Net", bulk: Bulk.HANDHELD },
+
+  // Armor
+  { name: "Shield", bulk: Bulk.BULKY },
+  { name: "Padded Armor", bulk: Bulk.HANDHELD },
+  { name: "Leather Armor", bulk: Bulk.HANDHELD },
+  { name: "Studded Leather Armor", bulk: Bulk.HANDHELD },
+  { name: "Hide Armor", bulk: Bulk.BULKY },
+  { name: "Chain Shirt", bulk: Bulk.BULKY },
+  { name: "Scale Mail", bulk: Bulk.BULKY },
+  { name: "Breastplate", bulk: Bulk.BULKY },
+  { name: "Half Plate", bulk: Bulk.BULKY },
+  { name: "Ring Mail", bulk: Bulk.BULKY },
+  { name: "Chain Mail", bulk: Bulk.BULKY },
+  { name: "Splint Armor", bulk: Bulk.BULKY },
+  { name: "Plate Armor", bulk: Bulk.VERYBULKY },
   
+  // Adventuring Gear
+  { name: "Rations", bulk: Bulk.PACKABLE },
+  { name: "Waterskin", bulk: Bulk.HANDHELD },
+  { name: "Tinderbox", bulk: Bulk.PACKABLE },
+  { name: "Mirror", bulk: Bulk.PACKABLE },
+  { name: "Chalk", bulk: Bulk.PACKABLE },
+  { name: "Parchment", bulk: Bulk.PACKABLE },
+  { name: "Ink and Pen", bulk: Bulk.PACKABLE },
+  { name: "Whistle", bulk: Bulk.PACKABLE },
+  { name: "Horn", bulk: Bulk.HANDHELD },
+  { name: "Oil", bulk: Bulk.PACKABLE },
+  { name: "Shovel", bulk: Bulk.BULKY },
+  { name: "Hammer", bulk: Bulk.HANDHELD },
+  { name: "Rope", bulk: Bulk.BULKY },
+  { name: "Torch", bulk: Bulk.PACKABLE },
+  { name: "Manacles", bulk: Bulk.HANDHELD },
+  { name: "Grappling Hook", bulk: Bulk.HANDHELD },
+  { name: "Crowbar", bulk: Bulk.HANDHELD },
+  { name: "Lantern, hooded", bulk: Bulk.HANDHELD },
+
+  { name: "Satchel", bulk: Bulk.HANDHELD, container: { col: 2, row: 1 }, displayText: containerDisplayText },
+  { name: "Backpack", bulk: Bulk.BULKY, container: { col: 2, row: 4 }, displayText: containerDisplayText },
+  
+  { name: "Saddlebag", bulk: Bulk.BULKY },
+  { name: "Ammunition Cache", bulk: Bulk.HANDHELD },
+  { name: "Basic Poison", bulk: Bulk.PACKABLE },
+  { name: "Antitoxin", bulk: Bulk.PACKABLE },
+  { name: "Acid", bulk: Bulk.HANDHELD },
+  { name: "Alchemist's Fire", bulk: Bulk.HANDHELD },
+  { name: "Hunting Trap", bulk: Bulk.BULKY },
+  { name: "Caltrops", bulk: Bulk.PACKABLE },
+  { name: "Ball Bearings", bulk: Bulk.PACKABLE },
+  { name: "Healing Potion", bulk: Bulk.HANDHELD },
+
+  // Tools & Kits
+  { name: "Climber's Tools", bulk: Bulk.BULKY },
+  { name: "Smith's Tools", bulk: Bulk.BULKY },
+  { name: "Mason's Tools", bulk: Bulk.HANDHELD },
+  { name: "Woodcarver's Tools", bulk: Bulk.HANDHELD },
+  { name: "Leatherworker's Tools", bulk: Bulk.HANDHELD },
+  { name: "Weaver's Tools", bulk: Bulk.HANDHELD },
+  { name: "Scribe's Supplies", bulk: Bulk.HANDHELD },
+  { name: "Painter's Supplies", bulk: Bulk.HANDHELD },
+  { name: "Jeweler's Tools", bulk: Bulk.HANDHELD },
+  { name: "Cook's Utensils", bulk: Bulk.HANDHELD },
+  { name: "Healer's Kit", bulk: Bulk.HANDHELD },
+  { name: "Poisoner's Kit", bulk: Bulk.HANDHELD },
+  { name: "Herbalism Kit", bulk: Bulk.HANDHELD },
+  { name: "Glassblower's Tools", bulk: Bulk.BULKY },
+  { name: "Potter's Tools", bulk: Bulk.BULKY },
+  { name: "Thieves' Tools", bulk: Bulk.HANDHELD },
+  { name: "Tinker's Tools", bulk: Bulk.HANDHELD },
+  { name: "Alchemist's Supplies", bulk: Bulk.BULKY },
+  { name: "Disguise Kit", bulk: Bulk.BULKY },
+  { name: "Navigator's Tools", bulk: Bulk.HANDHELD },
+  { name: "Brewer's Supplies", bulk: Bulk.BULKY },  
+  { name: "Camp Supplies", bulk: Bulk.BULKY },
+];
+
+function createPouch() {
+  const pouch = new InventoryItem({
+    name: "Pouch",
+    bulk: Bulk.HANDHELD,
+    container: { col: 1, row: 5 },
+    displayText: containerDisplayText
+  });
+  return pouch;
+}
+
+
 const input = document.getElementById("search-input");
 const results = document.getElementById("search-results");
 results.style.display = "flex";

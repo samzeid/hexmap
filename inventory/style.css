@@ -1,125 +1,168 @@
 :root {
-    --cell-width: 64px;
-    --cell-height: 64px;
+  --cell-width: 128px;
+  --cell-height: 128px;
 }
 
 body {
-    background: #1a1a1a;
-    color: white;
-    font-family: sans-serif;
-    padding: 1rem;
+  background: #1a1a1a;
+  color: white;
+  font-family: sans-serif;
+  padding: 1rem;
 }
 
 .container {
-    position: relative; /* Added for absolute positioning of items */
-    display: inline-flex;
-    flex-direction: column;
-    border: 3px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  border: 3px solid rgba(255, 255, 255, 0.1);
 }
 
 .row {
-    display: flex;
+  display: flex;
 }
 
 .item {
-    background: rgba(128, 128, 128, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(2px);
+  border-radius: 3%;
+  background: rgba(128, 128, 128, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(2px);
 
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    cursor: grab;
-    user-select: none;
-    
-    z-index: 10;
-    position: absolute; /* Important for positioning */
-    width: calc(var(--item-width, 1) * var(--cell-width, 1));
-    height: calc(var(--item-height, 1) * var(--cell-height, 1));
-    box-sizing: border-box;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--cell-height) * 0.125);
+  line-height: 1.3;
+  padding: calc(var(--cell-height) * 0.05);
+  text-align: center;
+  cursor: grab;
+  user-select: none;
 
-    /*transition: top 0.2s ease, left 0.2s ease; */
+  z-index: 10;
+  position: absolute;
+  width: calc(var(--item-width, 1) * var(--cell-width));
+  height: calc(var(--item-height, 1) * var(--cell-height));
+  box-sizing: border-box;
 }
 
 .item:hover {
-    background: rgba(25, 118, 210, 0.35);
-    border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(25, 118, 210, 0.35);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
-/* Different background color for Pouch items */
-.item.pouch {
-  background-color: rgba(85, 119, 170, 0.5);
-  border-color: rgba(100, 140, 200, 0.7);
-  font-size: 0.6rem;
-  line-height: 1;
-  display: flex;
+/* Pouch-style container display */
+.item.container, #search-results .item.container {
+  background-color: rgba(185, 119, 170, 0.5);
+  border-color: rgba(200, 140, 200, 0.7);
+  font-size: calc(var(--cell-height) * 0.1);
+  line-height: 1.3;
   flex-direction: column;
   align-items: center;
 }
 
-.pouch-title {
+.container-title {
   position: absolute;
-  left: 2px;
-  top: 2px;
+  left: calc(var(--cell-height) * 0.02);
+  top: calc(var(--cell-height) * 0.02);
   font-style: italic;
+  font-size: calc(var(--cell-height) * 0.125);
 }
 
+.container-columns {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.container-columns ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: calc(var(--cell-height) * 0.125);
+  line-height: 1.3;
+}
+
+
 .open-container {
-    background-color: rgba(255, 255, 255, 0.5);
+  background-color: rgba(255, 255, 255, 0.5);
 }
 
 .cell {
-    position: relative;
-    width: var(--cell-width);
-    height: var(--cell-height);
-
-    background: rgba(58, 58, 58, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
-    box-sizing: border-box;
-
+  position: relative;
+  width: var(--cell-width);
+  height: var(--cell-height);
+  background: rgba(58, 58, 58, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  box-sizing: border-box;
 }
 
 #item-search {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    background: #222;
-    color: white;
-    padding: 0.5rem;
-    border: 1px solid #555;
-    width: 200px;
-  }
-  #search-results .item {
-    cursor: grab;
-    margin: 0.25rem 0;
-  }
-  
-  #delete-bin {
-    position: fixed;
-    bottom: 1rem;
-    right: 1rem;
-    background: #440000;
-    color: white;
-    padding: 0.5rem 1rem;
-    border: 2px solid red;
-    font-weight: bold;
-  }
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  background: #222;
+  color: white;
+  padding: 0.5rem;
+  border: 1px solid #555;
+  width: calc(var(--cell-width) * 2);
+}
 
-  #search-results .item {
-    border: 1px solid #888;
-    background: #333;
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 0.5rem;
-  }
-  
-  .search-item {
-    margin-bottom: 0.5rem;
-  }
+#search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: calc(var(--cell-height) * 0.1) calc(var(--cell-height) * 0.15);
+  font-size: calc(var(--cell-height) * 0.125);
+  border-radius: 1rem;
+  border: none;
+  outline: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
 
+#search-input::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+#search-results .item {
+  border: 1px solid #888;
+  background: #333;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+  font-size: calc(var(--cell-height) * 0.125);
+}
+
+#delete-bin {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  background: #440000;
+  color: white;
+  padding: 0.5rem 1rem;
+  border: 2px solid red;
+  font-weight: bold;
+  font-size: calc(var(--cell-height) * 0.125);
+}
+
+.search-item {
+  margin-bottom: 0.5rem;
+}
+
+
+.item.packable, #search-results .item.packable {
+  border: 10px solid #333;
+  border-radius: 100%;
+}
+
+.pouch-container .cell {
+  border: 10px solid #333;
+  border-radius: 100%;
+}
