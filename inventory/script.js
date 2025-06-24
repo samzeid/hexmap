@@ -1,6 +1,8 @@
 let CELL_WIDTH;
 let CELL_HEIGHT;
 
+const inspectorDiv = document.getElementById("inspector");
+
 window.addEventListener("DOMContentLoaded", () => {
   const rootStyles = getComputedStyle(document.documentElement);
   CELL_WIDTH = parseInt(rootStyles.getPropertyValue("--cell-width"));
@@ -57,10 +59,12 @@ function containerDisplayText() {
 
 
 class InventoryItem {
-  constructor({ name = "", bulk = Bulk.HANDHELD, container = null, displayText = null }) {
+  constructor({ name = "", bulk = Bulk.HANDHELD, container = null, displayText = null, description = "", variables = {} }) {
     this.id = `item-${++idCounter}`;
     this.name = name;
     this.size = bulk;
+    this.description = description;
+    this.variables = variables;
     if (container) {
       this.innerContainer = new InventoryContainer(container);
       this.innerContainer.ownerId = this.id;
@@ -408,6 +412,8 @@ function drawItem(item, x, y, containerId, staticMode = false) {
 
   if (!staticMode && item.isContainer()) {
     div.addEventListener("click", () => toggleContainerView(item));
+  } else {
+    div.addEventListener("click", () => updateInspector(item));
   }
 
   return div;
@@ -558,19 +564,17 @@ const ITEM_LIBRARY = [
   { name: "Tinderbox", bulk: Bulk.PACKABLE },
   { name: "Mirror", bulk: Bulk.PACKABLE },
   { name: "Chalk", bulk: Bulk.PACKABLE },
-  { name: "Parchment", bulk: Bulk.PACKABLE },
-  { name: "Ink and Pen", bulk: Bulk.PACKABLE },
   { name: "Whistle", bulk: Bulk.PACKABLE },
   { name: "Horn", bulk: Bulk.HANDHELD },
-  { name: "Oil", bulk: Bulk.PACKABLE },
+  { name: "Oil Flask", bulk: Bulk.PACKABLE },
   { name: "Shovel", bulk: Bulk.BULKY },
   { name: "Hammer", bulk: Bulk.HANDHELD },
   { name: "Rope", bulk: Bulk.BULKY },
-  { name: "Torch", bulk: Bulk.PACKABLE },
+  { name: "Torch", bulk: Bulk.HANDHELD },
   { name: "Manacles", bulk: Bulk.HANDHELD },
   { name: "Grappling Hook", bulk: Bulk.HANDHELD },
   { name: "Crowbar", bulk: Bulk.HANDHELD },
-  { name: "Lantern, hooded", bulk: Bulk.HANDHELD },
+  { name: "Lantern", bulk: Bulk.HANDHELD },
 
   { name: "Satchel", bulk: Bulk.HANDHELD, container: { col: 2, row: 1 }, displayText: containerDisplayText },
   { name: "Backpack", bulk: Bulk.BULKY, container: { col: 2, row: 4 }, displayText: containerDisplayText },
@@ -642,3 +646,21 @@ input.addEventListener("input", () => {
       results.appendChild(div);
     });
 });
+
+
+function updateInspector(item) {
+  inspectorDiv.innerHTML = `
+    <h2>${item.name}</h2>
+    <p>${item.description || "No description provided."}</p>
+    <div class="variables">
+      ${Object.entries(item.variables).map(([key, value]) => `
+        <div class="variable">
+          <label>${key}:</label>
+          <button onclick="changeVariable('${item.id}', '${key}', -1)">-</button>
+          <input type="number" value="${value}" onchange="setVariable('${item.id}', '${key}', this.value)" />
+          <button onclick="changeVariable('${item.id}', '${key}', 1)">+</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
