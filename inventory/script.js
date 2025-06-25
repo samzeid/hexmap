@@ -1,3 +1,5 @@
+
+window.InventorySystem = (() => {
 let CELL_WIDTH;
 let CELL_HEIGHT;
 
@@ -18,6 +20,21 @@ const Bulk = {
 };
 
 let idCounter = 0;
+
+
+function variableDisplayText() {
+  const lines = [this.name];
+
+  if (this.variables && Object.keys(this.variables).length > 0) {
+    for (const [key, meta] of Object.entries(this.variables)) {
+      const value = typeof meta === "object" && "value" in meta ? meta.value : meta;
+      lines.push(`${key}: ${value}`);
+    }
+  }
+
+  return lines.join("<br>");
+}
+
 
 function containerDisplayText() {
   const itemName = `<div class='container-title'>${this.name}</div>`;
@@ -59,18 +76,23 @@ function containerDisplayText() {
 
 
 class InventoryItem {
-  constructor({ name = "", bulk = Bulk.HANDHELD, container = null, displayText = null, description = "", variables = {} }) {
+  constructor({ name = "", bulk = Bulk.HANDHELD, container = null, displayText = null, variableDisplayText = null, description = "", variables = {} }) {
     this.id = `item-${++idCounter}`;
     this.name = name;
     this.size = bulk;
     this.description = description;
-    this.variables = variables;
+    // Deep clone variables to avoid shared references
+    this.variables = JSON.parse(JSON.stringify(variables)); 
+    
     if (container) {
       this.innerContainer = new InventoryContainer(container);
       this.innerContainer.ownerId = this.id;
     }
-    if(displayText){
+    if (displayText) {
       this.displayText = displayText;
+    }
+    if (variableDisplayText) {
+      this.variableDisplayText = variableDisplayText;
     }
   }
 
@@ -82,14 +104,21 @@ class InventoryItem {
     return this.size.id === Bulk.PACKABLE.id;
   }
 
-  // New method: returns display text, multiline support
   getDisplayText() {
     if (typeof this.displayText === "function") {
-      return this.displayText();
+      return this.displayText.call(this);
     }
     return this.name;
   }
+
+  getVariableDisplayText() {
+    if (typeof this.variableDisplayText === "function") {
+      return this.variableDisplayText.call(this);
+    }
+    return ""; // fallback blank if no function assigned
+  }
 }
+
 
 class InventoryContainer {
   constructor({ col, row }) {
@@ -212,14 +241,41 @@ function getContainerById(id) {
 
 function getItemFromData(data, src) {
   if (data.fromSearch) {
-    const item = new InventoryItem(data);
     const baseItem = ITEM_LIBRARY.find(i => i.name === data.name);
-    if (baseItem?.displayText) item.displayText = baseItem.displayText;
-    return item;
+    if (!baseItem) return null;
+
+    // Build a new object with expected props, fallback to baseItem props
+    const itemData = {
+      name: baseItem.name,
+      bulk: baseItem.bulk,
+      container: baseItem.container,
+      description: baseItem.description || "",
+      variables: baseItem.variables ? { ...baseItem.variables } : {},
+      displayText: baseItem.displayText,
+      variableDisplayText: baseItem.variableDisplayText,
+      ...data,  // override with any data props
+    };
+
+    // Make sure bulk is a proper object (in case data.bulk is partial)
+    if (data.bulk && typeof data.bulk === "object") {
+      itemData.bulk = {
+        width: data.bulk.width ?? baseItem.bulk.width,
+        height: data.bulk.height ?? baseItem.bulk.height,
+        id: data.bulk.id ?? baseItem.bulk.id,
+      };
+    }
+
+    // Ensure variables is a proper object
+    if (data.variables && typeof data.variables === "object") {
+      itemData.variables = { ...itemData.variables, ...data.variables };
+    }
+
+    return new InventoryItem(itemData);
   } else {
     return src.getItem(data.originX, data.originY);
   }
 }
+
 
 function isWithinBounds(item, container, x, y) {
   return x >= 0 && y >= 0 &&
@@ -412,9 +468,9 @@ function drawItem(item, x, y, containerId, staticMode = false) {
 
   if (!staticMode && item.isContainer()) {
     div.addEventListener("click", () => toggleContainerView(item));
-  } else {
-    div.addEventListener("click", () => updateInspector(item));
-  }
+  } 
+    
+  div.addEventListener("click", () => updateInspector(item));
 
   return div;
 }
@@ -485,136 +541,6 @@ document.getElementById("delete-bin").addEventListener("drop", e => {
 
 const inventory = new Inventory();
 
-const ITEM_LIBRARY = [
-  // Instrument
-  { name: "Bagpipes", bulk: Bulk.BULKY },
-  { name: "Drum", bulk: Bulk.HANDHELD },
-  { name: "Dulcimer", bulk: Bulk.BULKY },
-  { name: "Flute", bulk: Bulk.HANDHELD },
-  { name: "Lute", bulk: Bulk.BULKY },
-  { name: "Lyre", bulk: Bulk.HANDHELD },
-  { name: "Horn", bulk: Bulk.HANDHELD },
-  { name: "Pan Flute", bulk: Bulk.HANDHELD },
-  { name: "Shawm", bulk: Bulk.HANDHELD },
-  { name: "Viol", bulk: Bulk.BULKY },
-
-  // Simple Melee Weapons
-  { name: "Club", bulk: Bulk.HANDHELD },
-  { name: "Dagger", bulk: Bulk.HANDHELD },
-  { name: "Greatclub", bulk: Bulk.BULKY },
-  { name: "Handaxe", bulk: Bulk.HANDHELD },
-  { name: "Javelin", bulk: Bulk.HANDHELD },
-  { name: "Light Hammer", bulk: Bulk.HANDHELD },
-  { name: "Mace", bulk: Bulk.HANDHELD },
-  { name: "Quarterstaff", bulk: Bulk.BULKY },
-  { name: "Sickle", bulk: Bulk.HANDHELD },
-  { name: "Spear", bulk: Bulk.HANDHELD },
-
-  // Simple Ranged Weapons
-  { name: "Light Crossbow", bulk: Bulk.HANDHELD },
-  { name: "Dart", bulk: Bulk.HANDHELD },
-  { name: "Shortbow", bulk: Bulk.HANDHELD },
-  { name: "Sling", bulk: Bulk.HANDHELD },
-
-  // Martial Melee Weapons
-  { name: "Battleaxe", bulk: Bulk.HANDHELD },
-  { name: "Flail", bulk: Bulk.HANDHELD },
-  { name: "Glaive", bulk: Bulk.BULKY },
-  { name: "Greataxe", bulk: Bulk.BULKY },
-  { name: "Greatsword", bulk: Bulk.BULKY },
-  { name: "Halberd", bulk: Bulk.BULKY },
-  { name: "Lance", bulk: Bulk.BULKY },
-  { name: "Longsword", bulk: Bulk.HANDHELD },
-  { name: "Maul", bulk: Bulk.BULKY },
-  { name: "Morningstar", bulk: Bulk.HANDHELD },
-  { name: "Pike", bulk: Bulk.BULKY },
-  { name: "Rapier", bulk: Bulk.HANDHELD },
-  { name: "Scimitar", bulk: Bulk.HANDHELD },
-  { name: "Shortsword", bulk: Bulk.HANDHELD },
-  { name: "Trident", bulk: Bulk.HANDHELD },
-  { name: "War Pick", bulk: Bulk.HANDHELD },
-  { name: "Warhammer", bulk: Bulk.HANDHELD },
-  { name: "Whip", bulk: Bulk.HANDHELD },
-
-  // Martial Ranged Weapons
-  { name: "Blowgun", bulk: Bulk.HANDHELD },
-  { name: "Hand Crossbow", bulk: Bulk.HANDHELD },
-  { name: "Heavy Crossbow", bulk: Bulk.BULKY },
-  { name: "Longbow", bulk: Bulk.BULKY },
-  { name: "Net", bulk: Bulk.HANDHELD },
-
-  // Armor
-  { name: "Shield", bulk: Bulk.BULKY },
-  { name: "Padded Armor", bulk: Bulk.HANDHELD },
-  { name: "Leather Armor", bulk: Bulk.HANDHELD },
-  { name: "Studded Leather Armor", bulk: Bulk.HANDHELD },
-  { name: "Hide Armor", bulk: Bulk.BULKY },
-  { name: "Chain Shirt", bulk: Bulk.BULKY },
-  { name: "Scale Mail", bulk: Bulk.BULKY },
-  { name: "Breastplate", bulk: Bulk.BULKY },
-  { name: "Half Plate", bulk: Bulk.BULKY },
-  { name: "Ring Mail", bulk: Bulk.BULKY },
-  { name: "Chain Mail", bulk: Bulk.BULKY },
-  { name: "Splint Armor", bulk: Bulk.BULKY },
-  { name: "Plate Armor", bulk: Bulk.VERYBULKY },
-  
-  // Adventuring Gear
-  { name: "Rations", bulk: Bulk.PACKABLE },
-  { name: "Waterskin", bulk: Bulk.HANDHELD },
-  { name: "Tinderbox", bulk: Bulk.PACKABLE },
-  { name: "Mirror", bulk: Bulk.PACKABLE },
-  { name: "Chalk", bulk: Bulk.PACKABLE },
-  { name: "Whistle", bulk: Bulk.PACKABLE },
-  { name: "Horn", bulk: Bulk.HANDHELD },
-  { name: "Oil Flask", bulk: Bulk.PACKABLE },
-  { name: "Shovel", bulk: Bulk.BULKY },
-  { name: "Hammer", bulk: Bulk.HANDHELD },
-  { name: "Rope", bulk: Bulk.BULKY },
-  { name: "Torch", bulk: Bulk.HANDHELD },
-  { name: "Manacles", bulk: Bulk.HANDHELD },
-  { name: "Grappling Hook", bulk: Bulk.HANDHELD },
-  { name: "Crowbar", bulk: Bulk.HANDHELD },
-  { name: "Lantern", bulk: Bulk.HANDHELD },
-
-  { name: "Satchel", bulk: Bulk.HANDHELD, container: { col: 2, row: 1 }, displayText: containerDisplayText },
-  { name: "Backpack", bulk: Bulk.BULKY, container: { col: 2, row: 4 }, displayText: containerDisplayText },
-  
-  { name: "Saddlebag", bulk: Bulk.BULKY },
-  { name: "Ammunition Cache", bulk: Bulk.HANDHELD },
-  { name: "Basic Poison", bulk: Bulk.PACKABLE },
-  { name: "Antitoxin", bulk: Bulk.PACKABLE },
-  { name: "Acid", bulk: Bulk.HANDHELD },
-  { name: "Alchemist's Fire", bulk: Bulk.HANDHELD },
-  { name: "Hunting Trap", bulk: Bulk.BULKY },
-  { name: "Caltrops", bulk: Bulk.PACKABLE },
-  { name: "Ball Bearings", bulk: Bulk.PACKABLE },
-  { name: "Healing Potion", bulk: Bulk.HANDHELD },
-
-  // Tools & Kits
-  { name: "Climber's Tools", bulk: Bulk.BULKY },
-  { name: "Smith's Tools", bulk: Bulk.BULKY },
-  { name: "Mason's Tools", bulk: Bulk.HANDHELD },
-  { name: "Woodcarver's Tools", bulk: Bulk.HANDHELD },
-  { name: "Leatherworker's Tools", bulk: Bulk.HANDHELD },
-  { name: "Weaver's Tools", bulk: Bulk.HANDHELD },
-  { name: "Scribe's Supplies", bulk: Bulk.HANDHELD },
-  { name: "Painter's Supplies", bulk: Bulk.HANDHELD },
-  { name: "Jeweler's Tools", bulk: Bulk.HANDHELD },
-  { name: "Cook's Utensils", bulk: Bulk.HANDHELD },
-  { name: "Healer's Kit", bulk: Bulk.HANDHELD },
-  { name: "Poisoner's Kit", bulk: Bulk.HANDHELD },
-  { name: "Herbalism Kit", bulk: Bulk.HANDHELD },
-  { name: "Glassblower's Tools", bulk: Bulk.BULKY },
-  { name: "Potter's Tools", bulk: Bulk.BULKY },
-  { name: "Thieves' Tools", bulk: Bulk.HANDHELD },
-  { name: "Tinker's Tools", bulk: Bulk.HANDHELD },
-  { name: "Alchemist's Supplies", bulk: Bulk.BULKY },
-  { name: "Disguise Kit", bulk: Bulk.BULKY },
-  { name: "Navigator's Tools", bulk: Bulk.HANDHELD },
-  { name: "Brewer's Supplies", bulk: Bulk.BULKY },  
-  { name: "Camp Supplies", bulk: Bulk.BULKY },
-];
-
 function createPouch() {
   const pouch = new InventoryItem({
     name: "Pouch",
@@ -647,20 +573,210 @@ input.addEventListener("input", () => {
     });
 });
 
-
 function updateInspector(item) {
   inspectorDiv.innerHTML = `
     <h2>${item.name}</h2>
     <p>${item.description || "No description provided."}</p>
     <div class="variables">
-      ${Object.entries(item.variables).map(([key, value]) => `
-        <div class="variable">
-          <label>${key}:</label>
-          <button onclick="changeVariable('${item.id}', '${key}', -1)">-</button>
-          <input type="number" value="${value}" onchange="setVariable('${item.id}', '${key}', this.value)" />
-          <button onclick="changeVariable('${item.id}', '${key}', 1)">+</button>
-        </div>
-      `).join('')}
+      ${Object.entries(item.variables).map(([key, meta]) => {
+        const { value, control, min, max } = meta;
+
+        const minus = (control === "plusminus" || control === "both")
+          ? `<button onclick="changeVariable('${item.id}', '${key}', -1)">-</button>`
+          : "";
+
+        const plus = (control === "plusminus" || control === "both")
+          ? `<button onclick="changeVariable('${item.id}', '${key}', 1)">+</button>`
+          : "";
+
+        const minAttr = (typeof min === "number") ? `min="${min}"` : "";
+        const maxAttr = (typeof max === "number") ? `max="${max}"` : "";
+
+        const set = (control === "set" || control === "both")
+          ? `<input type="number" value="${value}" ${minAttr} ${maxAttr} onchange="setVariable('${item.id}', '${key}', this.value)" />`
+          : `<span>${value}</span>`;
+
+        return `
+          <div class="variable">
+            <label>${key}:</label>
+            ${minus}
+            ${set}
+            ${plus}
+          </div>
+        `;
+      }).join('')}
     </div>
   `;
 }
+
+function changeVariable(itemId, key, delta) {
+  const item = findItemById(itemId);
+  if (!item) return;
+
+  const meta = item.variables?.[key];
+  if (!meta || typeof meta.value !== "number") return;
+
+  let newValue = meta.value + delta;
+
+  if (typeof meta.min === "number" && newValue < meta.min) {
+    newValue = meta.min;
+  }
+  if (typeof meta.max === "number" && newValue > meta.max) {
+    newValue = meta.max;
+  }
+
+  meta.value = newValue;
+  updateInspector(item);
+  drawInventory(inventory);
+}
+
+function setVariable(itemId, key, value) {
+  const item = findItemById(itemId);
+  if (!item) return;
+
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed)) return;
+
+  const meta = item.variables?.[key];
+  if (!meta) return;
+
+  let newValue = parsed;
+  if (typeof meta.min === "number" && newValue < meta.min) {
+    newValue = meta.min;
+  }
+  if (typeof meta.max === "number" && newValue > meta.max) {
+    newValue = meta.max;
+  }
+
+  meta.value = newValue;
+  updateInspector(item);
+  drawInventory(inventory);
+}
+
+window.changeVariable = changeVariable;
+window.setVariable = setVariable;
+
+const ITEM_LIBRARY = [
+  { name: "Platinum Coins", bulk: Bulk.PACKABLE, description: `1 platinum coin = 10 gold coins`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
+  { name: "Gold Coins", bulk: Bulk.PACKABLE, description: `1 gold coin = 10 silver coins`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
+  { name: "Silver Coins", bulk: Bulk.PACKABLE, description: `1 silver coin = 10 copper coins`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
+  { name: "Copper Coins", bulk: Bulk.PACKABLE, description: `Basic currency unit`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
+
+  { name: "Bagpipes", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
+  { name: "Drum", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
+  { name: "Dulcimer", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
+  { name: "Flute", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
+  { name: "Lute", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
+  { name: "Lyre", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
+  { name: "Pan Flute", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
+  { name: "Shawm", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
+  { name: "Viol", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
+  
+  { name: "Club", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 bludgeoning damage<br>light` },
+  { name: "Dagger", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 piercing damage<br>finesse, light, thrown (range 20/60)` },
+  { name: "Greatclub", bulk: Bulk.BULKY, description: `<i>simple weapon</i><br>1d8 bludgeoning damage<br>two-handed, heavy` },
+  { name: "Handaxe", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 slashing damage<br>light, thrown (range 20/60)` },
+  { name: "Javelin", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 piercing damage<br>thrown (range 30/120)` },
+  { name: "Light Hammer", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 bludgeoning damage<br>light, thrown (range 20/60)` },
+  { name: "Mace", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 bludgeoning damage` },
+  { name: "Quarterstaff", bulk: Bulk.BULKY, description: `<i>simple weapon</i><br>1d6 bludgeoning damage<br>versatile (1d8)` },
+  { name: "Sickle", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 slashing damage<br>light` },
+  { name: "Spear", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 piercing damage<br>thrown (range 20/60), versatile (1d8)` },
+  { name: "Light Crossbow", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d8 piercing damage<br>range 80/320, loading, two-handed` },
+  { name: "Dart", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 piercing damage<br>finesse, thrown (range 20/60)` },
+  { name: "Shortbow", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 piercing damage<br>range 80/320, two-handed` },
+  { name: "Sling", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 bludgeoning damage<br>range 30/120` },
+  { name: "Battleaxe", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 slashing damage<br>versatile (1d10)` },
+  { name: "Flail", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 bludgeoning damage` },
+  { name: "Glaive", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 slashing damage<br>heavy, reach, two-handed` },
+  { name: "Greataxe", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d12 slashing damage<br>heavy, two-handed` },
+  { name: "Greatsword", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>2d6 slashing damage<br>heavy, two-handed` },
+  { name: "Halberd", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 slashing damage<br>heavy, reach, two-handed` },
+  { name: "Lance", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d12 piercing damage<br>reach, special` },
+  { name: "Longsword", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 slashing damage<br>versatile (1d10)` },
+  { name: "Maul", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>2d6 bludgeoning damage<br>heavy, two-handed` },
+  { name: "Morningstar", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 piercing damage` },
+  { name: "Pike", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 piercing damage<br>heavy, reach, two-handed` },
+  { name: "Rapier", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 piercing damage<br>finesse` },
+  { name: "Scimitar", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 slashing damage<br>finesse, light` },
+  { name: "Shortsword", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 piercing damage<br>finesse, light` },
+  { name: "Trident", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 piercing damage<br>thrown (range 20/60), versatile (1d8)` },
+  { name: "War Pick", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 piercing damage` },
+  { name: "Warhammer", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 bludgeoning damage<br>versatile (1d10)` },
+  { name: "Whip", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d4 slashing damage<br>finesse, reach` },
+  { name: "Blowgun", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1 piercing damage<br>range 25/100, loading` },
+  { name: "Hand Crossbow", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 piercing damage<br>range 30/120, light, loading` },
+  { name: "Heavy Crossbow", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 piercing damage<br>range 100/400, heavy, loading, two-handed` },
+  { name: "Longbow", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d8 piercing damage<br>range 150/600, heavy, two-handed` },
+  { name: "Net", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>special, thrown (range 5/15)` },
+
+  { name: "Shield", bulk: Bulk.BULKY, description: `<i>shield</i><br>+2 AC` },
+  { name: "Light Armor", bulk: Bulk.HANDHELD, description: `<i>light armor</i><br>AC 12 + Dex modifier. <br> <i>leather, or other simple padding.</i>` },
+  { name: "Medium Armor", bulk: Bulk.BULKY, description: `<i>medium armor</i><br>AC 14 + max 2 Dex modifier. Disadvantage on stealth checks. <br> <i>scale mail, partial chainmail, or similarly mildly cumbersome armor.</i>` },
+  { name: "Heavy Armor", bulk: Bulk.BULKY, description: `<i>heavy armor</i><br>AC 16 <br> <i>full chain mail, or similarly cumbersome armor.</i>` },
+  { name: "Half Plate", bulk: Bulk.BULKY, description: `<i>medium armor</i><br>AC 15 + max 2 Dex modifier. Disadvantage on stealth checks. <br> <i>this armor can be made into full plate for the difference in cost.</i>` },
+  { name: "Splint Armor", bulk: Bulk.BULKY, description: `<i>heavy armor</i><br>AC 17 <br> <i>full leather with rivited strips of metal.</i>` },
+  { name: "Plate Armor", bulk: Bulk.VERYBULKY, description: `<i>heavy armor</i><br>AC 18 <br> <i>complete plate armor.</i>` },
+
+  // Adventuring Gear
+  { name: "Rations", bulk: Bulk.PACKABLE, description: `A days rations.` },
+  { name: "Mirror", bulk: Bulk.PACKABLE, description: `A steel mirror used for grooming, peeking around corners, or signaling with reflected light.` },
+  { name: "Tinderbox", bulk: Bulk.PACKABLE, description: `Use as a bonus action to light exposed fuel (e.g., candle, torch); 1 minute to light covered material.` },
+  { name: "Waterskin", bulk: Bulk.HANDHELD, description: `Holds 4 pints of water. Essential for avoiding dehydration during travel or exertion.` },
+  { name: "Chalk", bulk: Bulk.PACKABLE, variables: { charges: { value: 5, control: "plusminus", min: 0, max: 5 } }, description: `Expend 1 charge to mark a surface; expend 5 to leave a 50-ft trail. Useful for leaving notes and marking objects.` },
+  { name: "Rope", bulk: Bulk.BULKY, description: `50ft of rope. Use an action to tie a secure knot (DC 10 Sleight of Hand). Can bind a Grappled, Incapacitated, or Restrained creature. Bound creatures are Restrained. Escape (DC 15 Acrobatics); burst (DC 20 Athletics).` },
+  { name: "Shovel", bulk: Bulk.BULKY, description: `After 1 hour of digging, creates a 5-foot cube hole in dirt, sand, or loose material.` },
+  { name: "Whistle", bulk: Bulk.PACKABLE, description: `Blow as an action to emit a piercing sound audible up to 600 feet away.` },
+  { name: "Horn", bulk: Bulk.HANDHELD, description: `Blow as an action to emit a loud note audible up to 600 feet away.` },
+  { name: "Manacles", bulk: Bulk.HANDHELD, description: `As an action, bind an unwilling Small or Medium creature within 5ft that is Grappled, Incapacitated, or Restrained, with a successful DC 13 Dexterity (Sleight of Hand) check.<br>
+    A bound creature is Restrained.<br>
+    It can attempt a DC 25 Dexterity (Sleight of Hand) check to slip free, or a DC 25 Strength (Athletics) check to break them as an action.<br>
+    Another creature can pick the lock with a DC 15 Dexterity (Sleight of Hand) check.<br>
+    <i>AC 19, damage threshold 10, 10 hit points.</i>` },
+  { name: "Grappling Hook", bulk: Bulk.HANDHELD, description: `As an action, throw at a target within 50 ft. The hook catches on a DC 13 Dexterity (Acrobatics) or Strength (Athletics) check. If tied to Rope, can be climbed.` },
+  { name: "Crowbar", bulk: Bulk.HANDHELD, description: `Using a Crowbar gives you Advantage on Strength checks where the Crowbar's leverage can be applied.` },
+  { name: "Lantern", bulk: Bulk.HANDHELD, description: `Sheds bright light in a 30-foot radius and dim light for an additional 30 feet. As a bonus action you can lower the hood to reduce it to dim light in a 5-foot radius or raise the hood. Consumes 1 charge of oil per hour from an Oil Flask.` },
+  { name: "Oil Flask", bulk: Bulk.PACKABLE, displayText: variableDisplayText, variables: { charges: { value: 5, control: "plusminus", min: 0, max: 5 } }, description: `Used to fuel lanterns or coat objects, making them flammable when exposed to fire (burning condition).` },  
+  { name: "Torch", bulk: Bulk.PACKABLE, variables: { charges: { value: 6, control: "plusminus", min: 0, max: 6 } }, description: `Light the torch to expend a charge and cast 10 minutes of bright light in a 20-foot radius and dim light for an additional 20 feet. The torch can be used as a Simple Melee weapon. On a hit, the target takes 1d4 + Strength bludgeoning damage or fire damage when lit.`},
+
+  { name: "Satchel", bulk: Bulk.HANDHELD, container: { col: 2, row: 1 }, displayText: containerDisplayText, description: `It takes a bonus action or action to access an item in your satchel.` },
+  { name: "Backpack", bulk: Bulk.BULKY, container: { col: 2, row: 4 }, displayText: containerDisplayText, description: `It takes an action to access an item in your backpack. A creature can wear only one backpack.` },
+  
+  { name: "Saddlebag", bulk: Bulk.BULKY, description: `A mount's saddlebag for carrying gear.` },
+  { name: "Ammunition Cache", bulk: Bulk.HANDHELD, description: `A single weapon's ammunition. This must be accessed each time you reload the weapon.`  },
+  { name: "Basic Poison", bulk: Bulk.PACKABLE, description: `As a bonus action, coat one weapon or up to three pieces of ammunition. A target hit must succeed on a DC 13 Constitution saving throw or become poisoned. The poison lasts until the target saves at the end of their turns or 1 minute.` },
+  { name: "Antitoxin", bulk: Bulk.PACKABLE, description: `As a Bonus Action, you can drink a vial of Antitoxin to gain Advantage on saving throws to avoid or end the Poisoned condition for 1 hour.` },
+  { name: "Acid", bulk: Bulk.HANDHELD, description: `Replace one of your attacks to throw this at a creature or object within 20 ft, they must succeed on a DC 13 Dexterity saving throw or take 2d6 acid damage. This item is destroyed.` },
+  { name: "Alchemist's Fire", bulk: Bulk.HANDHELD, description: `Replace one of your attacks to throw this at a creature or object within 20 ft, they must succeed on a DC 13 Dexterity saving throw or take 1d4 fire damage and start burning. This item is destroyed.` },
+  { name: "Hunting Trap", bulk: Bulk.BULKY, description: `Spend 10 minutes setting and concealing this trap. When a creature steps on it, it must succeed on a DC 13 Dexterity save or take 2d10 piercing damage, and be grappled. The grapple requires a DC 13 Strength (Athletics) check to end.` },
+  { name: "Caltrops", bulk: Bulk.HANDHELD, description: `Scatter on the ground in a 5-ft square. Each creature entering must succeed on a DC13 Dexterity save or take 1d4 damage and their speed is 0 until the start of their next turn.` },
+  { name: "Ball Bearings", bulk: Bulk.HANDHELD, description: `Scatter on the ground in a 10-ft square. Each creature entering must succeed on a DC13 Dexterity save or fall prone.` },
+  { name: "Healing Potion", bulk: Bulk.HANDHELD, description: `Drink as an action to regain 2d4 + 2 hit points.` },
+
+  // Tools & Kits
+  { name: "Climber's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Smith's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Mason's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Woodcarver's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Leatherworker's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Weaver's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Scribe's Supplies", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Painter's Supplies", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Jeweler's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Cook's Utensils", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Healer's Kit", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Poisoner's Kit", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Herbalism Kit", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Glassblower's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Potter's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Thieves' Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Tinker's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Alchemist's Supplies", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Disguise Kit", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Navigator's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+  { name: "Brewer's Supplies", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },  
+  { name: "Camp Supplies", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "both", min: 0, max: 3 } }, description: `Expend a charge to gain advantage on a relevant roll or to produce an item related to these tools. Charges fully replenish after a long rest.` },
+];
+
+return {};
+})();
