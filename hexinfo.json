@@ -402,6 +402,16 @@
       "hexes": ["53,42"],
       "name": "Faraland",
       "description": "This town's lifeblood is exotic spices and rare produce, ill suited to other climates."
+    },
+    {
+      "hexes": ["13,27"],
+      "name": "Spiddle",
+      "description": "All but empty, this inhospitable little town offers lodging to those foolhardy enough to travel between Noxis and Calis."
+    },
+    {
+      "hexes": ["13,27"],
+      "name": "Spurn",
+      "description": "Those who travel with haste will sometimes take the path through Spurn. The roads are unforgiving and those who don't know better will lose their wagons to the bog."
     }
   ]
 }
