@@ -168,6 +168,16 @@
       "description": "A vital trade hub at the river's mouth, Forkmouth sits far from the Godhold. With bandits thick along the Fork River, goods from Vorsan Rest arrive by sea and move inland under guard."
     },
     {
+      "hexes": ["21,39"],
+      "name": "Forkhold",
+      "description": "This stronghold was built to defend against the wilds and ferry prisoners and guards travelling to The Blackpit."
+    },
+    {
+      "hexes": ["22,36"],
+      "name": "The Blackpit",
+      "description": "Criminals turned slaves dig for exotic and precious metals. However, digging through the muk ridden, collapsing tunnels makes for deadly work."
+    },
+    {
       "hexes": ["23,44"],
       "name": "Grimhold",
       "description": "Once a bandit outpost, Grimhold was purged and secured by the Custodiate. Now it serves as a guarded refuge for those moving between Forkmouth and the settlements of Calis."
