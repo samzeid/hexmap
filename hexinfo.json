@@ -382,6 +382,16 @@
       "hexes": ["12,36", "12,35"],
       "name": "Faithguard Tower",
       "description": "A tower built by the Custodiate to monitor the city and enforce law."
+    },
+    {
+      "hexes": ["43,40"],
+      "name": "Erenport",
+      "description": "The main trade port of the Vorsan Rest. A colourful and vibrant city where exotic goods are plentiful, as are blackmarkets and contraband."
+    },
+    {
+      "hexes": ["53,42"],
+      "name": "Faraland",
+      "description": "This town's lifeblood is exotic spices and rare produce, ill suited to other climates."
     }
   ]
 }
