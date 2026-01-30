@@ -416,7 +416,7 @@
       "description": "All but empty, this inhospitable little town offers lodging to those foolhardy enough to travel between Noxis and Calis."
     },
     {
-      "hexes": ["13,27"],
+      "hexes": ["17,31"],
       "name": "Spurn",
       "description": "Those who travel with haste will sometimes take the path through Spurn. The roads are unforgiving and those who don't know better will lose their wagons to the bog."
     },
