@@ -452,12 +452,17 @@
     {
       "hexes": ["8,40"],
       "name": "Braken",
-      "description": ""
+      "description": "Arish, Braken and Kina struggle to support the surging population of Calis."
     },
     {
       "hexes": ["13,40"],
       "name": "Kina",
-      "description": "."
+      "description": "Arish, Braken and Kina struggle to support the surging population of Calis."
+    },
+    {
+      "hexes": ["17,38"],
+      "name": "Arish",
+      "description": "Arish, Braken and Kina struggle to support the surging population of Calis."
     }
   ]
 }
