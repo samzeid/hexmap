@@ -79,6 +79,20 @@
       "type": "environmental"
     },
     {
+      "hexes": ["6,40", "6,39", "6,38", "5,37", "5,36", "4,36", "3,35", "2,35", "1,34"],
+      "name": "Storm's Way",
+      "description": "The sandstone chasm's underground tunnels flood with water during storms and dry rapidly. It's sheer cliffs and ever shifting geography makes it trecherous to navigate.",
+      "color": "rgba(128,128,128,0.3)",
+      "type": "environmental"
+    },
+    {
+      "hexes": ["10,40", "10,42", "9,40", "8,41", "9,41", "10,41", "11,40", "15,43", "15,42", "14,42", "13,41", "12,42", "11,41"],
+      "name": "Lake Carcho",
+      "description": "The Koh tribes hold this lake sacred, they claim its water feeds all of Calis.",
+      "color": "rgba(0,0,255,0.3)",
+      "type": "environmental"
+    },
+    {
       "hexes": ["41,29", "42,29", "42,30"],
       "name": "Hook Cove",
       "description": "Bio-luminescent jellyfish fill the cove's waters each late spring to early summer, making The Candles rock formation appear to glow as though lit with a turquoise flame when seen from certain angles.",
@@ -429,6 +443,21 @@
       "hexes": ["7,48","6,48","6,49"],
       "name": "The Mortal",
       "description": "The ancient face of a man and a skull carved into a large sandstone pillar."
+    },
+    {
+      "hexes": ["7,41"],
+      "name": "Markiel",
+      "description": "This small town is notable for its organised trade between Calis and the Koh tribes."
+    },
+    {
+      "hexes": ["8,40"],
+      "name": "Braken",
+      "description": "Resting between Storm's Way and "
+    },
+    {
+      "hexes": ["8,40"],
+      "name": "Kina",
+      "description": "."
     }
   ]
 }
