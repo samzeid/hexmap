@@ -463,6 +463,11 @@
       "hexes": ["17,38"],
       "name": "Arish",
       "description": "Arish, Braken and Kina struggle to support the surging population of Calis."
+    },
+    {
+      "hexes": ["22,23"],
+      "name": "Something of note",
+      "description": "Worked stone was seen here, it didn't match the colour of the rock nearby. It was mostly covered by nature."
     }
   ]
 }
