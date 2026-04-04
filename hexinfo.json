@@ -468,6 +468,11 @@
       "hexes": ["22,23"],
       "name": "Something of note",
       "description": "Worked stone was seen here, it didn't match the colour of the rock nearby. It was mostly covered by nature."
+    },
+    {
+      "hexes": ["21,19"],
+      "name": "Water Temple",
+      "description": "The map found in Spike's cloak of the fence points to this location, with a brief description of a water temple."
     }
   ]
 }
