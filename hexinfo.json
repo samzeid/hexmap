@@ -472,7 +472,12 @@
     {
       "hexes": ["21,19"],
       "name": "Water Temple",
-      "description": "The map found in Spike's cloak of the fence points to this location, with a brief description of a water temple."
+      "description": "The map found in Spike's cloak points here, included was a brief description, describing a flooded temple."
+    },
+    {
+      "hexes": ["18,20"],
+      "name": "Cursed Crypt",
+      "description": "A cursed dungeon was found, you cleared the mummy cursing it, but it can be explored further."
     }
   ]
 }
