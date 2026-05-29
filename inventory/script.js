@@ -1,782 +1,831 @@
-
 window.InventorySystem = ({ database, auth }) => {
-  let CELL_WIDTH;
-  let CELL_HEIGHT;
 
-  const inspectorDiv = document.getElementById("inspector");
-
-  window.addEventListener("DOMContentLoaded", () => {
-    const rootStyles = getComputedStyle(document.documentElement);
-    CELL_WIDTH = parseInt(rootStyles.getPropertyValue("--cell-width"));
-    CELL_HEIGHT = parseInt(rootStyles.getPropertyValue("--cell-height"));
-    drawInventory(inventory);
-  });
-
-  const Bulk = {
-    PACKABLE: { id: 'packable', width: 1, height: 1 },
-    HANDHELD: { id: 'handheld', width: 1, height: 1 },
-    BULKY: { id: 'bulky', width: 2, height: 1 },
-    VERYBULKY: { id: 'verybulky', width: 2, height: 2}
+  // ── STATE ──────────────────────────────────────────────────────────────
+  const state = {
+    charName: '',
+    carryCapacity: '',
+    containers: [
+      { id: 'equipped', name: 'Equipped',      rows: 1, collapsed: false, slots: null, permanent: true },
+      { id: 'strapped', name: 'Strapped Gear', rows: 2, collapsed: false, slots: null, permanent: true },
+    ]
   };
 
-  let idCounter = 0;
-
-
-  function variableDisplayText() {
-    const lines = [this.name];
-
-    if (this.variables && Object.keys(this.variables).length > 0) {
-      for (const [key, meta] of Object.entries(this.variables)) {
-        const value = typeof meta === "object" && "value" in meta ? meta.value : meta;
-        lines.push(`${key}: ${value}`);
-      }
-    }
-
-    return lines.join("<br>");
-  }
-
-
-  function containerDisplayText() {
-    const itemName = `<div class='container-title'>${this.name}</div>`;
-
-    if (!this.innerContainer) return itemName;
-
-    const innerItems = Object.values(this.innerContainer.items);
-    if (innerItems.length === 0) return itemName;
-
-    const listed = [];
-    const seen = new Set();
-    for (const item of innerItems) {
-      if (!seen.has(item)) {
-        listed.push(item.name);
-        seen.add(item);
-      }
-    }
-
-    // If 5 or fewer items, show as single column list
-    if (listed.length <= 5) {
-      const lines = listed.map(name => `• ${name}`).join("<br>");
-      return `${itemName}<br>${lines}`;
-    }
-
-    // Otherwise, divide into two roughly even columns
-    const mid = Math.ceil(listed.length / 2);
-    const col1 = listed.slice(0, mid);
-    const col2 = listed.slice(mid);
-
-    const colHTML = `
-      <div class="container-columns">
-        <ul>${col1.map(name => `<li>• ${name}</li>`).join("")}</ul>
-        <ul>${col2.map(name => `<li>• ${name}</li>`).join("")}</ul>
-      </div>
-    `;
-
-    return itemName + colHTML;
-  }
-
-
-  class InventoryItem {
-    constructor({ name = "", bulk = Bulk.HANDHELD, container = null, displayText = null, variableDisplayText = null, description = "", variables = {} }) {
-      this.id = `item-${++idCounter}`;
-      this.name = name;
-      this.size = bulk;
-      this.description = description;
-      // Deep clone variables to avoid shared references
-      this.variables = JSON.parse(JSON.stringify(variables)); 
-      
-      if (container) {
-        this.innerContainer = new InventoryContainer(container);
-        this.innerContainer.ownerId = this.id;
-      }
-      if (displayText) {
-        this.displayText = displayText;
-      }
-      if (variableDisplayText) {
-        this.variableDisplayText = variableDisplayText;
-      }
-    }
-
-    isContainer() {
-      return !!this.innerContainer;
-    }
-
-    isPackable() {
-      return this.size.id === Bulk.PACKABLE.id;
-    }
-
-    getDisplayText() {
-      if (typeof this.displayText === "function") {
-        return this.displayText.call(this);
-      }
-      return this.name;
-    }
-
-    getVariableDisplayText() {
-      if (typeof this.variableDisplayText === "function") {
-        return this.variableDisplayText.call(this);
-      }
-      return ""; // fallback blank if no function assigned
-    }
-  }
-
-
-  class InventoryContainer {
-    constructor({ col, row }) {
-      this.col = col;
-      this.row = row;
-      this.items = {}; // key = "x,y"
-    }
-
-    getItem(x, y) {
-      return this.items[`${x},${y}`] || null;
-    }
-
-    getItemOrigin(item) {
-      for (const key in this.items) {
-        if (this.items[key] === item) return key.split(",").map(Number);
-      }
-      return null;
-    }
-
-    getItemOccupiedSlots(item) {
-      const origin = this.getItemOrigin(item);
-      if (!origin) return [];
-      const [ox, oy] = origin;
-      const slots = [];
-      for (let dx = 0; dx < item.size.width; dx++) {
-        for (let dy = 0; dy < item.size.height; dy++) {
-          slots.push({ x: ox + dx, y: oy + dy });
-        }
-      }
-      return slots;
-    }
-
-    removeItem(item) {
-      for (const slot of this.getItemOccupiedSlots(item)) {
-        delete this.items[`${slot.x},${slot.y}`];
-      }
-    }
-
-    addItem(item, x, y, skipPouchAuto = false) {
-      // If item is packable and container is NOT a pouch, and we are NOT skipping pouch auto-creation:
-      if (item.isPackable() && !isContainerPouch(this) && !skipPouchAuto) {
-        const pouch = createPouch();
-    
-        for (let dx = 0; dx < pouch.size.width; dx++) {
-          for (let dy = 0; dy < pouch.size.height; dy++) {
-            this.items[`${x + dx},${y + dy}`] = pouch;
-          }
-        }
-    
-        // Put the packable inside the pouch's inner container at (0, 0)
-        pouch.innerContainer.addItem(item, 0, 0);
-    
-        return true;
-      }
-    
-      // Normal add for other items and packables inside pouch
-      for (let dx = 0; dx < item.size.width; dx++) {
-        for (let dy = 0; dy < item.size.height; dy++) {
-          this.items[`${x + dx},${y + dy}`] = item;
-        }
-      }
-    
-      return true;
-    }
-  }
-
-  class Inventory {
-    containers = {
-      base: new InventoryContainer({ col: 2, row: 2 }),
-    };
-  }
-
-  const itemDivCache = new Map();
-  const dynamicContainers = {};
-
-  function drawInventory(inventory) {
-    const inventoryDiv = document.getElementById("inventory");
-    inventoryDiv.innerHTML = "";
-    const allContainers = { ...inventory.containers, ...dynamicContainers };
-    for (const [id, container] of Object.entries(allContainers)) {
-      const containerDiv = drawContainer(container, id);
-      inventoryDiv.appendChild(containerDiv);
-      updateItemPositions(container, containerDiv);
-    }
-  }
-
-  function handleDrop(e, dropX, dropY, containerId) {
-    e.preventDefault();
-    const target = getCellCoordinatesFromMouseEvent(e);
-    if (!target) return;
-
-    const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-    const src = getContainerById(data.sourceContainerId);
-    const dst = getContainerById(containerId);
-
-    const item = getItemFromData(data, src);
-    if (!item || !dst) return;
-
-    const ox = target.x - data.offsetX;
-    const oy = target.y - data.offsetY;
-
-    if (!isWithinBounds(item, dst, ox, oy)) return;
-
-    const conflict = collidesWith(item, dst, ox, oy);
-    if (conflict) return; // Customize this later if needed
-
-    if (handlePouchDrop(item, dst, data, ox, oy)) return;
-    if (handlePackableAutoPouch(item, dst, src, data, ox, oy)) return;
-
-    // Standard drop
-    dst.addItem(item, ox, oy, true);
-    if (!data.fromSearch) src.removeItem(item);
-
-    cleanupEmptyPouches();
-  }
-
-  function getContainerById(id) {
-    return inventory.containers[id] || dynamicContainers[id];
-  }
-
-  function getItemFromData(data, src) {
-    if (data.fromSearch) {
-      const baseItem = ITEM_LIBRARY.find(i => i.name === data.name);
-      if (!baseItem) return null;
-
-      // Build a new object with expected props, fallback to baseItem props
-      const itemData = {
-        name: baseItem.name,
-        bulk: baseItem.bulk,
-        container: baseItem.container,
-        description: baseItem.description || "",
-        variables: baseItem.variables ? { ...baseItem.variables } : {},
-        displayText: baseItem.displayText,
-        variableDisplayText: baseItem.variableDisplayText,
-        ...data,  // override with any data props
-      };
-
-      // Make sure bulk is a proper object (in case data.bulk is partial)
-      if (data.bulk && typeof data.bulk === "object") {
-        itemData.bulk = {
-          width: data.bulk.width ?? baseItem.bulk.width,
-          height: data.bulk.height ?? baseItem.bulk.height,
-          id: data.bulk.id ?? baseItem.bulk.id,
-        };
-      }
-
-      // Ensure variables is a proper object
-      if (data.variables && typeof data.variables === "object") {
-        itemData.variables = { ...itemData.variables, ...data.variables };
-      }
-
-      return new InventoryItem(itemData);
-    } else {
-      return src.getItem(data.originX, data.originY);
-    }
-  }
-
-
-  function isWithinBounds(item, container, x, y) {
-    return x >= 0 && y >= 0 &&
-      x + item.size.width <= container.col &&
-      y + item.size.height <= container.row;
-  }
-
-  function collidesWith(item, container, x, y) {
-    for (let dx = 0; dx < item.size.width; dx++) {
-      for (let dy = 0; dy < item.size.height; dy++) {
-        const existing = container.getItem(x + dx, y + dy);
-        if (existing && existing !== item) return existing;
-      }
-    }
-    return null;
-  }
-
-  function handlePouchDrop(item, dst, data, x, y) {
-    if (!isContainerPouch(dst)) return false;
-    if (!item.isPackable()) return true;
-
-    const success = dst.addItem(item, x, y);
-    if (success && !data.fromSearch) {
-      const src = getContainerById(data.sourceContainerId);
-      src.removeItem(item);
-    }
-
-    return true;
-  }
-
-  function handlePackableAutoPouch(item, dst, src, data, x, y) {
-    if (!item.isPackable()) return false;
-
-    const pouch = createPouch();
-    pouch.displayText = containerDisplayText;
-
-    if (collidesWith(pouch, dst, x, y)) return true;
-
-    dst.addItem(pouch, x, y);
-    pouch.innerContainer.addItem(item, 0, 0);
-
-    if (!data.fromSearch)
-      src.removeItem(item);
-    
-    return true;
-  }
-
-  function cleanupEmptyPouches() {
-    const allContainers = { ...inventory.containers, ...dynamicContainers };
-    for (const container of Object.values(allContainers)) {
-      for (const key in container.items) {
-        const item = container.items[key];
-        if (item?.name === "Pouch" && item.innerContainer && Object.keys(item.innerContainer.items).length === 0) {
-          container.removeItem(item);
-          itemDivCache.delete(item);
-          delete dynamicContainers[item.id];
-          break;
-        }
-      }
-    }
-  }
-
-  function isContainerPouch(container) {
-    if (!container.ownerId) return false;
-    const pouchItem = findItemById(container.ownerId);
-    return pouchItem?.name === "Pouch";
-  }
-
-  function findItemById(id) {
-    const allContainers = { ...inventory.containers, ...dynamicContainers };
-    for (const container of Object.values(allContainers)) {
-      for (const item of Object.values(container.items)) {
-        if (item.id === id) return item;
-      }
-    }
-    return null;
-  }
-
-  function drawContainer(container, containerId) {
-    const containerDiv = document.createElement("div");
-    containerDiv.classList.add("container");
-    containerDiv.dataset.containerId = containerId;
-    containerDiv.style.position = "relative";
-
-    if (isContainerPouch(container)) {
-      containerDiv.classList.add("pouch-container");
-    }
-    
-
-    for (let y = 0; y < container.row; y++) {
-      const rowDiv = document.createElement("div");
-      rowDiv.classList.add("row");
-      for (let x = 0; x < container.col; x++) {
-        const cellDiv = document.createElement("div");
-        cellDiv.classList.add("cell");
-        cellDiv.dataset.x = x;
-        cellDiv.dataset.y = y;
-        cellDiv.addEventListener("dragover", e => e.preventDefault());
-        cellDiv.addEventListener("drop", e => {
-          handleDrop(e, x, y, containerId);
-          drawInventory(inventory);
-        });
-        rowDiv.appendChild(cellDiv);
-      }
-      containerDiv.appendChild(rowDiv);
-    }
-
-    const added = new Set();
-    for (const key in container.items) {
-      const item = container.items[key];
-      if (!added.has(item)) {
-        const [ox, oy] = container.getItemOrigin(item);
-        const div = drawItem(item, ox, oy, containerId);
-        itemDivCache.set(item, div);
-        containerDiv.appendChild(div);
-        added.add(item);
-      }
-    }
-
-    return containerDiv;
-  }
-
-  function updateItemPositions(container, containerDiv) {
-    for (const [item, div] of itemDivCache.entries()) {
-      const origin = container.getItemOrigin(item);
-      if (!origin) continue;
-      const [x, y] = origin;
-      div.style.top = `${y * CELL_HEIGHT}px`;
-      div.style.left = `${x * CELL_WIDTH}px`;
-      if (div.parentElement !== containerDiv) containerDiv.appendChild(div);
-    }
-  }
-
-  function drawItem(item, x, y, containerId, staticMode = false) {
-    const div = document.createElement("div");
-    div.classList.add("item");
-
-    if (item.isContainer()) div.classList.add("container");
-
-    if (item.isPackable()) div.classList.add("packable");
-
-    // Use the displayText function if it exists, otherwise fallback to name
-    div.innerHTML = item.getDisplayText();
-
-    div.draggable = true;
-
-    if (item._isOpen) {
-      div.classList.add("open-container");
-    } else {
-      div.classList.remove("open-container");
-    }
-
-    div.style.setProperty("--item-width", item.size.width);
-    div.style.setProperty("--item-height", item.size.height);
-
-    if (staticMode) {
-      div.style.position = "relative";
-    } else {
-      div.style.position = "absolute";
-      div.style.top = `${y * CELL_HEIGHT}px`;
-      div.style.left = `${x * CELL_WIDTH}px`;
-    }
-
-    div.addEventListener("dragstart", e => {
-      if (item.isContainer() && item._isOpen) {
-        toggleContainerView(item);
-      }
-    
-      let slotX = 0, slotY = 0, originX = 0, originY = 0;
-    
-      if (!staticMode) {
-        slotX = Math.floor(e.offsetX / CELL_WIDTH);
-        slotY = Math.floor(e.offsetY / CELL_HEIGHT);
-        originX = Math.round(parseInt(div.style.left, 10) / CELL_WIDTH);
-        originY = Math.round(parseInt(div.style.top, 10) / CELL_HEIGHT);
-      }
-    
-      e.dataTransfer.setData("text/plain", JSON.stringify({
-        originX,
-        originY,
-        offsetX: slotX,
-        offsetY: slotY,
-        sourceContainerId: containerId,
-        fromSearch: staticMode,
-        name: item.name,
-        bulk: item.size,
-        container: item.innerContainer ? { col: item.innerContainer.col, row: item.innerContainer.row } : null
-      }));
-    });
-
-    if (!staticMode && item.isContainer()) {
-      div.addEventListener("click", () => toggleContainerView(item));
-    } 
-      
-    div.addEventListener("click", () => updateInspector(item));
-
-    return div;
-  }
-
-  function toggleContainerView(item) {
-    if (item._isOpen) {
-      const stack = [item];
-      while (stack.length > 0) {
-        const current = stack.pop();
-        current._isOpen = false;
-        delete dynamicContainers[current.id];
-        if (current.innerContainer) {
-          for (const key in current.innerContainer.items) {
-            const child = current.innerContainer.items[key];
-            if (child?.isContainer && child.isContainer()) {
-              stack.push(child);
-            }
-          }
-        }
-      }
-    } else {
-      item._isOpen = true;
-      if (item.innerContainer) {
-        dynamicContainers[item.id] = item.innerContainer;
-      }
-    }
-
-    drawInventory(inventory);
-  }
-
-  function getCellCoordinatesFromMouseEvent(e) {
-    const containers = document.querySelectorAll(".container");
-    for (const el of containers) {
-      if (el.contains(e.target)) {
-        const rect = el.getBoundingClientRect();
-        const offsetX = e.clientX - rect.left;
-        const offsetY = e.clientY - rect.top;
-        return {
-          x: Math.floor(offsetX / CELL_WIDTH),
-          y: Math.floor(offsetY / CELL_HEIGHT)
-        };
-      }
-    }
-    return null;
-  }
-
-  document.getElementById("delete-bin").addEventListener("dragover", e => e.preventDefault());
-  document.getElementById("delete-bin").addEventListener("drop", e => {
-    e.preventDefault();
-    const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-    if (data.fromSearch) return;
-    const container = getContainerById(data.sourceContainerId);
-    const item = container?.getItem(data.originX, data.originY);
-    if (item) {
-      if (item.isContainer() && item.innerContainer) {
-        for (const key in item.innerContainer.items) {
-          const innerItem = item.innerContainer.items[key];
-          itemDivCache.delete(innerItem);
-        }
-        delete dynamicContainers[item.id];
-      }
-
-      container.removeItem(item);
-      itemDivCache.delete(item);
-      drawInventory(inventory);
-    }
+  // slots[r] = [leftSlot, rightSlot]  where slot = null | { name, variables }
+  state.containers.forEach(c => {
+    c.slots = Array.from({ length: c.rows }, () => [null, null]);
   });
 
-  const inventory = new Inventory();
-
-  function createPouch() {
-    const pouch = new InventoryItem({
-      name: "Pouch",
-      bulk: Bulk.HANDHELD,
-      container: { col: 1, row: 5 },
-      displayText: containerDisplayText
-    });
-    return pouch;
-  }
-
-
-  const input = document.getElementById("search-input");
-  const results = document.getElementById("search-results");
-  results.style.display = "flex";
-  results.style.flexDirection = "column";
-  results.style.gap = "4px";
-
-  input.addEventListener("input", () => {
-    const query = input.value.toLowerCase();
-    results.innerHTML = "";
-    if (!query) return;
-
-    ITEM_LIBRARY
-      .filter(i => i.name.toLowerCase().includes(query))
-      .forEach(itemData => {
-        const div = drawItem(new InventoryItem(itemData), 0, 0, "search", true);
-        div.style.width = `${itemData.bulk.width * CELL_WIDTH}px`;
-        div.style.height = `${itemData.bulk.height * CELL_HEIGHT}px`;
-        results.appendChild(div);
-      });
-  });
-
-  function updateInspector(item) {
-    inspectorDiv.innerHTML = `
-      <h2>${item.name}</h2>
-      <p>${item.description || "No description provided."}</p>
-      <div class="variables">
-        ${Object.entries(item.variables).map(([key, meta]) => {
-          const { value, control, min, max } = meta;
-
-          const minus = (control === "plusminus" || control === "both")
-            ? `<button onclick="changeVariable('${item.id}', '${key}', -1)">-</button>`
-            : "";
-
-          const plus = (control === "plusminus" || control === "both")
-            ? `<button onclick="changeVariable('${item.id}', '${key}', 1)">+</button>`
-            : "";
-
-          const minAttr = (typeof min === "number") ? `min="${min}"` : "";
-          const maxAttr = (typeof max === "number") ? `max="${max}"` : "";
-
-          const set = (control === "set" || control === "both")
-            ? `<input type="number" value="${value}" ${minAttr} ${maxAttr} onchange="setVariable('${item.id}', '${key}', this.value)" />`
-            : `<span>${value}</span>`;
-
-          return `
-            <div class="variable">
-              <label>${key}:</label>
-              ${minus}
-              ${set}
-              ${plus}
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-  }
-
-  function changeVariable(itemId, key, delta) {
-    const item = findItemById(itemId);
-    if (!item) return;
-
-    const meta = item.variables?.[key];
-    if (!meta || typeof meta.value !== "number") return;
-
-    let newValue = meta.value + delta;
-
-    if (typeof meta.min === "number" && newValue < meta.min) {
-      newValue = meta.min;
-    }
-    if (typeof meta.max === "number" && newValue > meta.max) {
-      newValue = meta.max;
-    }
-
-    meta.value = newValue;
-    updateInspector(item);
-    drawInventory(inventory);
-  }
-
-  function setVariable(itemId, key, value) {
-    const item = findItemById(itemId);
-    if (!item) return;
-
-    const parsed = parseInt(value, 10);
-    if (isNaN(parsed)) return;
-
-    const meta = item.variables?.[key];
-    if (!meta) return;
-
-    let newValue = parsed;
-    if (typeof meta.min === "number" && newValue < meta.min) {
-      newValue = meta.min;
-    }
-    if (typeof meta.max === "number" && newValue > meta.max) {
-      newValue = meta.max;
-    }
-
-    meta.value = newValue;
-    updateInspector(item);
-    drawInventory(inventory);
-  }
-
-  window.changeVariable = changeVariable;
-  window.setVariable = setVariable;
+  // ── ITEM LIBRARY ────────────────────────────────────────────────────────
+  const Bulk = {
+    PACKABLE:  { id: 'packable'  },
+    STOCK:     { id: 'stock'     },
+    BULKY:     { id: 'bulky'     },
+    VERYBULKY: { id: 'verybulky' },
+  };
 
   const ITEM_LIBRARY = [
-    { name: "Platinum Coins", bulk: Bulk.PACKABLE, description: `1 platinum coin = 10 gold coins`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
-    { name: "Gold Coins", bulk: Bulk.PACKABLE, description: `1 gold coin = 10 silver coins`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
-    { name: "Silver Coins", bulk: Bulk.PACKABLE, description: `1 silver coin = 10 copper coins`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
-    { name: "Copper Coins", bulk: Bulk.PACKABLE, description: `Basic currency unit`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
+    // Container items — occupy 1 slot but don't count toward carry capacity
+    { name: "Backpack", bulk: Bulk.STOCK, description: `Holds gear. Does not count toward carry capacity.`, noCarry: true, containerRows: 4 },
+    { name: "Satchel",  bulk: Bulk.STOCK, description: `Holds gear. Does not count toward carry capacity.`, noCarry: true, containerRows: 1 },
 
-    { name: "Bagpipes", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Drum", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Dulcimer", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Flute", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Lute", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Lyre", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Pan Flute", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Shawm", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Viol", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    
-    { name: "Club", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 bludgeoning damage<br>light` },
-    { name: "Dagger", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 piercing damage<br>finesse, light, thrown (range 20/60)` },
-    { name: "Greatclub", bulk: Bulk.BULKY, description: `<i>simple weapon</i><br>1d8 bludgeoning damage<br>two-handed, heavy` },
-    { name: "Handaxe", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 slashing damage<br>light, thrown (range 20/60)` },
-    { name: "Javelin", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 piercing damage<br>thrown (range 30/120)` },
-    { name: "Light Hammer", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 bludgeoning damage<br>light, thrown (range 20/60)` },
-    { name: "Mace", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 bludgeoning damage` },
-    { name: "Quarterstaff", bulk: Bulk.BULKY, description: `<i>simple weapon</i><br>1d6 bludgeoning damage<br>versatile (1d8)` },
-    { name: "Sickle", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 slashing damage<br>light` },
-    { name: "Spear", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 piercing damage<br>thrown (range 20/60), versatile (1d8)` },
-    { name: "Light Crossbow", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d8 piercing damage<br>range 80/320, loading, two-handed` },
-    { name: "Dart", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 piercing damage<br>finesse, thrown (range 20/60)` },
-    { name: "Shortbow", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 piercing damage<br>range 80/320, two-handed` },
-    { name: "Sling", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 bludgeoning damage<br>range 30/120` },
-    { name: "Battleaxe", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 slashing damage<br>versatile (1d10)` },
-    { name: "Flail", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 bludgeoning damage` },
-    { name: "Glaive", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 slashing damage<br>heavy, reach, two-handed` },
-    { name: "Greataxe", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d12 slashing damage<br>heavy, two-handed` },
-    { name: "Greatsword", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>2d6 slashing damage<br>heavy, two-handed` },
-    { name: "Halberd", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 slashing damage<br>heavy, reach, two-handed` },
-    { name: "Lance", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d12 piercing damage<br>reach, special` },
-    { name: "Longsword", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 slashing damage<br>versatile (1d10)` },
-    { name: "Maul", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>2d6 bludgeoning damage<br>heavy, two-handed` },
-    { name: "Morningstar", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 piercing damage` },
-    { name: "Pike", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 piercing damage<br>heavy, reach, two-handed` },
-    { name: "Rapier", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 piercing damage<br>finesse` },
-    { name: "Scimitar", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 slashing damage<br>finesse, light` },
-    { name: "Shortsword", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 piercing damage<br>finesse, light` },
-    { name: "Trident", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 piercing damage<br>thrown (range 20/60), versatile (1d8)` },
-    { name: "War Pick", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 piercing damage` },
-    { name: "Warhammer", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 bludgeoning damage<br>versatile (1d10)` },
-    { name: "Whip", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d4 slashing damage<br>finesse, reach` },
-    { name: "Blowgun", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1 piercing damage<br>range 25/100, loading` },
-    { name: "Hand Crossbow", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 piercing damage<br>range 30/120, light, loading` },
-    { name: "Heavy Crossbow", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 piercing damage<br>range 100/400, heavy, loading, two-handed` },
-    { name: "Longbow", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d8 piercing damage<br>range 150/600, heavy, two-handed` },
-    { name: "Net", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>special, thrown (range 5/15)` },
+    { name: "Platinum Coins", bulk: Bulk.PACKABLE, description: `1 platinum coin = 10 gold coins`, variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
+    { name: "Gold Coins",     bulk: Bulk.PACKABLE, description: `1 gold coin = 10 silver coins`,   variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
+    { name: "Silver Coins",   bulk: Bulk.PACKABLE, description: `1 silver coin = 10 copper coins`, variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
+    { name: "Copper Coins",   bulk: Bulk.PACKABLE, description: `Basic currency unit`,              variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
 
-    { name: "Shield", bulk: Bulk.BULKY, description: `<i>shield</i><br>+2 AC` },
-    { name: "Light Armor", bulk: Bulk.HANDHELD, description: `<i>light armor</i><br>AC 12 + Dex modifier. <br> <i>leather, or other simple padding.</i>` },
-    { name: "Medium Armor", bulk: Bulk.BULKY, description: `<i>medium armor</i><br>AC 14 + max 2 Dex modifier. Disadvantage on stealth checks. <br> <i>scale mail, partial chainmail, or similarly mildly cumbersome armor.</i>` },
-    { name: "Heavy Armor", bulk: Bulk.BULKY, description: `<i>heavy armor</i><br>AC 16 <br> <i>full chain mail, or similarly cumbersome armor.</i>` },
-    { name: "Half Plate", bulk: Bulk.BULKY, description: `<i>medium armor</i><br>AC 15 + max 2 Dex modifier. Disadvantage on stealth checks. <br> <i>this armor can be made into full plate for the difference in cost.</i>` },
-    { name: "Splint Armor", bulk: Bulk.BULKY, description: `<i>heavy armor</i><br>AC 17 <br> <i>full leather with rivited strips of metal.</i>` },
-    { name: "Plate Armor", bulk: Bulk.VERYBULKY, description: `<i>heavy armor</i><br>AC 18 <br> <i>complete plate armor.</i>` },
+    { name: "Bagpipes",   bulk: Bulk.BULKY,    description: `Play a known tune (DC 10), or improvise (DC 15)` },
+    { name: "Drum",       bulk: Bulk.STOCK, description: `Play a known tune (DC 10), or improvise (DC 15)` },
+    { name: "Dulcimer",   bulk: Bulk.BULKY,    description: `Play a known tune (DC 10), or improvise (DC 15)` },
+    { name: "Flute",      bulk: Bulk.STOCK, description: `Play a known tune (DC 10), or improvise (DC 15)` },
+    { name: "Lute",       bulk: Bulk.BULKY,    description: `Play a known tune (DC 10), or improvise (DC 15)` },
+    { name: "Lyre",       bulk: Bulk.STOCK, description: `Play a known tune (DC 10), or improvise (DC 15)` },
+    { name: "Pan Flute",  bulk: Bulk.STOCK, description: `Play a known tune (DC 10), or improvise (DC 15)` },
+    { name: "Shawm",      bulk: Bulk.STOCK, description: `Play a known tune (DC 10), or improvise (DC 15)` },
+    { name: "Viol",       bulk: Bulk.BULKY,    description: `Play a known tune (DC 10), or improvise (DC 15)` },
 
-    // Adventuring Gear
-    { name: "Rations", bulk: Bulk.PACKABLE, description: `A days rations.` },
-    { name: "Mirror", bulk: Bulk.PACKABLE, description: `A steel mirror used for grooming, peeking around corners, or signaling with reflected light.` },
-    { name: "Tinderbox", bulk: Bulk.PACKABLE, description: `Use as a bonus action to light exposed fuel (e.g., candle, torch); 1 minute to light covered material.` },
-    { name: "Waterskin", bulk: Bulk.HANDHELD, description: `Holds 4 pints of water. Essential for avoiding dehydration during travel or exertion.` },
-    { name: "Chalk", bulk: Bulk.PACKABLE, variables: { charges: { value: 5, control: "plusminus", min: 0, max: 5 } }, description: `Expend 1 charge to mark a surface; expend 5 to leave a 50-ft trail. Useful for leaving notes and marking objects.` },
-    { name: "Rope", bulk: Bulk.BULKY, description: `50ft of rope. Use an action to tie a secure knot (DC 10 Sleight of Hand). Can bind a Grappled, Incapacitated, or Restrained creature. Bound creatures are Restrained. Escape (DC 15 Acrobatics); burst (DC 20 Athletics).` },
-    { name: "Shovel", bulk: Bulk.BULKY, description: `After 1 hour of digging, creates a 5-foot cube hole in dirt, sand, or loose material.` },
-    { name: "Whistle", bulk: Bulk.PACKABLE, description: `Blow as an action to emit a piercing sound audible up to 600 feet away.` },
-    { name: "Horn", bulk: Bulk.HANDHELD, description: `Blow as an action to emit a loud note audible up to 600 feet away.` },
-    { name: "Manacles", bulk: Bulk.HANDHELD, description: `As an action, bind an unwilling Small or Medium creature within 5ft that is Grappled, Incapacitated, or Restrained, with a successful DC 13 Dexterity (Sleight of Hand) check.<br>
-      A bound creature is Restrained.<br>
-      It can attempt a DC 25 Dexterity (Sleight of Hand) check to slip free, or a DC 25 Strength (Athletics) check to break them as an action.<br>
-      Another creature can pick the lock with a DC 15 Dexterity (Sleight of Hand) check.<br>
-      <i>AC 19, damage threshold 10, 10 hit points.</i>` },
-    { name: "Grappling Hook", bulk: Bulk.HANDHELD, description: `As an action, throw at a target within 50 ft. The hook catches on a DC 13 Dexterity (Acrobatics) or Strength (Athletics) check. If tied to Rope, can be climbed.` },
-    { name: "Crowbar", bulk: Bulk.HANDHELD, description: `Using a Crowbar gives you Advantage on Strength checks where the Crowbar's leverage can be applied.` },
-    { name: "Lantern", bulk: Bulk.HANDHELD, description: `Sheds bright light in a 30-foot radius and dim light for an additional 30 feet. As a bonus action you can lower the hood to reduce it to dim light in a 5-foot radius or raise the hood. Consumes 1 charge of oil per hour from an Oil Flask.` },
-    { name: "Oil Flask", bulk: Bulk.PACKABLE, displayText: variableDisplayText, variables: { charges: { value: 5, control: "plusminus", min: 0, max: 5 } }, description: `Used to fuel lanterns or coat objects, making them flammable when exposed to fire (burning condition).` },  
-    { name: "Torch", bulk: Bulk.PACKABLE, variables: { charges: { value: 6, control: "plusminus", min: 0, max: 6 } }, description: `Light the torch to expend a charge and cast 10 minutes of bright light in a 20-foot radius and dim light for an additional 20 feet. The torch can be used as a Simple Melee weapon. On a hit, the target takes 1d4 + Strength bludgeoning damage or fire damage when lit.`},
+    { name: "Club",           bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d4 bludgeoning &mdash; light` },
+    { name: "Dagger",         bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d4 piercing &mdash; finesse, light, thrown (20/60)` },
+    { name: "Greatclub",      bulk: Bulk.BULKY,    description: `<i>simple weapon</i><br>1d8 bludgeoning &mdash; two-handed` },
+    { name: "Handaxe",        bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d6 slashing &mdash; light, thrown (20/60)` },
+    { name: "Javelin",        bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d6 piercing &mdash; thrown (30/120)` },
+    { name: "Light Hammer",   bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d4 bludgeoning &mdash; light, thrown (20/60)` },
+    { name: "Mace",           bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d6 bludgeoning` },
+    { name: "Quarterstaff",   bulk: Bulk.BULKY,    description: `<i>simple weapon</i><br>1d6 bludgeoning &mdash; versatile (1d8)` },
+    { name: "Sickle",         bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d4 slashing &mdash; light` },
+    { name: "Spear",          bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d6 piercing &mdash; thrown (20/60), versatile (1d8)` },
+    { name: "Light Crossbow", bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d8 piercing &mdash; range 80/320, loading, two-handed` },
+    { name: "Dart",           bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d4 piercing &mdash; finesse, thrown (20/60)` },
+    { name: "Shortbow",       bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d6 piercing &mdash; range 80/320, two-handed` },
+    { name: "Sling",          bulk: Bulk.STOCK, description: `<i>simple weapon</i><br>1d4 bludgeoning &mdash; range 30/120` },
+    { name: "Battleaxe",      bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d8 slashing &mdash; versatile (1d10)` },
+    { name: "Flail",          bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d8 bludgeoning` },
+    { name: "Glaive",         bulk: Bulk.BULKY,    description: `<i>martial weapon</i><br>1d10 slashing &mdash; heavy, reach, two-handed` },
+    { name: "Greataxe",       bulk: Bulk.BULKY,    description: `<i>martial weapon</i><br>1d12 slashing &mdash; heavy, two-handed` },
+    { name: "Greatsword",     bulk: Bulk.BULKY,    description: `<i>martial weapon</i><br>2d6 slashing &mdash; heavy, two-handed` },
+    { name: "Halberd",        bulk: Bulk.BULKY,    description: `<i>martial weapon</i><br>1d10 slashing &mdash; heavy, reach, two-handed` },
+    { name: "Lance",          bulk: Bulk.BULKY,    description: `<i>martial weapon</i><br>1d12 piercing &mdash; reach, special` },
+    { name: "Longsword",      bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d8 slashing &mdash; versatile (1d10)` },
+    { name: "Maul",           bulk: Bulk.BULKY,    description: `<i>martial weapon</i><br>2d6 bludgeoning &mdash; heavy, two-handed` },
+    { name: "Morningstar",    bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d8 piercing` },
+    { name: "Pike",           bulk: Bulk.BULKY,    description: `<i>martial weapon</i><br>1d10 piercing &mdash; heavy, reach, two-handed` },
+    { name: "Rapier",         bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d8 piercing &mdash; finesse` },
+    { name: "Scimitar",       bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d6 slashing &mdash; finesse, light` },
+    { name: "Shortsword",     bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d6 piercing &mdash; finesse, light` },
+    { name: "Trident",        bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d6 piercing &mdash; thrown (20/60), versatile (1d8)` },
+    { name: "War Pick",       bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d8 piercing` },
+    { name: "Warhammer",      bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d8 bludgeoning &mdash; versatile (1d10)` },
+    { name: "Whip",           bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d4 slashing &mdash; finesse, reach` },
+    { name: "Blowgun",        bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1 piercing &mdash; range 25/100, loading` },
+    { name: "Hand Crossbow",  bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>1d6 piercing &mdash; range 30/120, light, loading` },
+    { name: "Heavy Crossbow", bulk: Bulk.BULKY,    description: `<i>martial weapon</i><br>1d10 piercing &mdash; range 100/400, heavy, loading, two-handed` },
+    { name: "Longbow",        bulk: Bulk.BULKY,    description: `<i>martial weapon</i><br>1d8 piercing &mdash; range 150/600, heavy, two-handed` },
+    { name: "Net",            bulk: Bulk.STOCK, description: `<i>martial weapon</i><br>special, thrown (5/15)` },
 
-    { name: "Satchel", bulk: Bulk.HANDHELD, container: { col: 2, row: 1 }, displayText: containerDisplayText, description: `It takes a bonus action or action to access an item in your satchel.` },
-    { name: "Backpack", bulk: Bulk.BULKY, container: { col: 2, row: 4 }, displayText: containerDisplayText, description: `It takes an action to access an item in your backpack. A creature can wear only one backpack.` },
-    
-    { name: "Saddlebag", bulk: Bulk.BULKY, description: `A mount's saddlebag for carrying gear.` },
-    { name: "Ammunition Cache", bulk: Bulk.HANDHELD, description: `A single weapon's ammunition. This must be accessed each time you reload the weapon.`  },
-    { name: "Basic Poison", bulk: Bulk.PACKABLE, description: `As a bonus action, coat one weapon or up to three pieces of ammunition. A target hit must succeed on a DC 13 Constitution saving throw or become poisoned. The poison lasts until the target saves at the end of their turns or 1 minute.` },
-    { name: "Antitoxin", bulk: Bulk.PACKABLE, description: `As a Bonus Action, you can drink a vial of Antitoxin to gain Advantage on saving throws to avoid or end the Poisoned condition for 1 hour.` },
-    { name: "Acid", bulk: Bulk.HANDHELD, description: `Replace one of your attacks to throw this at a creature or object within 20 ft, they must succeed on a DC 13 Dexterity saving throw or take 2d6 acid damage. This item is destroyed.` },
-    { name: "Alchemist's Fire", bulk: Bulk.HANDHELD, description: `Replace one of your attacks to throw this at a creature or object within 20 ft, they must succeed on a DC 13 Dexterity saving throw or take 1d4 fire damage and start burning. This item is destroyed.` },
-    { name: "Hunting Trap", bulk: Bulk.BULKY, description: `Spend 10 minutes setting and concealing this trap. When a creature steps on it, it must succeed on a DC 13 Dexterity save or take 2d10 piercing damage, and be grappled. The grapple requires a DC 13 Strength (Athletics) check to end.` },
-    { name: "Caltrops", bulk: Bulk.HANDHELD, description: `Scatter on the ground in a 5-ft square. Each creature entering must succeed on a DC13 Dexterity save or take 1d4 damage and their speed is 0 until the start of their next turn.` },
-    { name: "Ball Bearings", bulk: Bulk.HANDHELD, description: `Scatter on the ground in a 10-ft square. Each creature entering must succeed on a DC13 Dexterity save or fall prone.` },
-    { name: "Healing Potion", bulk: Bulk.HANDHELD, description: `Drink as an action to regain 2d4 + 2 hit points.` },
+    { name: "Shield",       bulk: Bulk.BULKY,    description: `+2 AC` },
+    { name: "Light Armor",  bulk: Bulk.STOCK, description: `<i>light armor</i><br>AC 12 + Dex modifier` },
+    { name: "Medium Armor", bulk: Bulk.BULKY,    description: `<i>medium armor</i><br>AC 14 + max 2 Dex. Stealth disadvantage.` },
+    { name: "Heavy Armor",  bulk: Bulk.BULKY,    description: `<i>heavy armor</i><br>AC 16` },
+    { name: "Half Plate",   bulk: Bulk.BULKY,    description: `<i>medium armor</i><br>AC 15 + max 2 Dex. Stealth disadvantage.` },
+    { name: "Splint Armor", bulk: Bulk.BULKY,    description: `<i>heavy armor</i><br>AC 17` },
+    { name: "Plate Armor",  bulk: Bulk.VERYBULKY, description: `<i>heavy armor</i><br>AC 18` },
 
-    // Tools & Kits
-    { name: "Climber's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Smith's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Mason's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Woodcarver's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Leatherworker's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Weaver's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Scribe's Supplies", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Painter's Supplies", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Jeweler's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Cook's Utensils", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Healer's Kit", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Poisoner's Kit", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Herbalism Kit", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Glassblower's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Potter's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Thieves' Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Tinker's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Alchemist's Supplies", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Disguise Kit", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Navigator's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Brewer's Supplies", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Camp Supplies", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
+    { name: "Rations",         bulk: Bulk.PACKABLE, description: `A day's rations.` },
+    { name: "Mirror",          bulk: Bulk.PACKABLE, description: `A steel mirror for grooming, peeking around corners, or signalling.` },
+    { name: "Tinderbox",       bulk: Bulk.PACKABLE, description: `Bonus action to light exposed fuel; 1 minute for covered material.` },
+    { name: "Waterskin",       bulk: Bulk.STOCK, description: `Holds 4 pints of water.` },
+    { name: "Chalk",           bulk: Bulk.PACKABLE, description: `Expend 1 charge to mark a surface.`, variables: { charges: { value: 5, control: "plusminus", min: 0, max: 5 } } },
+    { name: "Rope",            bulk: Bulk.BULKY,    description: `50ft. DC 10 Sleight of Hand to tie. Bound creatures are Restrained (DC 15 Acrobatics or DC 20 Athletics to escape).` },
+    { name: "Shovel",          bulk: Bulk.BULKY,    description: `1 hour to dig a 5-ft cube in dirt or loose material.` },
+    { name: "Whistle",         bulk: Bulk.PACKABLE, description: `Audible up to 600 feet.` },
+    { name: "Horn",            bulk: Bulk.STOCK, description: `Audible up to 600 feet.` },
+    { name: "Manacles",        bulk: Bulk.STOCK, description: `Action to bind a Grappled/Incapacitated/Restrained creature (DC 13 Sleight of Hand). Restrained until DC 25 Dex/Str check or DC 15 lockpick.` },
+    { name: "Grappling Hook",  bulk: Bulk.STOCK, description: `Action, throw 50 ft. Catches on DC 13 check. If tied to rope, can be climbed.` },
+    { name: "Crowbar",         bulk: Bulk.STOCK, description: `Advantage on Strength checks where leverage applies.` },
+    { name: "Lantern",         bulk: Bulk.STOCK, description: `30-ft bright, 30-ft dim light. Bonus action to hood (5-ft dim). Burns 1 Oil Flask charge/hour.` },
+    { name: "Oil Flask",       bulk: Bulk.PACKABLE, description: `Fuel for lanterns, or coats objects to make them flammable.`, variables: { charges: { value: 5, control: "plusminus", min: 0, max: 5 } } },
+    { name: "Torch",           bulk: Bulk.PACKABLE, description: `10 min of 20-ft bright, 20-ft dim light. Can be used as a simple melee weapon (1d4 bludgeoning or fire when lit).`, variables: { charges: { value: 6, control: "plusminus", min: 0, max: 6 } } },
+    { name: "Healing Potion",  bulk: Bulk.STOCK, description: `Action: regain 2d4 + 2 hit points.` },
+    { name: "Basic Poison",    bulk: Bulk.PACKABLE, description: `Bonus action to coat a weapon or 3 pieces of ammo. Hit target: DC 13 Con save or Poisoned for up to 1 minute.` },
+    { name: "Antitoxin",       bulk: Bulk.PACKABLE, description: `Bonus action: advantage on saves vs Poisoned for 1 hour.` },
+    { name: "Acid",            bulk: Bulk.STOCK, description: `Replace an attack: throw 20 ft, DC 13 Dex save or 2d6 acid damage. Destroyed on use.` },
+    { name: "Alchemist's Fire", bulk: Bulk.STOCK, description: `Replace an attack: throw 20 ft, DC 13 Dex save or 1d4 fire damage + burning. Destroyed on use.` },
+    { name: "Hunting Trap",    bulk: Bulk.BULKY,    description: `10 min to set. Triggered creature: DC 13 Dex save or 2d10 piercing + Grappled (DC 13 Athletics to escape).` },
+    { name: "Caltrops",        bulk: Bulk.STOCK, description: `5-ft square. Entering creature: DC 13 Dex save or 1d4 damage + speed 0 until next turn.` },
+    { name: "Ball Bearings",   bulk: Bulk.STOCK, description: `10-ft square. Entering creature: DC 13 Dex save or fall Prone.` },
+    { name: "Ammunition Cache", bulk: Bulk.STOCK, description: `A single weapon's ammunition supply.` },
+
+    { name: "Climber's Kit",         bulk: Bulk.BULKY,    description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Smith's Tools",         bulk: Bulk.BULKY,    description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Mason's Tools",         bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Woodcarver's Tools",    bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Leatherworker's Tools", bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Weaver's Tools",        bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Scribe's Supplies",     bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Painter's Supplies",    bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Jeweler's Tools",       bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Cook's Utensils",       bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Healer's Kit",          bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Poisoner's Kit",        bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Herbalism Kit",         bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Thieves' Tools",        bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Tinker's Tools",        bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Navigator's Tools",     bulk: Bulk.STOCK, description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Alchemist's Supplies",  bulk: Bulk.BULKY,    description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Disguise Kit",          bulk: Bulk.BULKY,    description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Glassblower's Tools",   bulk: Bulk.BULKY,    description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Potter's Tools",        bulk: Bulk.BULKY,    description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Brewer's Supplies",     bulk: Bulk.BULKY,    description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+    { name: "Camp Supplies",         bulk: Bulk.BULKY,    description: `Advantage on relevant roll. Expend a charge to retrieve a component. Replenish after long rest.`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
   ];
+
+  // ── HELPERS ─────────────────────────────────────────────────────────────
+  function getLibraryItem(name) {
+    return ITEM_LIBRARY.find(i => i.name.toLowerCase() === name.trim().toLowerCase()) || null;
+  }
+
+  function isNoCarry(slotData) {
+    if (!slotData) return false;
+    if (slotData.isContainer) return true;
+    const lib = getLibraryItem(slotData.name);
+    return !!(lib && lib.noCarry);
+  }
+
+  function isContainerItem(slotData) {
+    if (!slotData) return false;
+    if (slotData.isContainer) return true;
+    const lib = getLibraryItem(slotData.name);
+    return !!(lib && lib.containerRows);
+  }
+
+  function containerHasItems(container) {
+    return container.slots.some(row => row[0] !== null || row[1] !== null);
+  }
+
+  function createLinkedContainer(slotData, srcContainerId, r, c) {
+    const lib = getLibraryItem(slotData.name);
+    const rows = slotData.isContainer
+      ? (slotData.containerRows || 2)
+      : (lib && lib.containerRows) || 2;
+    const linked = {
+      id: `linked-${Date.now()}`,
+      name: slotData.name,
+      rows,
+      collapsed: false,
+      slots: Array.from({ length: rows }, () => [null, null]),
+      linkedTo: { containerId: srcContainerId, r, c }
+    };
+    slotData.containerId = linked.id;
+    state.containers.push(linked);
+  }
+
+  function updateCarryDisplay() {
+    const used   = countCarry();
+    const usedEl = document.getElementById('carry-used');
+    const header = document.getElementById('char-header');
+    usedEl.textContent = used;
+    const max  = parseInt(state.carryCapacity);
+    const over = !isNaN(max) && max > 0 && used > max;
+    usedEl.classList.toggle('carry-over', over);
+    header.classList.toggle('carry-over', over);
+  }
+
+  function countCarry() {
+    let used = 0;
+    for (const container of state.containers) {
+      if (container.id === 'equipped') continue;
+      for (const row of container.slots) {
+        const [left, right] = row;
+        if (left && isSlotBulky(left) && !left.conflict) {
+          if (!isNoCarry(left)) used += 2;
+        } else {
+          if (left  && !isNoCarry(left))  used += 1;
+          if (right && !isNoCarry(right)) used += 1;
+        }
+      }
+    }
+    return used;
+  }
+
+  function isSlotBulky(slotData) {
+    if (!slotData) return false;
+    const id = slotData.bulk ? slotData.bulk.id
+              : (getLibraryItem(slotData.name) || {bulk: Bulk.STOCK}).bulk.id;
+    return id === 'bulky' || id === 'verybulky';
+  }
+
+  // ── DOM REFS ────────────────────────────────────────────────────────────
+  const containersEl = document.getElementById('containers');
+  const dropdownEl   = document.getElementById('autocomplete-dropdown');
+  const inspectorEl  = document.getElementById('inspector');
+
+  // Active autocomplete context
+  let acContainer = null, acRow = -1, acCol = -1, acInput = null;
+  let ignoreNextBlur = false;
+
+  // Drag state
+  let dragState      = null;
+  let ghostEl        = null;
+  let longPressTimer = null;
+
+  // ── RENDER ──────────────────────────────────────────────────────────────
+  function growEquipped() {
+    const equipped = state.containers.find(c => c.id === 'equipped');
+    if (!equipped) return;
+    const hasEmptyRow = equipped.slots.some(row => row[0] === null && row[1] === null);
+    if (!hasEmptyRow) {
+      equipped.slots.push([null, null]);
+      equipped.rows++;
+    }
+  }
+
+  function render() {
+    growEquipped();
+    containersEl.innerHTML = '';
+    state.containers.forEach(c => containersEl.appendChild(buildCard(c)));
+    updateCarryDisplay();
+  }
+
+  function buildCard(container) {
+    const card = document.createElement('div');
+    const specialClass = container.id === 'equipped' ? ' card-equipped'
+                       : container.id === 'strapped'  ? ' card-strapped' : '';
+    card.className = 'inv-card' + specialClass;
+
+    const hdr = document.createElement('div');
+    hdr.className = 'inv-hdr';
+
+    const toggle = document.createElement('button');
+    toggle.className = 'inv-hdr-toggle';
+    toggle.innerHTML = `<span>${container.name}</span><span class="inv-chevron">${container.collapsed ? '▶' : '▼'}</span>`;
+    toggle.addEventListener('click', () => { container.collapsed = !container.collapsed; render(); });
+
+    hdr.appendChild(toggle);
+
+    if (!container.permanent) {
+      const del = document.createElement('button');
+      del.className = 'inv-hdr-del';
+      del.textContent = '✕';
+      del.title = 'Remove container';
+      del.addEventListener('click', () => {
+        if (containerHasItems(container)) {
+          if (!confirm(`${container.name} has items inside. Remove it anyway?`)) return;
+        }
+        // Clear the linked slot item if any
+        if (container.linkedTo) {
+          const { containerId, r, c } = container.linkedTo;
+          const src = state.containers.find(cnt => cnt.id === containerId);
+          if (src) src.slots[r][c] = null;
+        }
+        state.containers = state.containers.filter(cnt => cnt !== container);
+        render();
+      });
+      hdr.appendChild(del);
+    }
+    card.appendChild(hdr);
+
+    if (!container.collapsed) {
+      const grid = document.createElement('div');
+      grid.className = 'inv-grid';
+
+      container.slots.forEach((row, r) => {
+        const leftBulky = row[0] && isSlotBulky(row[0]) && !row[0].conflict;
+        if (leftBulky) {
+          grid.appendChild(buildSlot(container, r, 0, row[0], true));
+        } else {
+          grid.appendChild(buildSlot(container, r, 0, row[0], false));
+          grid.appendChild(buildSlot(container, r, 1, row[1], false));
+        }
+      });
+
+      card.appendChild(grid);
+    }
+
+    return card;
+  }
+
+  function buildSlot(container, r, c, slotData, full) {
+    const conflict = slotData && slotData.conflict;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'slot' + (full ? ' slot-full' : '');
+    wrap.dataset.containerId = container.id;
+    wrap.dataset.r = r;
+    wrap.dataset.c = c;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'slot-input' + (slotData ? ' slot-filled' : '') + (conflict ? ' slot-conflict' : '');
+    input.value = slotData ? slotData.name : '';
+    input.placeholder = '—';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+
+    const prev = slotData ? slotData.name : '';
+
+    input.addEventListener('focus', () => {
+      acContainer = container; acRow = r; acCol = c; acInput = input;
+      if (slotData) showInspector(slotData, container, r, c);
+      updateDropdown(input.value);
+    });
+
+    input.addEventListener('input', () => updateDropdown(input.value));
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const val = input.value.trim();
+        if (val) commitSlot(val, container, r, c);
+        else if (slotData) clearSlot(container, r, c);
+        else closeDropdown();
+      } else if (e.key === 'Escape') {
+        input.value = prev;
+        closeDropdown();
+        input.blur();
+      }
+    });
+
+    input.addEventListener('blur', () => {
+      if (ignoreNextBlur) { ignoreNextBlur = false; return; }
+      input.value = prev;
+      closeDropdown();
+    });
+
+    wrap.appendChild(input);
+
+    if (slotData) {
+      const label = document.createElement('span');
+      const isContainer = isNoCarry(slotData);
+      label.className = 'slot-label'
+        + (conflict     ? ' slot-label-conflict'   : '')
+        + (isContainer  ? ' slot-label-container'  : '');
+      const vars = Object.values(slotData.variables || {});
+      const count = vars.length === 1 && typeof vars[0].value === 'number' ? vars[0].value : null;
+      label.textContent = count !== null ? `${count} × ${slotData.name}` : slotData.name;
+      wrap.appendChild(label);
+    }
+
+    if (conflict) {
+      const warn = document.createElement('span');
+      warn.className = 'slot-warn';
+      warn.textContent = '⚠';
+      warn.title = 'Item is too bulky — clear an adjacent slot to resolve';
+      wrap.appendChild(warn);
+    }
+
+    if (slotData) {
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'slot-remove';
+      removeBtn.textContent = '−';
+      removeBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        clearSlot(container, r, c);
+      });
+      wrap.appendChild(removeBtn);
+    }
+
+    if (slotData) {
+      let downX, downY;
+
+      wrap.addEventListener('pointerdown', e => {
+        if (dragState || e.target.tagName === 'BUTTON') return;
+        downX = e.clientX; downY = e.clientY;
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          startDrag(slotData, container, r, c, downX, downY);
+        }, 380);
+      });
+
+      wrap.addEventListener('pointermove', e => {
+        if (!longPressTimer) return;
+        if ((e.clientX - downX) ** 2 + (e.clientY - downY) ** 2 > 64) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      });
+
+      const cancelLong = () => {
+        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      };
+      wrap.addEventListener('pointerup',     cancelLong);
+      wrap.addEventListener('pointercancel', cancelLong);
+    }
+
+    return wrap;
+  }
+
+  // ── SLOT MANAGEMENT ──────────────────────────────────────────────────────
+  function commitSlot(name, container, r, c) {
+    ignoreNextBlur = true;
+    const libItem = getLibraryItem(name);
+    const canonName = libItem ? libItem.name : name;
+    const row = container.slots[r];
+    const existing = row[c];
+
+    const sameItem = existing && existing.name === canonName;
+    const variables = sameItem
+      ? existing.variables
+      : (libItem ? JSON.parse(JSON.stringify(libItem.variables || {}))
+                 : { count: { value: 1, control: 'both', min: 0 } });
+
+    const slotData = {
+      name: canonName,
+      variables,
+      ...(libItem ? {} : {
+        custom: true,
+        bulk: sameItem && existing.bulk ? existing.bulk : Bulk.STOCK,
+        description: sameItem ? (existing.description || '') : '',
+      }),
+    };
+
+    if (isSlotBulky(slotData)) {
+      const otherCol = 1 - c;
+      const displaced = row[otherCol];
+
+      if (!displaced) {
+        row[0] = slotData;
+        row[1] = null;
+      } else {
+        const target = findEmptySlot(container, r);
+        if (target) {
+          container.slots[target.r][target.c] = displaced;
+          row[0] = slotData;
+          row[1] = null;
+        } else {
+          slotData.conflict = true;
+          row[c] = slotData;
+        }
+      }
+    } else {
+      row[c] = slotData;
+    }
+
+    // Determine where the item actually landed
+    const finalC = (isSlotBulky(slotData) && !slotData.conflict) ? 0 : c;
+    if (isContainerItem(slotData) && !slotData.containerId) {
+      createLinkedContainer(slotData, container.id, r, finalC);
+    }
+
+    closeDropdown();
+    render();
+    showInspector(slotData, container, r, c);
+  }
+
+  function findEmptySlot(container, excludeRow) {
+    for (let r = 0; r < container.slots.length; r++) {
+      if (r === excludeRow) continue;
+      const [left, right] = container.slots[r];
+      if (left && isSlotBulky(left)) continue; // row fully taken by bulky item
+      if (!left)  return { r, c: 0 };
+      if (!right) return { r, c: 1 };
+    }
+    return null;
+  }
+
+  function clearSlot(container, r, c) {
+    ignoreNextBlur = true;
+    const slotData = container.slots[r][c];
+
+    if (slotData && slotData.containerId) {
+      const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+      if (linked && containerHasItems(linked)) {
+        if (!confirm(`${slotData.name} has items inside. Remove it anyway?`)) {
+          ignoreNextBlur = false;
+          return;
+        }
+      }
+      state.containers = state.containers.filter(cnt => cnt.id !== slotData.containerId);
+    }
+
+    container.slots[r][c] = null;
+    closeDropdown();
+    render();
+    hideInspector();
+  }
+
+  // ── AUTOCOMPLETE ─────────────────────────────────────────────────────────
+  function updateDropdown(query) {
+    query = (query || '').trim().toLowerCase();
+    if (!query) { closeDropdown(); return; }
+
+    const matches = ITEM_LIBRARY.filter(i => i.name.toLowerCase().includes(query)).slice(0, 10);
+    if (!matches.length) { closeDropdown(); return; }
+
+    dropdownEl.innerHTML = '';
+    matches.forEach(item => {
+      const opt = document.createElement('div');
+      opt.className = 'ac-opt';
+      const bid = item.bulk.id;
+      const tag = bid !== 'stock'
+        ? `<span class="ac-tag ${bid}">${bid}</span>` : '';
+      opt.innerHTML = `<span class="ac-name">${item.name}</span>${tag}`;
+
+      const pick = () => {
+        ignoreNextBlur = true;
+        if (acContainer !== null) commitSlot(item.name, acContainer, acRow, acCol);
+        closeDropdown();
+      };
+      opt.addEventListener('mousedown', e => { e.preventDefault(); pick(); });
+      opt.addEventListener('touchstart', e => { e.preventDefault(); pick(); }, { passive: false });
+      dropdownEl.appendChild(opt);
+    });
+
+    positionDropdown();
+    dropdownEl.hidden = false;
+  }
+
+  function positionDropdown() {
+    if (!acInput) return;
+    const rect = acInput.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    dropdownEl.style.left  = `${rect.left}px`;
+    dropdownEl.style.width = `${rect.width}px`;
+    if (spaceBelow >= 160 || spaceBelow >= window.innerHeight - rect.top) {
+      dropdownEl.style.top    = `${rect.bottom + 2}px`;
+      dropdownEl.style.bottom = 'auto';
+    } else {
+      dropdownEl.style.top    = 'auto';
+      dropdownEl.style.bottom = `${window.innerHeight - rect.top + 2}px`;
+    }
+  }
+
+  function closeDropdown() {
+    dropdownEl.hidden = true;
+    dropdownEl.innerHTML = '';
+  }
+
+  // ── INSPECTOR ────────────────────────────────────────────────────────────
+  function showInspector(slotData, container, r, c) {
+    const lib = getLibraryItem(slotData.name);
+    document.getElementById('insp-name').textContent = slotData.name;
+
+    const descP    = document.getElementById('insp-desc');
+    const descEdit = document.getElementById('insp-desc-edit');
+    if (slotData.custom) {
+      descP.hidden = true;
+      descEdit.hidden = false;
+      descEdit.value = slotData.description || '';
+      descEdit.oninput = () => { slotData.description = descEdit.value; };
+    } else {
+      descP.hidden = false;
+      descEdit.hidden = true;
+      descP.innerHTML = lib ? lib.description : '';
+    }
+
+    document.getElementById('insp-remove').onclick = () => clearSlot(container, r, c);
+
+    // Size selector — custom items only
+    const sizeEl = document.getElementById('insp-size');
+    if (slotData.custom) {
+      sizeEl.hidden = false;
+      const currentId = slotData.bulk ? slotData.bulk.id : 'stock';
+      sizeEl.querySelectorAll('.size-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.bulk === currentId);
+        btn.onclick = () => {
+          const newBulk = Bulk[btn.dataset.bulk.toUpperCase()] || Bulk.STOCK;
+          const row = container.slots[r];
+          // If was spanning, clear the span slot before re-placing
+          if (isSlotBulky(slotData) && !slotData.conflict && c === 0 && row[1] === null) {
+            row[1] = null; // already null, stays empty
+          }
+          row[c] = null;
+          slotData.bulk = newBulk;
+          placeSlotData(slotData, container, r, c);
+          showInspector(slotData, container, r, c);
+        };
+      });
+    } else {
+      sizeEl.hidden = true;
+    }
+
+    // Container toggle — custom items only
+    const containerSectionEl = document.getElementById('insp-container-section');
+    if (slotData.custom) {
+      containerSectionEl.hidden = false;
+      const toggleBtn  = document.getElementById('insp-container-btn');
+      const rowsRowEl  = document.getElementById('insp-container-rows-row');
+      const rowsInput  = document.getElementById('insp-container-rows');
+
+      toggleBtn.classList.toggle('active', !!slotData.isContainer);
+      toggleBtn.textContent = slotData.isContainer ? 'On' : 'Off';
+      rowsRowEl.hidden = !slotData.isContainer;
+      rowsInput.value  = slotData.containerRows || 2;
+
+      toggleBtn.onclick = () => {
+        if (slotData.isContainer) {
+          // Turn container off
+          if (slotData.containerId) {
+            const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+            if (linked && containerHasItems(linked)) {
+              if (!confirm(`This will remove the ${slotData.name} container and its contents. Continue?`)) return;
+            }
+            if (linked) state.containers = state.containers.filter(cnt => cnt !== linked);
+            slotData.containerId = null;
+          }
+          slotData.isContainer = false;
+        } else {
+          // Turn container on
+          slotData.isContainer = true;
+          slotData.containerRows = slotData.containerRows || 2;
+          if (!slotData.containerId) createLinkedContainer(slotData, container.id, r, c);
+        }
+        render();
+        showInspector(slotData, container, r, c);
+      };
+
+      rowsInput.onchange = () => {
+        slotData.containerRows = Math.max(1, Math.min(20, parseInt(rowsInput.value) || 2));
+        if (slotData.containerId) {
+          const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+          if (linked) {
+            const target = slotData.containerRows;
+            while (linked.slots.length < target) linked.slots.push([null, null]);
+            while (linked.slots.length > target) {
+              const last = linked.slots[linked.slots.length - 1];
+              if (last[0] === null && last[1] === null) linked.slots.pop();
+              else break;
+            }
+            linked.rows = linked.slots.length;
+            render();
+          }
+        }
+      };
+    } else {
+      containerSectionEl.hidden = true;
+    }
+
+    const varsEl = document.getElementById('insp-vars');
+    varsEl.innerHTML = '';
+
+    for (const [key, meta] of Object.entries(slotData.variables || {})) {
+      const div = document.createElement('div');
+      div.className = 'insp-var';
+      const canStep = meta.control === 'plusminus' || meta.control === 'both';
+      const canType = meta.control === 'set'       || meta.control === 'both';
+      div.innerHTML = `
+        <div class="insp-ctrl">
+          ${canStep ? `<button class="insp-btn" data-k="${key}" data-d="-1">−</button>` : ''}
+          ${canType
+            ? `<input class="insp-num" type="number" value="${meta.value}" data-k="${key}"
+                ${typeof meta.min === 'number' ? `min="${meta.min}"` : ''}
+                ${typeof meta.max === 'number' ? `max="${meta.max}"` : ''} />`
+            : `<span class="insp-val" data-k="${key}">${meta.value}</span>`}
+          ${canStep ? `<button class="insp-btn" data-k="${key}" data-d="1">+</button>` : ''}
+        </div>
+      `;
+      varsEl.appendChild(div);
+    }
+
+    varsEl.querySelectorAll('.insp-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const m = slotData.variables[btn.dataset.k];
+        let v = m.value + parseInt(btn.dataset.d);
+        if (typeof m.min === 'number') v = Math.max(m.min, v);
+        if (typeof m.max === 'number') v = Math.min(m.max, v);
+        m.value = v;
+        render();
+        showInspector(slotData, container, r, c);
+      });
+    });
+
+    varsEl.querySelectorAll('.insp-num').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const m = slotData.variables[inp.dataset.k];
+        let v = parseInt(inp.value);
+        if (isNaN(v)) return;
+        if (typeof m.min === 'number') v = Math.max(m.min, v);
+        if (typeof m.max === 'number') v = Math.min(m.max, v);
+        m.value = v;
+        inp.value = v;
+        render();
+        showInspector(slotData, container, r, c);
+      });
+    });
+
+    inspectorEl.hidden = false;
+  }
+
+  function hideInspector() { inspectorEl.hidden = true; }
+
+  document.getElementById('insp-close').addEventListener('click', hideInspector);
+
+  document.addEventListener('pointerdown', e => {
+    if (!inspectorEl.hidden &&
+        !inspectorEl.contains(e.target) &&
+        !e.target.classList.contains('slot-input')) {
+      hideInspector();
+    }
+  });
+
+  // ── CHARACTER FIELDS ──────────────────────────────────────────────────────
+  document.getElementById('char-name').addEventListener('input', e => { state.charName = e.target.value; });
+  document.getElementById('char-carry').addEventListener('input', e => {
+    state.carryCapacity = e.target.value;
+    updateCarryDisplay();
+  });
+
+  // ── DRAG & DROP ───────────────────────────────────────────────────────────
+  function startDrag(slotData, container, r, c, x, y) {
+    // Remove item from source slot
+    container.slots[r][c] = null;
+
+    dragState = { slotData, srcContainer: container, srcR: r, srcC: c };
+
+    ghostEl = document.createElement('div');
+    ghostEl.className = 'drag-ghost';
+    ghostEl.textContent = slotData.name;
+    document.body.appendChild(ghostEl);
+    document.body.classList.add('is-dragging');
+
+    moveGhost(x, y);
+    closeDropdown();
+    if (document.activeElement) document.activeElement.blur();
+    render();
+  }
+
+  function moveGhost(x, y) {
+    if (!ghostEl) return;
+    ghostEl.style.left = `${x}px`;
+    ghostEl.style.top  = `${y}px`;
+  }
+
+  function endDrag(x, y) {
+    if (!dragState) return;
+
+    ghostEl.style.visibility = 'hidden';
+    const el = document.elementFromPoint(x, y);
+    ghostEl.remove();
+    ghostEl = null;
+    document.body.classList.remove('is-dragging');
+
+    const wrap = el && el.closest('[data-container-id]');
+    const targetContainer = wrap && state.containers.find(c => c.id === wrap.dataset.containerId);
+
+    if (targetContainer) {
+      const tR = parseInt(wrap.dataset.r);
+      const tC = parseInt(wrap.dataset.c);
+      const targetItem = targetContainer.slots[tR][tC];
+
+      // Swap: if target slot has an item, send it back to the source slot
+      if (targetItem) {
+        targetContainer.slots[tR][tC] = null;
+        dragState.srcContainer.slots[dragState.srcR][dragState.srcC] = targetItem;
+      }
+
+      placeSlotData(dragState.slotData, targetContainer, tR, tC);
+    } else {
+      // Dropped outside a valid slot — return to source
+      placeSlotData(dragState.slotData, dragState.srcContainer, dragState.srcR, dragState.srcC);
+    }
+
+    dragState = null;
+  }
+
+  function placeSlotData(slotData, container, r, c) {
+    slotData.conflict = false;
+    const row = container.slots[r];
+    let finalC = c;
+
+    if (isSlotBulky(slotData)) {
+      const otherCol = 1 - c;
+      const displaced = row[otherCol];
+
+      if (!displaced) {
+        row[0] = slotData; row[1] = null; finalC = 0;
+      } else {
+        const target = findEmptySlot(container, r);
+        if (target) {
+          container.slots[target.r][target.c] = displaced;
+          row[0] = slotData; row[1] = null; finalC = 0;
+        } else {
+          slotData.conflict = true;
+          row[c] = slotData;
+        }
+      }
+    } else {
+      row[c] = slotData;
+    }
+
+    // Keep linked container's back-reference in sync
+    if (slotData.containerId) {
+      const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+      if (linked) linked.linkedTo = { containerId: container.id, r, c: finalC };
+    } else if (isContainerItem(slotData)) {
+      createLinkedContainer(slotData, container.id, r, finalC);
+    }
+
+    render();
+  }
+
+  document.addEventListener('pointermove', e => {
+    if (dragState) moveGhost(e.clientX, e.clientY);
+  });
+
+  document.addEventListener('pointerup', e => {
+    if (dragState) endDrag(e.clientX, e.clientY);
+  });
+
+  // ── INIT ──────────────────────────────────────────────────────────────────
+  render();
 
   return {};
 };

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Firebase RTDB Set Example</title>
+  <style>
+    body { font-family: sans-serif; }
+    #currentSet {
+      margin-top: 20px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      white-space: pre-wrap; /* Preserve formatting */
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Manage Selected Hexes</h1>
+
+  <div>
+    <input type="text" id="hexInput" placeholder="Enter hex ID (e.g., A1)">
+    <button id="addButton">Add Hex</button>
+    <button id="removeButton">Remove Hex</button>
+  </div>
+
+  <h2>Current Selected Hexes:</h2>
+  <div id="currentSet">Loading...</div>
+
+  <!-- Firebase SDKs - Using the compat versions -->
+  <!-- The core Firebase JS SDK is always required and must be listed first -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+
+  <!-- Add Firebase products you want to use -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <script>
+    // Your web app's Firebase configuration
+    // Replace placeholder values with your actual project details
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY", // Find this in Project Settings -> General
+      authDomain: "hexcrawl-650cd.firebaseapp.com",
+      projectId: "hexcrawl-650cd",
+      storageBucket: "hexcrawl-650cd.appspot.com",
+      messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // Find this in Project Settings -> Cloud Messaging
+      appId: "YOUR_APP_ID", // Find this in Project Settings -> General (Web App)
+      databaseURL: "https://hexcrawl-650cd-default-rtdb.firebaseio.com" // This is your database URL!
+    };
+
+    // Initialize Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+
+    // Get a reference to the database service
+    const database = app.database(); // Use app.database() with compat library
+
+    // Get a reference to the specific location for our "selectedHexes" set
+    const selectedHexesRef = database.ref('selectedHexes'); // We'll store the set directly at the root under 'selectedHexes'
+
+    // --- Functions to Add and Remove Hexes ---
+
+    // Function to add a hex string to the set
+    function addHex(hexId) {
+      if (!hexId) {
+        console.warn("Cannot add empty hex ID.");
+        return;
+      }
+      // Use update to add the specific key (hexId) with a value of true
+      const updates = {};
+      updates[hexId] = true;
+
+      selectedHexesRef.update(updates)
+        .then(() => {
+          console.log(`Successfully added hex: ${hexId}`);
+          document.getElementById('hexInput').value = ''; // Clear input field
+        })
+        .catch((error) => {
+          console.error("Error adding hex: ", error);
+        });
+    }
+
+    // Function to remove a hex string from the set
+    function removeHex(hexId) {
+      if (!hexId) {
+        console.warn("Cannot remove empty hex ID.");
+        return;
+      }
+      // Use update to remove the specific key (hexId) by setting its value to null
+      const updates = {};
+      updates[hexId] = null; // Setting a value to null in an update removes the key
+
+      selectedHexesRef.update(updates)
+        .then(() => {
+          console.log(`Successfully removed hex: ${hexId}`);
+          document.getElementById('hexInput').value = ''; // Clear input field
+        })
+        .catch((error) => {
+          console.error("Error removing hex: ", error);
+        });
+    }
+
+    // --- Listen for Changes and Update Display Automatically ---
+
+    // Use the 'on' method to listen for 'value' changes at the selectedHexesRef
+    // This function will be called initially and every time the data at this location changes
+    selectedHexesRef.on('value', (snapshot) => {
+      const hexesData = snapshot.val(); // Get the data snapshot as a JSON object
+
+      const displayElement = document.getElementById('currentSet');
+
+      if (hexesData) {
+        // Convert the object (where keys are hex IDs) back into a readable list or string
+        const hexIds = Object.keys(hexesData);
+        if (hexIds.length > 0) {
+          displayElement.innerText = hexIds.join(', '); // Display as a comma-separated list
+        } else {
+          displayElement.innerText = "Set is empty.";
+        }
+      } else {
+        // Data is null if the 'selectedHexes' path doesn't exist or is empty
+        displayElement.innerText = "Set is empty.";
+      }
+      console.log("Current selected hexes data received:", hexesData);
+    }, (error) => {
+      console.error("Error fetching selected hexes:", error);
+      document.getElementById('currentSet').innerText = "Error loading data.";
+    });
+
+
+    // --- Add Event Listeners for Buttons ---
+
+    document.getElementById('addButton').addEventListener('click', () => {
+      const hexId = document.getElementById('hexInput').value.trim(); // Get and trim input value
+      addHex(hexId);
+    });
+
+     document.getElementById('removeButton').addEventListener('click', () => {
+      const hexId = document.getElementById('hexInput').value.trim(); // Get and trim input value
+      removeHex(hexId);
+    });
+
+     // Optional: Allow adding/removing on Enter key press in the input field
+     document.getElementById('hexInput').addEventListener('keypress', (event) => {
+        if (event.key === 'Enter') {
+            const hexId = document.getElementById('hexInput').value.trim();
+            if (hexId) {
+               // Decide whether Enter adds or removes - let's make it add for simplicity
+               addHex(hexId);
+            }
+            event.preventDefault(); // Prevent default form submission if this were in a form
+        }
+     });
+
+
+  </script>
+
+</body>
+</html>

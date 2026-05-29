@@ -2,17 +2,67 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Inventory System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inventory</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id ="inspector"></div>
-  <div id="inventory" class="inventory"></div>
-  <div id="item-search">
-    <input type="text" placeholder="Search items..." id="search-input">
-    <div id="search-results"></div>
+
+  <header id="char-header">
+    <div class="char-field grow">
+      <label>Name</label>
+      <input type="text" id="char-name" placeholder="Character name" autocomplete="off" />
+    </div>
+    <div class="char-field">
+      <label>Carry</label>
+      <div class="carry-row">
+        <span id="carry-used">0</span>
+        <span class="carry-slash">/</span>
+        <input type="text" id="char-carry" placeholder="—" autocomplete="off" />
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="containers"></div>
+  </main>
+
+  <div id="autocomplete-dropdown" hidden></div>
+
+  <div id="inspector" hidden>
+    <div id="insp-header">
+      <h2 id="insp-name"></h2>
+      <button id="insp-close">✕</button>
+    </div>
+    <p id="insp-desc"></p>
+    <textarea id="insp-desc-edit" hidden placeholder="Description..."></textarea>
+    <div id="insp-size" hidden>
+      <div class="insp-size-row">
+        <button class="size-btn" data-bulk="stock">Stock</button>
+        <button class="size-btn" data-bulk="packable">Packable</button>
+        <button class="size-btn" data-bulk="bulky">Bulky</button>
+      </div>
+    </div>
+    <div id="insp-container-section" hidden>
+      <div class="insp-toggle-row">
+        <span class="insp-toggle-label">Container</span>
+        <button id="insp-container-btn" class="toggle-btn">Off</button>
+      </div>
+      <div id="insp-container-rows-row" hidden class="insp-toggle-row">
+        <span class="insp-toggle-label">Rows</span>
+        <input type="number" id="insp-container-rows" value="2" min="1" max="20" class="insp-num" style="width:60px" />
+      </div>
+    </div>
+    <div id="insp-vars"></div>
+    <button id="insp-remove">Remove item</button>
   </div>
-  <div id="delete-bin">Drop here to delete</div>
+
   <script src="script.js"></script>
+  <script>
+    window.InventorySystem({
+      database: null,
+      auth: { onAuthStateChanged: (cb) => cb(null) }
+    });
+  </script>
 </body>
 </html>
