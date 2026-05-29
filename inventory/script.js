@@ -144,14 +144,14 @@ window.InventorySystem = ({ database, auth }) => {
   }
 
   function isNoCarry(slotData) {
-    if (!slotData) return false;
+    if (!slotData || slotData.packableGroup) return false;
     if (slotData.isContainer) return true;
     const lib = getLibraryItem(slotData.name);
     return !!(lib && lib.noCarry);
   }
 
   function isContainerItem(slotData) {
-    if (!slotData) return false;
+    if (!slotData || slotData.packableGroup) return false;
     if (slotData.isContainer) return true;
     const lib = getLibraryItem(slotData.name);
     return !!(lib && lib.containerRows);
@@ -207,10 +207,17 @@ window.InventorySystem = ({ database, auth }) => {
   }
 
   function isSlotBulky(slotData) {
-    if (!slotData) return false;
+    if (!slotData || slotData.packableGroup) return false;
     const id = slotData.bulk ? slotData.bulk.id
               : (getLibraryItem(slotData.name) || {bulk: Bulk.STOCK}).bulk.id;
     return id === 'bulky' || id === 'verybulky';
+  }
+
+  function isPackable(slotData) {
+    if (!slotData || slotData.packableGroup) return false;
+    const lib = getLibraryItem(slotData.name);
+    const id = slotData.bulk ? slotData.bulk.id : lib ? lib.bulk.id : 'stock';
+    return id === 'packable';
   }
 
   // ── DOM REFS ────────────────────────────────────────────────────────────
@@ -221,6 +228,7 @@ window.InventorySystem = ({ database, auth }) => {
   // Active autocomplete context
   let acContainer = null, acRow = -1, acCol = -1, acInput = null;
   let ignoreNextBlur = false;
+  let acPackableOnly = false;
 
   // Drag state
   let dragState      = null;
@@ -238,8 +246,25 @@ window.InventorySystem = ({ database, auth }) => {
     }
   }
 
+  function shrinkEquipped() {
+    const equipped = state.containers.find(c => c.id === 'equipped');
+    if (!equipped) return;
+    // Remove trailing empty rows while more than one empty row exists at the end
+    while (equipped.slots.length > 1) {
+      const last = equipped.slots[equipped.slots.length - 1];
+      const prev = equipped.slots[equipped.slots.length - 2];
+      if (last[0] === null && last[1] === null && prev[0] === null && prev[1] === null) {
+        equipped.slots.pop();
+        equipped.rows--;
+      } else {
+        break;
+      }
+    }
+  }
+
   function render() {
     growEquipped();
+    shrinkEquipped();
     containersEl.innerHTML = '';
     state.containers.forEach(c => containersEl.appendChild(buildCard(c)));
     updateCarryDisplay();
@@ -248,7 +273,8 @@ window.InventorySystem = ({ database, auth }) => {
   function buildCard(container) {
     const card = document.createElement('div');
     const specialClass = container.id === 'equipped' ? ' card-equipped'
-                       : container.id === 'strapped'  ? ' card-strapped' : '';
+                       : container.id === 'strapped'  ? ' card-strapped'
+                       : !container.permanent         ? ' card-added' : '';
     card.className = 'inv-card' + specialClass;
 
     const hdr = document.createElement('div');
@@ -312,6 +338,10 @@ window.InventorySystem = ({ database, auth }) => {
     wrap.dataset.r = r;
     wrap.dataset.c = c;
 
+    if (slotData && slotData.packableGroup) {
+      return buildPackableGroupSlot(wrap, container, r, c, slotData);
+    }
+
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'slot-input' + (slotData ? ' slot-filled' : '') + (conflict ? ' slot-conflict' : '');
@@ -368,7 +398,7 @@ window.InventorySystem = ({ database, auth }) => {
       const warn = document.createElement('span');
       warn.className = 'slot-warn';
       warn.textContent = '⚠';
-      warn.title = 'Item is too bulky — clear an adjacent slot to resolve';
+      warn.title = slotData.conflictMsg || 'Item is too bulky — clear an adjacent slot to resolve';
       wrap.appendChild(warn);
     }
 
@@ -384,14 +414,17 @@ window.InventorySystem = ({ database, auth }) => {
     }
 
     if (slotData) {
-      let downX, downY;
+      let downX, downY, downPointerId;
 
       wrap.addEventListener('pointerdown', e => {
         if (dragState || e.target.tagName === 'BUTTON') return;
-        downX = e.clientX; downY = e.clientY;
+        downX = e.clientX; downY = e.clientY; downPointerId = e.pointerId;
         longPressTimer = setTimeout(() => {
           longPressTimer = null;
-          startDrag(slotData, container, r, c, downX, downY);
+          document.documentElement.setPointerCapture(downPointerId);
+          const sr = wrap.getBoundingClientRect();
+          startDrag(slotData, container, r, c, downX, downY,
+            { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 });
         }, 380);
       });
 
@@ -413,6 +446,114 @@ window.InventorySystem = ({ database, auth }) => {
     return wrap;
   }
 
+  function buildPackableGroupSlot(wrap, container, r, c, group) {
+    wrap.classList.add('slot-packable');
+
+    for (let i = 0; i < 4; i++) {
+      const item = group.items[i];
+      const cell = document.createElement('div');
+      cell.className = 'pack-cell';
+
+      if (item) {
+        cell.classList.add('pack-cell-filled');
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'pack-cell-name' + (item.conflict ? ' pack-cell-conflict' : '');
+        const vars = Object.values(item.variables || {});
+        const count = vars.length === 1 && typeof vars[0].value === 'number' ? vars[0].value : null;
+        nameSpan.textContent = count !== null ? `${count}× ${item.name}` : item.name;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'pack-cell-remove';
+        removeBtn.textContent = '−';
+        removeBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          group.items.splice(i, 1);
+          if (group.items.length === 0) container.slots[r][c] = null;
+          render();
+          hideInspector();
+        });
+
+        cell.appendChild(nameSpan);
+        cell.appendChild(removeBtn);
+
+        cell.addEventListener('click', e => {
+          if (e.target === removeBtn) return;
+          showInspector(item, container, r, c, i);
+        });
+
+        let downX, downY, downPointerId;
+        cell.addEventListener('pointerdown', e => {
+          if (dragState || e.target.tagName === 'BUTTON') return;
+          downX = e.clientX; downY = e.clientY; downPointerId = e.pointerId;
+          longPressTimer = setTimeout(() => {
+            longPressTimer = null;
+            document.documentElement.setPointerCapture(downPointerId);
+            const sr = cell.getBoundingClientRect();
+            group.items.splice(i, 1);
+            if (group.items.length === 0) container.slots[r][c] = null;
+            startDrag(item, container, r, c, downX, downY,
+              { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 });
+          }, 380);
+        });
+
+        cell.addEventListener('pointermove', e => {
+          if (!longPressTimer) return;
+          if ((e.clientX - downX) ** 2 + (e.clientY - downY) ** 2 > 64) {
+            clearTimeout(longPressTimer); longPressTimer = null;
+          }
+        });
+
+        const cancelLong = () => {
+          if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        };
+        cell.addEventListener('pointerup',     cancelLong);
+        cell.addEventListener('pointercancel', cancelLong);
+
+      } else {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'pack-cell-input';
+        input.placeholder = '—';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+
+        input.addEventListener('focus', () => {
+          acContainer = container; acRow = r; acCol = c; acInput = input;
+          acPackableOnly = true;
+          updateDropdown(input.value);
+        });
+
+        input.addEventListener('blur', () => {
+          if (ignoreNextBlur) { ignoreNextBlur = false; return; }
+          input.value = '';
+          closeDropdown();
+        });
+
+        input.addEventListener('input', () => updateDropdown(input.value));
+
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const val = input.value.trim();
+            if (val) commitSlot(val, container, r, c);
+            else closeDropdown();
+          } else if (e.key === 'Escape') {
+            input.value = '';
+            closeDropdown();
+            input.blur();
+          }
+        });
+
+        cell.appendChild(input);
+      }
+
+      wrap.appendChild(cell);
+    }
+
+    return wrap;
+  }
+
   // ── SLOT MANAGEMENT ──────────────────────────────────────────────────────
   function commitSlot(name, container, r, c) {
     ignoreNextBlur = true;
@@ -421,7 +562,7 @@ window.InventorySystem = ({ database, auth }) => {
     const row = container.slots[r];
     const existing = row[c];
 
-    const sameItem = existing && existing.name === canonName;
+    const sameItem = existing && !existing.packableGroup && existing.name === canonName;
     const variables = sameItem
       ? existing.variables
       : (libItem ? JSON.parse(JSON.stringify(libItem.variables || {}))
@@ -436,6 +577,58 @@ window.InventorySystem = ({ database, auth }) => {
         description: sameItem ? (existing.description || '') : '',
       }),
     };
+
+    // Packable items go into a packable group (up to 4 per slot)
+    if (isPackable(slotData)) {
+      let finalR = r, finalC = c, finalIdx = 0;
+
+      if (existing && existing.packableGroup) {
+        if (existing.items.length < 4) {
+          finalIdx = existing.items.length;
+          existing.items.push(slotData);
+        } else {
+          closeDropdown(); render(); return;
+        }
+      } else if (!existing) {
+        row[c] = { packableGroup: true, items: [slotData] };
+        finalIdx = 0;
+      } else {
+        // Target slot occupied; find a packable group with room, then an empty slot
+        let placed = false;
+        outer: for (let ri = 0; ri < container.slots.length; ri++) {
+          for (let ci = 0; ci < 2; ci++) {
+            const s = container.slots[ri][ci];
+            if (s && s.packableGroup && s.items.length < 4) {
+              finalR = ri; finalC = ci; finalIdx = s.items.length;
+              s.items.push(slotData); placed = true; break outer;
+            }
+          }
+        }
+        if (!placed) {
+          const empty = findEmptySlot(container, -1);
+          if (empty) {
+            finalR = empty.r; finalC = empty.c; finalIdx = 0;
+            container.slots[empty.r][empty.c] = { packableGroup: true, items: [slotData] };
+          }
+        }
+      }
+
+      closeDropdown();
+      render();
+      showInspector(slotData, container, finalR, finalC, finalIdx);
+      return;
+    }
+
+    // Non-packable typed into a packable group slot — add it in with a warning
+    if (existing && existing.packableGroup) {
+      slotData.conflict = true;
+      slotData.conflictMsg = 'This item is too large for a packable slot.';
+      existing.items.push(slotData);
+      closeDropdown();
+      render();
+      showInspector(slotData, container, r, c, existing.items.length - 1);
+      return;
+    }
 
     if (isSlotBulky(slotData)) {
       const otherCol = 1 - c;
@@ -452,6 +645,7 @@ window.InventorySystem = ({ database, auth }) => {
           row[1] = null;
         } else {
           slotData.conflict = true;
+          slotData.conflictMsg = 'This item is too bulky — clear an adjacent slot to resolve.';
           row[c] = slotData;
         }
       }
@@ -507,7 +701,9 @@ window.InventorySystem = ({ database, auth }) => {
     query = (query || '').trim().toLowerCase();
     if (!query) { closeDropdown(); return; }
 
-    const matches = ITEM_LIBRARY.filter(i => i.name.toLowerCase().includes(query)).slice(0, 10);
+    let matches = ITEM_LIBRARY.filter(i => i.name.toLowerCase().includes(query));
+    if (acPackableOnly) matches = matches.filter(i => i.bulk.id === 'packable');
+    matches = matches.slice(0, 10);
     if (!matches.length) { closeDropdown(); return; }
 
     dropdownEl.innerHTML = '';
@@ -549,14 +745,23 @@ window.InventorySystem = ({ database, auth }) => {
   }
 
   function closeDropdown() {
+    acPackableOnly = false;
     dropdownEl.hidden = true;
     dropdownEl.innerHTML = '';
   }
 
   // ── INSPECTOR ────────────────────────────────────────────────────────────
-  function showInspector(slotData, container, r, c) {
+  function showInspector(slotData, container, r, c, packIdx) {
     const lib = getLibraryItem(slotData.name);
     document.getElementById('insp-name').textContent = slotData.name;
+
+    const warnEl = document.getElementById('insp-warn');
+    if (slotData.conflict) {
+      warnEl.textContent = '⚠ ' + (slotData.conflictMsg || 'This item is in a conflicting slot.');
+      warnEl.hidden = false;
+    } else {
+      warnEl.hidden = true;
+    }
 
     const descP    = document.getElementById('insp-desc');
     const descEdit = document.getElementById('insp-desc-edit');
@@ -571,7 +776,18 @@ window.InventorySystem = ({ database, auth }) => {
       descP.innerHTML = lib ? lib.description : '';
     }
 
-    document.getElementById('insp-remove').onclick = () => clearSlot(container, r, c);
+    document.getElementById('insp-remove').onclick = () => {
+      if (typeof packIdx === 'number') {
+        const group = container.slots[r][c];
+        if (group && group.packableGroup) {
+          group.items.splice(packIdx, 1);
+          if (group.items.length === 0) container.slots[r][c] = null;
+          render(); hideInspector();
+        }
+      } else {
+        clearSlot(container, r, c);
+      }
+    };
 
     // Size selector — custom items only
     const sizeEl = document.getElementById('insp-size');
@@ -582,24 +798,35 @@ window.InventorySystem = ({ database, auth }) => {
         btn.classList.toggle('active', btn.dataset.bulk === currentId);
         btn.onclick = () => {
           const newBulk = Bulk[btn.dataset.bulk.toUpperCase()] || Bulk.STOCK;
-          const row = container.slots[r];
-          // If was spanning, clear the span slot before re-placing
-          if (isSlotBulky(slotData) && !slotData.conflict && c === 0 && row[1] === null) {
-            row[1] = null; // already null, stays empty
+          if (typeof packIdx === 'number') {
+            // Extract from packable group, re-place with new bulk
+            const group = container.slots[r][c];
+            if (group && group.packableGroup) {
+              group.items.splice(packIdx, 1);
+              if (group.items.length === 0) container.slots[r][c] = null;
+            }
+            slotData.bulk = newBulk;
+            placeSlotData(slotData, container, r, c);
+            hideInspector();
+          } else {
+            const row = container.slots[r];
+            if (isSlotBulky(slotData) && !slotData.conflict && c === 0 && row[1] === null) {
+              row[1] = null;
+            }
+            row[c] = null;
+            slotData.bulk = newBulk;
+            placeSlotData(slotData, container, r, c);
+            showInspector(slotData, container, r, c);
           }
-          row[c] = null;
-          slotData.bulk = newBulk;
-          placeSlotData(slotData, container, r, c);
-          showInspector(slotData, container, r, c);
         };
       });
     } else {
       sizeEl.hidden = true;
     }
 
-    // Container toggle — custom items only
+    // Container toggle — custom non-packable items only
     const containerSectionEl = document.getElementById('insp-container-section');
-    if (slotData.custom) {
+    if (slotData.custom && !isPackable(slotData)) {
       containerSectionEl.hidden = false;
       const toggleBtn  = document.getElementById('insp-container-btn');
       const rowsRowEl  = document.getElementById('insp-container-rows-row');
@@ -724,11 +951,11 @@ window.InventorySystem = ({ database, auth }) => {
   });
 
   // ── DRAG & DROP ───────────────────────────────────────────────────────────
-  function startDrag(slotData, container, r, c, x, y) {
-    // Remove item from source slot
-    container.slots[r][c] = null;
+  function startDrag(slotData, container, r, c, x, y, srcCenter) {
+    // Only null the slot if the item is sitting directly in it (not inside a packable group)
+    if (container.slots[r][c] === slotData) container.slots[r][c] = null;
 
-    dragState = { slotData, srcContainer: container, srcR: r, srcC: c };
+    dragState = { slotData, srcContainer: container, srcR: r, srcC: c, srcCenter: srcCenter || null };
 
     ghostEl = document.createElement('div');
     ghostEl.className = 'drag-ghost';
@@ -753,37 +980,145 @@ window.InventorySystem = ({ database, auth }) => {
 
     ghostEl.style.visibility = 'hidden';
     const el = document.elementFromPoint(x, y);
-    ghostEl.remove();
+    const ghost = ghostEl;
     ghostEl = null;
     document.body.classList.remove('is-dragging');
 
+    // Cursor ghost just fades — slot-to-slot clones handle the position animation
+    ghost.style.visibility = 'visible';
+    requestAnimationFrame(() => {
+      ghost.style.transition = 'opacity 0.12s';
+      ghost.style.opacity = '0';
+      setTimeout(() => ghost.remove(), 160);
+    });
+
     const wrap = el && el.closest('[data-container-id]');
     const targetContainer = wrap && state.containers.find(c => c.id === wrap.dataset.containerId);
+    const { slotData, srcContainer, srcR, srcC, srcCenter } = dragState;
+    dragState = null;
 
     if (targetContainer) {
       const tR = parseInt(wrap.dataset.r);
       const tC = parseInt(wrap.dataset.c);
       const targetItem = targetContainer.slots[tR][tC];
+      const draggingPackable = isPackable(slotData);
+      const targetIsGroup = targetItem && targetItem.packableGroup;
+      const srcSlot = srcContainer.slots[srcR][srcC];
+      const srcIsGroup = srcSlot && srcSlot.packableGroup;
 
-      // Swap: if target slot has an item, send it back to the source slot
-      if (targetItem) {
+      // Capture dest rect before render() rebuilds the DOM
+      const destRect = wrap.getBoundingClientRect();
+      const destCenter = { x: destRect.left + destRect.width / 2, y: destRect.top + destRect.height / 2 };
+
+      if (targetIsGroup && !draggingPackable) {
         targetContainer.slots[tR][tC] = null;
-        dragState.srcContainer.slots[dragState.srcR][dragState.srcC] = targetItem;
+        srcContainer.slots[srcR][srcC] = targetItem;
+      } else if (targetItem && !targetIsGroup && !draggingPackable) {
+        if (srcIsGroup) {
+          srcSlot.items.push(slotData);
+          render();
+          return;
+        }
+        // Swap — fly both items between their old and new slots
+        const swapName = targetItem.name;
+        targetContainer.slots[tR][tC] = null;
+        srcContainer.slots[srcR][srcC] = targetItem;
+        placeSlotData(slotData, targetContainer, tR, tC);
+        const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
+        if (srcCenter) spawnFlightClone(slotData.name, srcCenter, actualDest);
+        const actualSwapDest = postRenderCenter(srcContainer.id, srcR, srcC, targetItem);
+        if (actualSwapDest) spawnFlightClone(swapName, destCenter, actualSwapDest);
+        return;
       }
 
-      placeSlotData(dragState.slotData, targetContainer, tR, tC);
+      placeSlotData(slotData, targetContainer, tR, tC);
+      const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
+      if (srcCenter) spawnFlightClone(slotData.name, srcCenter, actualDest);
     } else {
-      // Dropped outside a valid slot — return to source
-      placeSlotData(dragState.slotData, dragState.srcContainer, dragState.srcR, dragState.srcC);
+      placeSlotData(slotData, srcContainer, srcR, srcC);
     }
+  }
 
-    dragState = null;
+  // After render, find where an item actually ended up — bulky items always render at c=0.
+  function postRenderCenter(containerId, r, c, item) {
+    const col = (isSlotBulky(item) && !item.conflict) ? 0 : c;
+    const el = document.querySelector(
+      `[data-container-id="${containerId}"][data-r="${r}"][data-c="${col}"]`
+    );
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }
+
+  function spawnFlightClone(name, from, to) {
+    const clone = document.createElement('div');
+    clone.className = 'drag-ghost';
+    clone.textContent = name;
+    clone.style.left      = `${from.x}px`;
+    clone.style.top       = `${from.y}px`;
+    clone.style.transform = 'translate(-50%, -50%)';
+    clone.style.opacity   = '1';
+    document.body.appendChild(clone);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      // Phase 1: fly to destination (0 – 350ms)
+      clone.style.transition = 'left 0.35s cubic-bezier(0.4,0,0.2,1), top 0.35s cubic-bezier(0.4,0,0.2,1)';
+      clone.style.left = `${to.x}px`;
+      clone.style.top  = `${to.y}px`;
+      // Phase 2: scale up on arrival (350 – 490ms)
+      setTimeout(() => {
+        clone.style.transition = 'transform 0.14s ease-out';
+        clone.style.transform  = 'translate(-50%, -50%) scale(1.18)';
+        // Phase 3: scale down and fade out (490 – 760ms)
+        setTimeout(() => {
+          clone.style.transition = 'transform 0.27s ease-in, opacity 0.27s ease-in';
+          clone.style.transform  = 'translate(-50%, -50%) scale(0.75)';
+          clone.style.opacity    = '0';
+          setTimeout(() => clone.remove(), 300);
+        }, 140);
+      }, 370);
+    }));
   }
 
   function placeSlotData(slotData, container, r, c) {
     slotData.conflict = false;
     const row = container.slots[r];
     let finalC = c;
+
+    if (isPackable(slotData)) {
+      const existing = row[c];
+      if (existing && existing.packableGroup && existing.items.length < 4) {
+        existing.items.push(slotData);
+      } else if (!existing) {
+        row[c] = { packableGroup: true, items: [slotData] };
+      } else {
+        let placed = false;
+        outer: for (let ri = 0; ri < container.slots.length; ri++) {
+          for (let ci = 0; ci < 2; ci++) {
+            const s = container.slots[ri][ci];
+            if (s && s.packableGroup && s.items.length < 4) {
+              s.items.push(slotData); placed = true; break outer;
+            }
+          }
+        }
+        if (!placed) {
+          const empty = findEmptySlot(container, -1);
+          if (empty) container.slots[empty.r][empty.c] = { packableGroup: true, items: [slotData] };
+        }
+      }
+      render();
+      return;
+    }
+
+    // Non-packable landing on a packable group — rejoin rather than overwrite
+    if (row[c] && row[c].packableGroup) {
+      if (!slotData.conflict) {
+        slotData.conflict = true;
+        slotData.conflictMsg = 'This item is too large for a packable slot.';
+      }
+      row[c].items.push(slotData);
+      render();
+      return;
+    }
 
     if (isSlotBulky(slotData)) {
       const otherCol = 1 - c;
@@ -798,6 +1133,7 @@ window.InventorySystem = ({ database, auth }) => {
           row[0] = slotData; row[1] = null; finalC = 0;
         } else {
           slotData.conflict = true;
+          slotData.conflictMsg = 'This item is too bulky — clear an adjacent slot to resolve.';
           row[c] = slotData;
         }
       }
@@ -822,6 +1158,14 @@ window.InventorySystem = ({ database, auth }) => {
 
   document.addEventListener('pointerup', e => {
     if (dragState) endDrag(e.clientX, e.clientY);
+  });
+
+  document.addEventListener('pointercancel', () => {
+    if (!dragState) return;
+    if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+    document.body.classList.remove('is-dragging');
+    placeSlotData(dragState.slotData, dragState.srcContainer, dragState.srcR, dragState.srcC);
+    dragState = null;
   });
 
   // ── INIT ──────────────────────────────────────────────────────────────────
