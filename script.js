@@ -635,19 +635,21 @@ document.getElementById("email-sign-in-btn").addEventListener("click", () => {
     const password = loginPassword.value;
     if (!email || !password) { showLoginError("Enter email and password."); return; }
     loginError.classList.add("hidden");
+    const btn = document.getElementById("email-sign-in-btn");
+    btn.textContent = "Signing in…";
+    btn.disabled = true;
     auth.signInWithEmailAndPassword(email, password)
-        .catch(err => showLoginError(err.message));
+        .catch(err => {
+            showLoginError(err.message);
+            btn.textContent = "Sign in";
+            btn.disabled = false;
+        });
 });
 
 loginPassword.addEventListener("keydown", e => {
     if (e.key === "Enter") document.getElementById("email-sign-in-btn").click();
 });
 
-document.getElementById("google-sign-in-btn").addEventListener("click", () => {
-    loginError.classList.add("hidden");
-    const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(err => showLoginError(err.message));
-});
 
 const signOutBtn = document.getElementById("sign-out-btn");
 

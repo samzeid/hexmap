@@ -420,7 +420,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
           document.documentElement.setPointerCapture(downPointerId);
           const sr = wrap.getBoundingClientRect();
           startDrag(slotData, container, r, c, downX, downY,
-            { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 });
+            { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 },
+            () => { container.slots[r][c] = null; });
         }, 380);
       });
 
@@ -486,10 +487,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
             longPressTimer = null;
             document.documentElement.setPointerCapture(downPointerId);
             const sr = cell.getBoundingClientRect();
-            group.items.splice(i, 1);
-            if (group.items.length === 0) container.slots[r][c] = null;
             startDrag(item, container, r, c, downX, downY,
-              { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 });
+              { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 },
+              () => {
+                const idx = group.items.indexOf(item);
+                if (idx !== -1) group.items.splice(idx, 1);
+                if (group.items.length === 0) container.slots[r][c] = null;
+              });
           }, 380);
         });
 
@@ -947,11 +951,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   });
 
   // ── DRAG & DROP ───────────────────────────────────────────────────────────
-  function startDrag(slotData, container, r, c, x, y, srcCenter) {
-    // Only null the slot if the item is sitting directly in it (not inside a packable group)
-    if (container.slots[r][c] === slotData) container.slots[r][c] = null;
-
-    dragState = { slotData, srcContainer: container, srcR: r, srcC: c, srcCenter: srcCenter || null };
+  // removeFromSource: called only when a drop is committed, to extract the item from its origin.
+  function startDrag(slotData, container, r, c, x, y, srcCenter, removeFromSource) {
+    dragState = { slotData, srcContainer: container, srcR: r, srcC: c, srcCenter: srcCenter || null, removeFromSource };
 
     ghostEl = document.createElement('div');
     ghostEl.className = 'drag-ghost';
@@ -962,7 +964,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     moveGhost(x, y);
     closeDropdown();
     if (document.activeElement) document.activeElement.blur();
-    render();
+    // Item stays in slot — no render needed; ghost is the only new visual.
   }
 
   function moveGhost(x, y) {
@@ -990,40 +992,55 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
     const wrap = el && el.closest('[data-container-id]');
     const targetContainer = wrap && state.containers.find(c => c.id === wrap.dataset.containerId);
-    const { slotData, srcContainer, srcR, srcC, srcCenter } = dragState;
+    const { slotData, srcContainer, srcR, srcC, srcCenter, removeFromSource } = dragState;
     dragState = null;
 
     // Cross-character tab drop
     const charTab = el && el.closest('[data-char-id]');
     if (charTab && charTab.dataset.charId) {
       document.querySelectorAll('[data-char-id]').forEach(t => t.classList.remove('tab-drag-over'));
-      if (onCrossCharDrop) onCrossCharDrop(slotData, charTab.dataset.charId);
-      else placeSlotData(slotData, srcContainer, srcR, srcC);
+      if (onCrossCharDrop) {
+        removeFromSource();
+        render();
+        onCrossCharDrop(slotData, charTab.dataset.charId);
+      }
+      // else: no handler — item stays in slot, nothing to do
       return;
     }
 
     if (targetContainer) {
       const tR = parseInt(wrap.dataset.r);
       const tC = parseInt(wrap.dataset.c);
+
+      // Same slot — no-op
+      if (targetContainer === srcContainer && tR === srcR && tC === srcC) {
+        render();
+        return;
+      }
+
       const targetItem = targetContainer.slots[tR][tC];
       const draggingPackable = isPackable(slotData);
       const targetIsGroup = targetItem && targetItem.packableGroup;
       const srcSlot = srcContainer.slots[srcR][srcC];
       const srcIsGroup = srcSlot && srcSlot.packableGroup;
 
+      // Packable from a group dropped on an occupied non-group slot — can't swap, leave in place
+      if (targetItem && !targetIsGroup && !draggingPackable && srcIsGroup) {
+        render();
+        return;
+      }
+
       // Capture dest rect before render() rebuilds the DOM
       const destRect = wrap.getBoundingClientRect();
       const destCenter = { x: destRect.left + destRect.width / 2, y: destRect.top + destRect.height / 2 };
+
+      // Commit: remove item from source now that we know the drop is valid
+      removeFromSource();
 
       if (targetIsGroup && !draggingPackable) {
         targetContainer.slots[tR][tC] = null;
         srcContainer.slots[srcR][srcC] = targetItem;
       } else if (targetItem && !targetIsGroup && !draggingPackable) {
-        if (srcIsGroup) {
-          srcSlot.items.push(slotData);
-          render();
-          return;
-        }
         // Swap — fly both items between their old and new slots
         const swapName = targetItem.name;
         targetContainer.slots[tR][tC] = null;
@@ -1040,7 +1057,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
       if (srcCenter) spawnFlightClone(slotData.name, srcCenter, actualDest);
     } else {
-      placeSlotData(slotData, srcContainer, srcR, srcC);
+      // Dropped outside any container — item stays in slot
+      render();
     }
   }
 
@@ -1169,8 +1187,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     if (!dragState) return;
     if (ghostEl) { ghostEl.remove(); ghostEl = null; }
     document.body.classList.remove('is-dragging');
-    placeSlotData(dragState.slotData, dragState.srcContainer, dragState.srcR, dragState.srcC);
     dragState = null;
+    render();
   });
 
   // ── INIT ──────────────────────────────────────────────────────────────────
@@ -1185,8 +1203,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       }));
     },
     checkIsPackable(item) { return isPackable(item); },
+    cancelDrag() {
+      if (!dragState) return;
+      if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+      document.body.classList.remove('is-dragging');
+      dragState = null;
+      render();
+    },
     loadState(newState) {
       if (dragState) {
+        // cancelDrag() should have been called before loadState; just clean up UI
         if (ghostEl) { ghostEl.remove(); ghostEl = null; }
         document.body.classList.remove('is-dragging');
         dragState = null;
@@ -1211,6 +1237,7 @@ window.CharacterManager = ({ auth, database }) => {
   let allChars     = {};   // id → { ownerUid, ownerName, state, createdAt, sortOrder }
   let saveTimer    = null;
   let suppressSave = false;
+  let dirty        = false;   // true while local edits haven't been flushed to Firebase yet
   let inv          = null;
 
   // ── INVENTORY SYSTEM ────────────────────────────────────────────────────
@@ -1235,21 +1262,20 @@ window.CharacterManager = ({ auth, database }) => {
     const password = document.getElementById('login-password').value;
     if (!email || !password) { showLoginError('Enter email and password.'); return; }
     document.getElementById('login-error').hidden = true;
+    const btn = document.getElementById('email-sign-in-btn');
+    btn.textContent = 'Signing in…';
+    btn.disabled = true;
     auth.signInWithEmailAndPassword(email, password)
-      .catch(err => showLoginError(err.message));
+      .catch(err => {
+        showLoginError(err.message);
+        btn.textContent = 'Sign in';
+        btn.disabled = false;
+      });
   });
 
   // Allow pressing Enter in password field to submit
   document.getElementById('login-password').addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('email-sign-in-btn').click();
-  });
-
-  // Google sign-in (requires Google provider enabled in Firebase Console)
-  document.getElementById('google-sign-in-btn').addEventListener('click', () => {
-    document.getElementById('login-error').hidden = true;
-    const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider)
-      .catch(err => showLoginError(err.message));
   });
 
   auth.onAuthStateChanged(user => {
@@ -1287,9 +1313,16 @@ window.CharacterManager = ({ auth, database }) => {
         };
       });
 
-      // Restore live edits for the current character
-      if (currentCharId && liveState && allChars[currentCharId]) {
-        allChars[currentCharId].state = liveState;
+      if (currentCharId && allChars[currentCharId]) {
+        if (dirty) {
+          // Unsaved local edits in flight — keep them, don't let the Firebase echo overwrite them
+          if (liveState) allChars[currentCharId].state = liveState;
+        } else {
+          // Nothing pending locally — apply whatever Firebase has (own echo or another user's edit)
+          suppressSave = true;
+          inv.loadState(allChars[currentCharId].state);
+          suppressSave = false;
+        }
       }
 
       renderTabs();
@@ -1327,8 +1360,10 @@ window.CharacterManager = ({ auth, database }) => {
 
   // ── CHARACTER SWITCHING ──────────────────────────────────────────────────
   function switchToChar(charId, skipSave) {
+    inv.cancelDrag();
     if (!skipSave && currentCharId) saveChar(currentCharId, true);
     clearTimeout(saveTimer);
+    dirty = false;
     currentCharId = charId;
     suppressSave = true;
     inv.loadState(allChars[charId].state);
@@ -1338,6 +1373,7 @@ window.CharacterManager = ({ auth, database }) => {
 
   function createChar() {
     if (!currentUser) return;
+    inv.cancelDrag();
     clearTimeout(saveTimer);
     if (currentCharId) saveChar(currentCharId, true);
 
@@ -1379,6 +1415,7 @@ window.CharacterManager = ({ auth, database }) => {
 
   function saveChar(charId, immediate) {
     if (!currentUser || !charId) return;
+    dirty = false;
     const state = inv.getState();
     if (allChars[charId]) allChars[charId].state = state;
     database.ref(`/inventory_characters/${charId}`).update({
@@ -1390,6 +1427,7 @@ window.CharacterManager = ({ auth, database }) => {
   // ── INVENTORY CALLBACKS ──────────────────────────────────────────────────
   function handleInventoryChange() {
     if (suppressSave || !currentCharId) return;
+    dirty = true;
     // Keep tab name in sync immediately
     const curTabName = document.querySelector(
       `[data-char-id="${currentCharId}"] .char-tab-name`
