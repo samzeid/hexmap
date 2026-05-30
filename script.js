@@ -972,11 +972,14 @@ const invOverlay = document.getElementById("inv-overlay");
 invBtn.addEventListener("click", () => {
     const open = invOverlay.classList.toggle("open");
     invBtn.classList.toggle("active", open);
+    controls.classList.toggle("inv-open", open);
 });
 
 document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && invOverlay.classList.contains("open")) {
         invOverlay.classList.remove("open");
         invBtn.classList.remove("active");
+        controls.classList.remove("inv-open");
     }
 });
+

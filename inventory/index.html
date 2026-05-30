@@ -28,6 +28,7 @@
         <div id="char-tabs"></div>
       </div>
       <button id="add-char-btn" title="New character">＋</button>
+      <button id="role-btn" title="Toggle DM / Player role"></button>
     </div>
 
     <!-- Scrollable inventory area -->
@@ -64,6 +65,7 @@
       <p id="insp-warn" hidden></p>
       <p id="insp-desc"></p>
       <textarea id="insp-desc-edit" hidden placeholder="Description..."></textarea>
+      <p id="insp-cost" hidden></p>
       <div id="insp-size" hidden>
         <div class="insp-size-row">
           <button class="size-btn" data-bulk="stock">Stock</button>
@@ -93,6 +95,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
   <script src="../firebase-setup.js"></script>
+  <script src="items.js"></script>
   <script src="script.js"></script>
   <script>
     const { auth, database } = window.FirebaseSetup();
