@@ -208,6 +208,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   }
 
   function buildSlot(container, r, c, slotData, full) {
+    // Hidden items are invisible to players — render as empty slot
+    if (slotData && slotData.hidden && !window._isDM) slotData = null;
     const conflict = slotData && slotData.conflict;
 
     const wrap = document.createElement('div');
@@ -222,7 +224,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
     const input = document.createElement('input');
     input.type = 'text';
-    input.className = 'slot-input' + (slotData ? ' slot-filled' : '') + (conflict ? ' slot-conflict' : '');
+    const isHidden = slotData && slotData.hidden;
+    input.className = 'slot-input' + (slotData ? ' slot-filled' : '') + (conflict ? ' slot-conflict' : '') + (isHidden ? ' slot-hidden' : '');
     input.value = slotData ? slotData.name : '';
     input.placeholder = '—';
     input.autocomplete = 'off';
@@ -267,8 +270,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
         + (conflict     ? ' slot-label-conflict'   : '')
         + (isContainer  ? ' slot-label-container'  : '');
       const vars = Object.values(slotData.variables || {});
-      const count = vars.length === 1 && typeof vars[0].value === 'number' ? vars[0].value : null;
-      label.textContent = count !== null ? `${count} × ${slotData.name}` : slotData.name;
+      const numVar = vars.length === 1 && typeof vars[0].value === 'number' ? vars[0] : null;
+      const selVar = vars.find(v => v.control === 'select' && v.value);
+      label.textContent = numVar  ? `${numVar.value} × ${slotData.name}`
+                        : selVar  ? `${slotData.name} — ${selVar.value}`
+                        : slotData.name;
       wrap.appendChild(label);
     }
 
@@ -333,14 +339,19 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       const cell = document.createElement('div');
       cell.className = 'pack-cell';
 
-      if (item) {
+      const visibleItem = item && (window._isDM || !item.hidden) ? item : null;
+      if (visibleItem) {
         cell.classList.add('pack-cell-filled');
+        if (item.hidden) cell.classList.add('pack-cell-hidden');
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'pack-cell-name' + (item.conflict ? ' pack-cell-conflict' : '');
         const vars = Object.values(item.variables || {});
-        const count = vars.length === 1 && typeof vars[0].value === 'number' ? vars[0].value : null;
-        nameSpan.textContent = count !== null ? `${count}× ${item.name}` : item.name;
+        const numVar = vars.length === 1 && typeof vars[0].value === 'number' ? vars[0] : null;
+        const selVar = vars.find(v => v.control === 'select' && v.value);
+        nameSpan.textContent = numVar ? `${numVar.value}× ${item.name}`
+                             : selVar ? `${item.name} — ${selVar.value}`
+                             : item.name;
 
         const removeBtn = document.createElement('button');
         removeBtn.className = 'pack-cell-remove';
@@ -771,25 +782,64 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       containerSectionEl.hidden = true;
     }
 
+    // Hidden toggle — DM only
+    const hiddenSectionEl = document.getElementById('insp-hidden-section');
+    const hiddenBtn       = document.getElementById('insp-hidden-btn');
+    if (window._isDM) {
+      hiddenSectionEl.hidden = false;
+      hiddenBtn.classList.toggle('active', !!slotData.hidden);
+      hiddenBtn.textContent = slotData.hidden ? 'On' : 'Off';
+      hiddenBtn.onclick = () => {
+        slotData.hidden = !slotData.hidden;
+        hiddenBtn.classList.toggle('active', slotData.hidden);
+        hiddenBtn.textContent = slotData.hidden ? 'On' : 'Off';
+        render();
+      };
+    } else {
+      hiddenSectionEl.hidden = true;
+    }
+
     const varsEl = document.getElementById('insp-vars');
     varsEl.innerHTML = '';
 
     for (const [key, meta] of Object.entries(slotData.variables || {})) {
       const div = document.createElement('div');
       div.className = 'insp-var';
-      const canStep = meta.control === 'plusminus' || meta.control === 'both';
-      const canType = meta.control === 'set'       || meta.control === 'both';
-      div.innerHTML = `
-        <div class="insp-ctrl">
-          ${canStep ? `<button class="insp-btn" data-k="${key}" data-d="-1">−</button>` : ''}
-          ${canType
-            ? `<input class="insp-num" type="number" value="${meta.value}" data-k="${key}"
-                ${typeof meta.min === 'number' ? `min="${meta.min}"` : ''}
-                ${typeof meta.max === 'number' ? `max="${meta.max}"` : ''} />`
-            : `<span class="insp-val" data-k="${key}">${meta.value}</span>`}
-          ${canStep ? `<button class="insp-btn" data-k="${key}" data-d="1">+</button>` : ''}
-        </div>
-      `;
+
+      if (meta.control === 'select') {
+        const label = document.createElement('span');
+        label.className = 'insp-var-label';
+        label.textContent = key;
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        sel.dataset.k = key;
+        (meta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt;
+          o.textContent = opt;
+          if (opt === meta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        sel.addEventListener('change', () => {
+          slotData.variables[key].value = sel.value;
+          render();
+        });
+        div.appendChild(label);
+        div.appendChild(sel);
+      } else {
+        const canStep = meta.control === 'plusminus' || meta.control === 'both';
+        div.innerHTML = `
+          <span class="insp-var-label">${key}</span>
+          <div class="insp-ctrl">
+            ${canStep ? `<button class="insp-btn" data-k="${key}" data-d="-1">−</button>` : ''}
+            <input class="insp-num" type="number" value="${meta.value}" data-k="${key}"
+              ${typeof meta.min === 'number' ? `min="${meta.min}"` : ''}
+              ${typeof meta.max === 'number' ? `max="${meta.max}"` : ''} />
+            ${canStep ? `<button class="insp-btn" data-k="${key}" data-d="1">+</button>` : ''}
+          </div>
+        `;
+      }
+
       varsEl.appendChild(div);
     }
 
@@ -800,22 +850,25 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
         if (typeof m.min === 'number') v = Math.max(m.min, v);
         if (typeof m.max === 'number') v = Math.min(m.max, v);
         m.value = v;
+        const inp = btn.closest('.insp-ctrl').querySelector('.insp-num');
+        if (inp) inp.value = v;
         render();
-        showInspector(slotData, container, r, c);
       });
     });
 
     varsEl.querySelectorAll('.insp-num').forEach(inp => {
-      inp.addEventListener('change', () => {
+      inp.addEventListener('input', () => {
         const m = slotData.variables[inp.dataset.k];
         let v = parseInt(inp.value);
         if (isNaN(v)) return;
         if (typeof m.min === 'number') v = Math.max(m.min, v);
         if (typeof m.max === 'number') v = Math.min(m.max, v);
         m.value = v;
-        inp.value = v;
         render();
-        showInspector(slotData, container, r, c);
+      });
+      inp.addEventListener('blur', () => {
+        const m = slotData.variables[inp.dataset.k];
+        inp.value = m.value;
       });
     });
 
@@ -1126,9 +1179,10 @@ window.CharacterManager = ({ auth, database }) => {
   let currentUser  = null;
   let currentCharId = null;
   let allChars     = {};   // id → { ownerUid, ownerName, state, createdAt, sortOrder }
-  let suppressSave = false;
-  let dirty        = false;   // true while local edits haven't been flushed to Firebase yet
-  let inv          = null;
+  let suppressSave       = false;
+  let dirty              = false;   // true while local edits haven't been flushed to Firebase yet
+  let localWriteInFlight = false;   // true briefly after a save to suppress our own Firebase echo
+  let inv                = null;
 
   // ── INVENTORY SYSTEM ────────────────────────────────────────────────────
   inv = window.InventorySystem({
@@ -1226,11 +1280,11 @@ window.CharacterManager = ({ auth, database }) => {
       });
 
       if (currentCharId && allChars[currentCharId]) {
-        if (dirty) {
-          // Unsaved local edits in flight — keep them, don't let the Firebase echo overwrite them
+        if (dirty || localWriteInFlight) {
+          // Local edits in flight — keep them, don't let the Firebase echo overwrite them
           if (liveState) allChars[currentCharId].state = liveState;
         } else {
-          // Nothing pending locally — apply whatever Firebase has (own echo or another user's edit)
+          // Nothing pending locally — apply whatever Firebase has (another user's edit)
           suppressSave = true;
           inv.loadState(allChars[currentCharId].state);
           suppressSave = false;
@@ -1326,11 +1380,14 @@ window.CharacterManager = ({ auth, database }) => {
   function saveChar(charId, immediate) {
     if (!currentUser || !charId) return;
     dirty = false;
+    localWriteInFlight = true;
     const state = inv.getState();
     if (allChars[charId]) allChars[charId].state = state;
     database.ref(`/inventory_characters/${charId}`).update({
       state:     JSON.stringify(state),
       ownerName: currentUser.displayName || currentUser.email || 'Player',
+    }).then(() => {
+      setTimeout(() => { localWriteInFlight = false; }, 200);
     });
   }
 

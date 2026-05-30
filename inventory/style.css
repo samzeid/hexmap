@@ -514,6 +514,11 @@ main {
 
 .slot-input:focus ~ .slot-label { display: none; }
 
+/* Hidden items — DM sees them dimmed */
+.slot-input.slot-hidden,
+.slot-input.slot-hidden ~ .slot-label { opacity: 0.35; }
+.pack-cell-hidden { opacity: 0.35; }
+
 .slot-conflict {
   border-left-color: rgba(255,80,80,0.7) !important;
   padding-right: 58px;
@@ -839,10 +844,16 @@ main {
 
 .insp-var {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
   padding: 10px 0;
   border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.insp-var-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: capitalize;
 }
 
 .insp-ctrl {
@@ -999,3 +1010,15 @@ main {
 
 .insp-num::-webkit-inner-spin-button,
 .insp-num::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+.insp-select {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  padding: 8px 10px;
+  outline: none;
+  cursor: pointer;
+}
