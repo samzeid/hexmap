@@ -11,8 +11,8 @@
   --text:         #e8e8f0;
   --muted:        rgba(255,255,255,0.4);
   --radius:       14px;
-  --slot-h:       62px;
-  --pack-cell-h:  24px;
+  --slot-h:       80px;
+  --pack-cell-h:  40px;
 }
 
 body {
@@ -23,6 +23,9 @@ body {
   height: 100svh;
   overflow: hidden;
 }
+
+/* Prevent iOS auto-zoom on input tap — all inputs must be >= 16px */
+input, textarea, select { font-size: max(16px, 1em); }
 
 /* ── APP SHELL ───────────────────────────────────────────────── */
 #app {
@@ -59,11 +62,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-width: 260px;
+  width: min(340px, calc(100vw - 48px));
 }
 
 #login-card h2 {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text);
   margin-bottom: 4px;
@@ -75,8 +78,8 @@ body {
   border: 1px solid var(--card-border);
   border-radius: 8px;
   color: var(--text);
-  font-size: 15px;
-  padding: 11px 12px;
+  font-size: 16px;
+  padding: 13px 12px;
   outline: none;
 }
 
@@ -86,12 +89,13 @@ body {
 
 #email-sign-in-btn {
   width: 100%;
+  min-height: 50px;
   background: rgba(255,255,255,0.14);
   color: var(--text);
   border: none;
   border-radius: 10px;
-  padding: 13px 20px;
-  font-size: 15px;
+  padding: 14px 20px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -100,7 +104,7 @@ body {
 #email-sign-in-btn:active { background: rgba(255,255,255,0.22); }
 
 #login-error {
-  font-size: 13px;
+  font-size: 14px;
   color: #ff7777;
   text-align: left;
 }
@@ -110,7 +114,7 @@ body {
   align-items: center;
   gap: 10px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .login-divider::before,
@@ -122,12 +126,13 @@ body {
 }
 
 #google-sign-in-btn {
+  min-height: 50px;
   background: transparent;
   color: var(--muted);
   border: 1px solid var(--card-border);
   border-radius: 10px;
-  padding: 11px 20px;
-  font-size: 14px;
+  padding: 14px 20px;
+  font-size: 16px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -163,13 +168,13 @@ body {
 .char-tab {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 14px 16px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -214,11 +219,16 @@ body {
   background: none;
   border: none;
   color: rgba(255,255,255,0.25);
-  font-size: 15px;
+  font-size: 18px;
   cursor: pointer;
-  padding: 0 0 0 2px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px 0 4px;
   line-height: 1;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .char-tab-del:hover { color: #ff6060; }
@@ -228,8 +238,9 @@ body {
   border: none;
   border-left: 1px solid var(--card-border);
   color: var(--muted);
-  font-size: 22px;
-  padding: 0 16px;
+  font-size: 24px;
+  min-height: 44px;
+  padding: 0 18px;
   cursor: pointer;
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
@@ -242,9 +253,10 @@ body {
   border: none;
   border-left: 1px solid var(--card-border);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 600;
-  padding: 0 12px;
+  min-height: 44px;
+  padding: 0 16px;
   cursor: pointer;
   flex-shrink: 0;
   white-space: nowrap;
@@ -299,7 +311,7 @@ body {
 .char-field.grow { flex: 1; }
 
 .char-field label {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
@@ -310,7 +322,7 @@ body {
   border: 1px solid var(--card-border);
   border-radius: 8px;
   color: var(--text);
-  font-size: 15px;
+  font-size: 16px;
   padding: 8px 10px;
   outline: none;
   width: 100%;
@@ -327,10 +339,10 @@ body {
   gap: 4px;
 }
 
-.carry-slash { color: var(--muted); font-size: 14px; }
+.carry-slash { color: var(--muted); font-size: 15px; }
 
 #carry-used {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text);
   min-width: 20px;
@@ -410,11 +422,11 @@ main {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 13px 16px;
+  padding: 16px;
   background: none;
   border: none;
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -427,7 +439,7 @@ main {
 
 .inv-chevron {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
 }
 
 .inv-hdr-del {
@@ -435,8 +447,9 @@ main {
   border: none;
   border-left: 1px solid var(--card-border);
   color: var(--muted);
-  font-size: 12px;
-  padding: 0 14px;
+  font-size: 16px;
+  min-height: 44px;
+  padding: 0 20px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -475,7 +488,7 @@ main {
   background: transparent;
   border: none;
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
   padding: 0 14px;
   outline: none;
   -webkit-tap-highlight-color: transparent;
@@ -497,10 +510,10 @@ main {
 .slot-label {
   position: absolute;
   left: 16px;
-  right: 38px;
+  right: 52px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 14px;
+  font-size: 17px;
   color: var(--text);
   pointer-events: none;
   user-select: none;
@@ -509,7 +522,7 @@ main {
   text-overflow: ellipsis;
 }
 
-.slot-label-conflict  { color: #ff6060; right: 62px; }
+.slot-label-conflict  { color: #ff6060; right: 72px; }
 .slot-label-container { color: rgba(180, 120, 255, 0.9); }
 
 .slot-input:focus ~ .slot-label { display: none; }
@@ -521,32 +534,32 @@ main {
 
 .slot-conflict {
   border-left-color: rgba(255,80,80,0.7) !important;
-  padding-right: 58px;
+  padding-right: 68px;
 }
 
 .slot-warn {
   position: absolute;
-  right: 36px;
+  right: 52px;
   top: 50%;
   transform: translateY(-50%);
   color: #ff6060;
-  font-size: 13px;
+  font-size: 15px;
   pointer-events: none;
   user-select: none;
 }
 
 .slot-remove {
   position: absolute;
-  right: 8px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
-  width: 22px;
-  height: 22px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: rgba(200, 50, 50, 0.75);
   border: none;
   color: white;
-  font-size: 16px;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
   display: flex;
@@ -561,12 +574,13 @@ main {
 /* ── ADD CONTAINER ───────────────────────────────────────────── */
 #add-container-btn {
   width: 100%;
-  padding: 14px;
+  min-height: 50px;
+  padding: 16px;
   background: transparent;
   border: 1px dashed rgba(255,255,255,0.12);
   border-radius: var(--radius);
   color: var(--muted);
-  font-size: 14px;
+  font-size: 16px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -589,8 +603,8 @@ main {
   border: 1px solid var(--card-border);
   border-radius: 8px;
   color: var(--text);
-  font-size: 15px;
-  padding: 10px 12px;
+  font-size: 16px;
+  padding: 12px 12px;
   outline: none;
 }
 
@@ -603,7 +617,7 @@ main {
 }
 
 .form-row label {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
   flex-shrink: 0;
 }
@@ -614,7 +628,7 @@ main {
   border: 1px solid var(--card-border);
   border-radius: 8px;
   color: var(--text);
-  font-size: 15px;
+  font-size: 16px;
   padding: 8px 10px;
   outline: none;
   text-align: center;
@@ -622,10 +636,11 @@ main {
 
 #confirm-add, #cancel-add {
   flex: 1;
-  padding: 10px;
+  min-height: 50px;
+  padding: 14px;
   border-radius: 8px;
   border: none;
-  font-size: 14px;
+  font-size: 16px;
   cursor: pointer;
 }
 
@@ -656,8 +671,9 @@ main {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: 14px;
   gap: 8px;
+  min-height: 50px;
   cursor: pointer;
   border-bottom: 1px solid rgba(255,255,255,0.05);
   -webkit-tap-highlight-color: transparent;
@@ -666,10 +682,10 @@ main {
 .ac-opt:last-child { border-bottom: none; }
 .ac-opt:hover, .ac-opt:active { background: rgba(255,255,255,0.07); }
 
-.ac-name { font-size: 14px; color: var(--text); }
+.ac-name { font-size: 16px; color: var(--text); }
 
 .ac-tag {
-  font-size: 10px;
+  font-size: 11px;
   padding: 2px 7px;
   border-radius: 4px;
   font-weight: 700;
@@ -694,9 +710,15 @@ main {
   -webkit-backdrop-filter: blur(24px);
   border-top: 1px solid rgba(255,255,255,0.12);
   border-radius: 18px 18px 0 0;
-  padding: 20px 18px 40px;
-  max-height: 55vh;
+  padding: 20px 18px env(safe-area-inset-bottom, 24px);
+  max-height: 60vh;
   overflow-y: auto;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#inspector.inspector-collapsed {
+  transform: translateY(calc(100% - 62px));
+  overflow: hidden;
 }
 
 #insp-header {
@@ -708,25 +730,26 @@ main {
 }
 
 #insp-name {
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1.2;
   flex: 1;
 }
 
-#insp-close {
+#insp-toggle {
   background: rgba(255,255,255,0.1);
   border: none;
   color: var(--text);
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 16px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #insp-size, #insp-container-section { margin-bottom: 12px; }
@@ -739,7 +762,7 @@ main {
 }
 
 .insp-toggle-label {
-  font-size: 13px;
+  font-size: 16px;
   color: var(--muted);
   flex: 1;
 }
@@ -749,10 +772,11 @@ main {
   border: 1px solid var(--card-border);
   border-radius: 8px;
   color: var(--muted);
-  font-size: 13px;
-  padding: 6px 14px;
+  font-size: 16px;
+  padding: 14px 20px;
+  min-height: 44px;
   cursor: pointer;
-  min-width: 52px;
+  min-width: 70px;
 }
 
 .toggle-btn.active {
@@ -764,17 +788,19 @@ main {
 
 .insp-size-row {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .size-btn {
-  flex: 1;
-  padding: 7px 4px;
+  width: 100%;
+  min-height: 50px;
+  padding: 16px;
   border-radius: 8px;
   border: 1px solid var(--card-border);
   background: transparent;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 16px;
   cursor: pointer;
 }
 
@@ -791,12 +817,12 @@ main {
   border: 1px solid var(--card-border);
   border-radius: 8px;
   color: var(--text);
-  font-size: 13px;
+  font-size: 16px;
   font-family: inherit;
   line-height: 1.5;
-  padding: 8px 10px;
+  padding: 10px 12px;
   resize: vertical;
-  min-height: 64px;
+  min-height: 72px;
   outline: none;
   margin-bottom: 12px;
 }
@@ -807,37 +833,37 @@ main {
 #insp-remove {
   width: 100%;
   margin-top: 14px;
-  padding: 10px;
+  padding: 16px;
   border-radius: 8px;
   border: 1px solid rgba(255,80,80,0.3);
   background: transparent;
   color: rgba(255,100,100,0.8);
-  font-size: 13px;
+  font-size: 16px;
   cursor: pointer;
 }
 
 #insp-remove:active { background: rgba(255,60,60,0.12); }
 
 #insp-warn {
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.45;
   color: #ffaa66;
   background: rgba(255,120,50,0.1);
   border: 1px solid rgba(255,120,50,0.25);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   margin-bottom: 12px;
 }
 
 #insp-desc {
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.55;
   color: rgba(255,255,255,0.65);
   margin-bottom: 6px;
 }
 
 #insp-cost {
-  font-size: 12px;
+  font-size: 15px;
   color: rgba(180,210,120,0.8);
   margin-bottom: 14px;
 }
@@ -846,12 +872,12 @@ main {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 0;
+  padding: 12px 0;
   border-top: 1px solid rgba(255,255,255,0.07);
 }
 
 .insp-var-label {
-  font-size: 12px;
+  font-size: 15px;
   color: var(--muted);
   text-transform: capitalize;
 }
@@ -912,7 +938,7 @@ main {
   background: transparent;
   border: none;
   color: var(--text);
-  font-size: 12px;
+  font-size: 14px;
   padding: 0 8px;
   outline: none;
   -webkit-tap-highlight-color: transparent;
@@ -924,7 +950,7 @@ main {
 .pack-cell.pack-cell-filled {
   cursor: pointer;
   padding: 0 4px 0 8px;
-  gap: 2px;
+  gap: 4px;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -932,7 +958,7 @@ main {
 
 .pack-cell-name {
   flex: 1;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -944,13 +970,13 @@ main {
 .pack-cell-name.pack-cell-conflict { color: #ff6060; }
 
 .pack-cell-remove {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: rgba(200, 50, 50, 0.75);
   border: none;
   color: white;
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
   display: flex;
@@ -973,7 +999,7 @@ main {
   border-radius: 8px;
   padding: 8px 14px;
   color: white;
-  font-size: 14px;
+  font-size: 15px;
   white-space: nowrap;
   transform: translate(-50%, -160%);
   box-shadow: 0 8px 28px rgba(0,0,0,0.65);
@@ -1016,9 +1042,9 @@ main {
   border: 1px solid rgba(255,255,255,0.15);
   border-radius: 10px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
   font-family: inherit;
-  padding: 8px 10px;
+  padding: 10px 12px;
   outline: none;
   cursor: pointer;
 }

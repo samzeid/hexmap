@@ -111,6 +111,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   let dragState      = null;
   let ghostEl        = null;
   let longPressTimer = null;
+  let dragScrollVel  = 0;
+  let dragScrollRaf  = null;
+
+  function dragScrollStep() {
+    if (!dragState || dragScrollVel === 0) { dragScrollRaf = null; return; }
+    document.getElementById('inv-scroll').scrollTop += dragScrollVel;
+    dragScrollRaf = requestAnimationFrame(dragScrollStep);
+  }
 
   // ── RENDER ──────────────────────────────────────────────────────────────
   function growEquipped() {
@@ -450,7 +458,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   // ── SLOT MANAGEMENT ──────────────────────────────────────────────────────
   function commitSlot(name, container, r, c) {
     ignoreNextBlur = true;
-    const libItem = getLibraryItem(name);
+    const rawLib  = getLibraryItem(name);
+    // Players get a custom item if they type the name of a hidden library item
+    const libItem = (rawLib && rawLib.hidden && !window._isDM) ? null : rawLib;
     const canonName = libItem ? libItem.name : name;
     const row = container.slots[r];
     const existing = row[c];
@@ -596,7 +606,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
     let matches = ITEM_LIBRARY.filter(i => i.name.toLowerCase().includes(query));
     if (acPackableOnly) matches = matches.filter(i => i.bulk.id === 'packable');
-    if (!window._isDM) matches = matches.filter(i => !i.dmOnly);
+    if (!window._isDM) matches = matches.filter(i => !i.dmOnly && !i.hidden);
     matches = matches.slice(0, 10);
     if (!matches.length) { closeDropdown(); return; }
 
@@ -873,17 +883,28 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     });
 
     inspectorEl.hidden = false;
+    inspectorEl.classList.remove('inspector-collapsed');
+    document.getElementById('insp-toggle').textContent = '∧';
   }
 
-  function hideInspector() { inspectorEl.hidden = true; }
+  function hideInspector() {
+    inspectorEl.hidden = true;
+    inspectorEl.classList.remove('inspector-collapsed');
+  }
 
-  document.getElementById('insp-close').addEventListener('click', hideInspector);
+  document.getElementById('insp-toggle').addEventListener('click', () => {
+    const collapsed = inspectorEl.classList.toggle('inspector-collapsed');
+    document.getElementById('insp-toggle').textContent = collapsed ? '∨' : '∧';
+  });
 
   document.addEventListener('pointerdown', e => {
-    if (!inspectorEl.hidden &&
-        !inspectorEl.contains(e.target) &&
-        !e.target.classList.contains('slot-input')) {
-      hideInspector();
+    if (!inspectorEl.hidden && !inspectorEl.contains(e.target) && !e.target.classList.contains('slot-input')) {
+      if (inspectorEl.classList.contains('inspector-collapsed')) {
+        // Tapping outside a collapsed inspector fully closes it
+        hideInspector();
+      } else {
+        hideInspector();
+      }
     }
   });
 
@@ -919,6 +940,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
   function endDrag(x, y) {
     if (!dragState) return;
+    dragScrollVel = 0;
+    dragScrollRaf = null;
 
     ghostEl.style.visibility = 'hidden';
     const el = document.elementFromPoint(x, y);
@@ -1120,7 +1143,24 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   }
 
   document.addEventListener('pointermove', e => {
-    if (dragState) moveGhost(e.clientX, e.clientY);
+    if (!dragState) return;
+    moveGhost(e.clientX, e.clientY);
+
+    // Auto-scroll #inv-scroll when dragging near top/bottom edges
+    const scrollEl = document.getElementById('inv-scroll');
+    const rect = scrollEl.getBoundingClientRect();
+    const ZONE = 100;
+    const MAX  = 12;
+    if (e.clientY < rect.top + ZONE) {
+      dragScrollVel = -MAX * Math.pow(1 - Math.max(0, e.clientY - rect.top) / ZONE, 2);
+    } else if (e.clientY > rect.bottom - ZONE) {
+      dragScrollVel = MAX * Math.pow(1 - Math.max(0, rect.bottom - e.clientY) / ZONE, 2);
+    } else {
+      dragScrollVel = 0;
+    }
+    if (dragScrollVel !== 0 && !dragScrollRaf) {
+      dragScrollRaf = requestAnimationFrame(dragScrollStep);
+    }
   });
 
   document.addEventListener('pointerup', e => {
@@ -1129,6 +1169,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
   document.addEventListener('pointercancel', () => {
     if (!dragState) return;
+    dragScrollVel = 0;
+    dragScrollRaf = null;
     if (ghostEl) { ghostEl.remove(); ghostEl = null; }
     document.body.classList.remove('is-dragging');
     dragState = null;
@@ -1149,6 +1191,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     checkIsPackable(item) { return isPackable(item); },
     cancelDrag() {
       if (!dragState) return;
+      dragScrollVel = 0;
+      dragScrollRaf = null;
       if (ghostEl) { ghostEl.remove(); ghostEl = null; }
       document.body.classList.remove('is-dragging');
       dragState = null;

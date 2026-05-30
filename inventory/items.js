@@ -170,7 +170,7 @@ window.ITEM_LIBRARY = [
   { name: "Flicker Dagger",        bulk: Bulk.STOCK,    cost: "120 gp", description: `*` },
   { name: "Deep-Haul Harpoon",     bulk: Bulk.STOCK,    cost: "60 gp/charge", description: `*`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
   { name: "Weapon of Silence",     bulk: Bulk.PACKABLE, cost: "60 gp/charge", description: `*`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS }, charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
-  { name: "Luster Weapon",         bulk: Bulk.PACKABLE, cost: "60 gp/charge", description: `*`, hidden: true, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS }, charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
+  { name: "Luster Weapon",         bulk: Bulk.STOCK,    cost: "60 gp/charge", description: `*`, hidden: true, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS }, charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
 
   // Rare — all hidden
   { name: "Waning Wand of Lightning Bolt", bulk: Bulk.PACKABLE, cost: "120 gp/charge", description: `<i>Waning wand — cannot be recharged</i><br>Expend a charge to cast Lightning Bolt (DC 15, 8d6).`, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } } },
