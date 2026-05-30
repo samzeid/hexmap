@@ -1235,7 +1235,6 @@ window.CharacterManager = ({ auth, database }) => {
   let currentUser  = null;
   let currentCharId = null;
   let allChars     = {};   // id → { ownerUid, ownerName, state, createdAt, sortOrder }
-  let saveTimer    = null;
   let suppressSave = false;
   let dirty        = false;   // true while local edits haven't been flushed to Firebase yet
   let inv          = null;
@@ -1362,7 +1361,6 @@ window.CharacterManager = ({ auth, database }) => {
   function switchToChar(charId, skipSave) {
     inv.cancelDrag();
     if (!skipSave && currentCharId) saveChar(currentCharId, true);
-    clearTimeout(saveTimer);
     dirty = false;
     currentCharId = charId;
     suppressSave = true;
@@ -1374,7 +1372,6 @@ window.CharacterManager = ({ auth, database }) => {
   function createChar() {
     if (!currentUser) return;
     inv.cancelDrag();
-    clearTimeout(saveTimer);
     if (currentCharId) saveChar(currentCharId, true);
 
     const ref       = database.ref('/inventory_characters').push();
@@ -1433,9 +1430,7 @@ window.CharacterManager = ({ auth, database }) => {
       `[data-char-id="${currentCharId}"] .char-tab-name`
     );
     if (curTabName) curTabName.textContent = inv.getState().charName || 'Unnamed';
-    // Debounced Firebase write
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => saveChar(currentCharId), 800);
+    saveChar(currentCharId);
   }
 
   function handleCrossCharDrop(item, targetCharId) {
