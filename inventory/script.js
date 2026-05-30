@@ -1,19 +1,14 @@
-window.InventorySystem = ({ database, auth }) => {
+window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
   // ── STATE ──────────────────────────────────────────────────────────────
-  const state = {
-    charName: '',
-    carryCapacity: '',
-    containers: [
-      { id: 'equipped', name: 'Equipped',      rows: 1, collapsed: false, slots: null, permanent: true },
-      { id: 'strapped', name: 'Strapped Gear', rows: 2, collapsed: false, slots: null, permanent: true },
-    ]
-  };
+  function createDefaultContainers() {
+    return [
+      { id: 'equipped', name: 'Equipped',      rows: 1, collapsed: false, permanent: true, slots: [[null,null]] },
+      { id: 'strapped', name: 'Strapped Gear', rows: 2, collapsed: false, permanent: true, slots: [[null,null],[null,null]] },
+    ];
+  }
 
-  // slots[r] = [leftSlot, rightSlot]  where slot = null | { name, variables }
-  state.containers.forEach(c => {
-    c.slots = Array.from({ length: c.rows }, () => [null, null]);
-  });
+  const state = { charName: '', carryCapacity: '', containers: createDefaultContainers() };
 
   // ── ITEM LIBRARY ────────────────────────────────────────────────────────
   const Bulk = {
@@ -268,6 +263,7 @@ window.InventorySystem = ({ database, auth }) => {
     containersEl.innerHTML = '';
     state.containers.forEach(c => containersEl.appendChild(buildCard(c)));
     updateCarryDisplay();
+    if (onChange) onChange();
   }
 
   function buildCard(container) {
@@ -997,6 +993,15 @@ window.InventorySystem = ({ database, auth }) => {
     const { slotData, srcContainer, srcR, srcC, srcCenter } = dragState;
     dragState = null;
 
+    // Cross-character tab drop
+    const charTab = el && el.closest('[data-char-id]');
+    if (charTab && charTab.dataset.charId) {
+      document.querySelectorAll('[data-char-id]').forEach(t => t.classList.remove('tab-drag-over'));
+      if (onCrossCharDrop) onCrossCharDrop(slotData, charTab.dataset.charId);
+      else placeSlotData(slotData, srcContainer, srcR, srcC);
+      return;
+    }
+
     if (targetContainer) {
       const tR = parseInt(wrap.dataset.r);
       const tC = parseInt(wrap.dataset.c);
@@ -1171,5 +1176,416 @@ window.InventorySystem = ({ database, auth }) => {
   // ── INIT ──────────────────────────────────────────────────────────────────
   render();
 
-  return {};
+  return {
+    getState() {
+      return JSON.parse(JSON.stringify({
+        charName:      state.charName,
+        carryCapacity: state.carryCapacity,
+        containers:    state.containers,
+      }));
+    },
+    checkIsPackable(item) { return isPackable(item); },
+    loadState(newState) {
+      if (dragState) {
+        if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+        document.body.classList.remove('is-dragging');
+        dragState = null;
+      }
+      hideInspector();
+      closeDropdown();
+      state.charName      = newState.charName      || '';
+      state.carryCapacity = newState.carryCapacity || '';
+      state.containers    = (newState.containers && newState.containers.length)
+                            ? newState.containers : createDefaultContainers();
+      document.getElementById('char-name').value  = state.charName;
+      document.getElementById('char-carry').value = state.carryCapacity;
+      render();
+    },
+  };
+};
+
+// ── CHARACTER MANAGER ──────────────────────────────────────────────────────
+window.CharacterManager = ({ auth, database }) => {
+  let currentUser  = null;
+  let currentCharId = null;
+  let allChars     = {};   // id → { ownerUid, ownerName, state, createdAt, sortOrder }
+  let saveTimer    = null;
+  let suppressSave = false;
+  let inv          = null;
+
+  // ── INVENTORY SYSTEM ────────────────────────────────────────────────────
+  inv = window.InventorySystem({
+    database: null,
+    auth: { onAuthStateChanged: () => {} },
+    onChange:         handleInventoryChange,
+    onCrossCharDrop:  handleCrossCharDrop,
+  });
+
+  // ── AUTH ────────────────────────────────────────────────────────────────
+  // ── AUTH ────────────────────────────────────────────────────────────────
+  function showLoginError(msg) {
+    const el = document.getElementById('login-error');
+    el.textContent = msg;
+    el.hidden = false;
+  }
+
+  // Email / password sign-in
+  document.getElementById('email-sign-in-btn').addEventListener('click', () => {
+    const email    = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    if (!email || !password) { showLoginError('Enter email and password.'); return; }
+    document.getElementById('login-error').hidden = true;
+    auth.signInWithEmailAndPassword(email, password)
+      .catch(err => showLoginError(err.message));
+  });
+
+  // Allow pressing Enter in password field to submit
+  document.getElementById('login-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('email-sign-in-btn').click();
+  });
+
+  // Google sign-in (requires Google provider enabled in Firebase Console)
+  document.getElementById('google-sign-in-btn').addEventListener('click', () => {
+    document.getElementById('login-error').hidden = true;
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider)
+      .catch(err => showLoginError(err.message));
+  });
+
+  auth.onAuthStateChanged(user => {
+    currentUser = user;
+    if (user) {
+      document.getElementById('login-screen').hidden = true;
+      document.getElementById('app').hidden = false;
+      subscribeToChars();
+    } else {
+      document.getElementById('login-screen').hidden = false;
+      document.getElementById('app').hidden = true;
+      currentCharId = null;
+      allChars = {};
+    }
+  });
+
+  // ── FIREBASE ────────────────────────────────────────────────────────────
+  function subscribeToChars() {
+    database.ref('/inventory_characters').on('value', snap => {
+      const raw = snap.val() || {};
+
+      // Rebuild allChars, preserving the current char's live state so
+      // an incoming write from someone else doesn't overwrite local edits.
+      const liveState = currentCharId ? inv.getState() : null;
+
+      allChars = {};
+      Object.entries(raw).forEach(([id, data]) => {
+        allChars[id] = {
+          id,
+          ownerUid:  data.ownerUid  || '',
+          ownerName: data.ownerName || 'Unknown',
+          state:     parseState(data.state),
+          createdAt: data.createdAt || 0,
+          sortOrder: data.sortOrder ?? data.createdAt ?? 0,
+        };
+      });
+
+      // Restore live edits for the current character
+      if (currentCharId && liveState && allChars[currentCharId]) {
+        allChars[currentCharId].state = liveState;
+      }
+
+      renderTabs();
+
+      if (!currentCharId || !allChars[currentCharId]) {
+        // Pick this user's most recent char, or the first overall, or create one
+        const mine = Object.values(allChars)
+          .filter(c => c.ownerUid === currentUser.uid)
+          .sort((a, b) => b.createdAt - a.createdAt);
+        if (mine.length) switchToChar(mine[0].id, true);
+        else createChar();
+      }
+    });
+  }
+
+  function parseState(str) {
+    try {
+      const s = JSON.parse(str || 'null');
+      if (!s) return blankState();
+      if (!s.containers || !s.containers.length) s.containers = defaultContainers();
+      return s;
+    } catch { return blankState(); }
+  }
+
+  function blankState() {
+    return { charName: '', carryCapacity: '', containers: defaultContainers() };
+  }
+
+  function defaultContainers() {
+    return [
+      { id:'equipped', name:'Equipped',      rows:1, collapsed:false, permanent:true, slots:[[null,null]] },
+      { id:'strapped', name:'Strapped Gear', rows:2, collapsed:false, permanent:true, slots:[[null,null],[null,null]] },
+    ];
+  }
+
+  // ── CHARACTER SWITCHING ──────────────────────────────────────────────────
+  function switchToChar(charId, skipSave) {
+    if (!skipSave && currentCharId) saveChar(currentCharId, true);
+    clearTimeout(saveTimer);
+    currentCharId = charId;
+    suppressSave = true;
+    inv.loadState(allChars[charId].state);
+    suppressSave = false;
+    renderTabs();
+  }
+
+  function createChar() {
+    if (!currentUser) return;
+    clearTimeout(saveTimer);
+    if (currentCharId) saveChar(currentCharId, true);
+
+    const ref       = database.ref('/inventory_characters').push();
+    const blank     = blankState();
+    const newId     = ref.key;
+    const createdAt = Date.now();
+
+    ref.set({
+      ownerUid:  currentUser.uid,
+      ownerName: currentUser.displayName || currentUser.email || 'Player',
+      state:     JSON.stringify(blank),
+      createdAt,
+      sortOrder: createdAt,
+    });
+
+    // Add immediately to local state so tabs and inventory update without waiting for Firebase
+    allChars[newId] = {
+      id: newId,
+      ownerUid:  currentUser.uid,
+      ownerName: currentUser.displayName || currentUser.email || 'Player',
+      state:     blank,
+      createdAt,
+      sortOrder: createdAt,
+    };
+    currentCharId = newId;
+    suppressSave = true;
+    inv.loadState(blank);
+    suppressSave = false;
+    renderTabs();
+  }
+
+  function deleteChar(charId) {
+    if (allChars[charId]?.ownerUid !== currentUser?.uid) return;
+    database.ref(`/inventory_characters/${charId}`).remove();
+    if (currentCharId === charId) currentCharId = null;
+    // Firebase listener handles picking/creating the next char
+  }
+
+  function saveChar(charId, immediate) {
+    if (!currentUser || !charId) return;
+    const state = inv.getState();
+    if (allChars[charId]) allChars[charId].state = state;
+    database.ref(`/inventory_characters/${charId}`).update({
+      state:     JSON.stringify(state),
+      ownerName: currentUser.displayName || currentUser.email || 'Player',
+    });
+  }
+
+  // ── INVENTORY CALLBACKS ──────────────────────────────────────────────────
+  function handleInventoryChange() {
+    if (suppressSave || !currentCharId) return;
+    // Keep tab name in sync immediately
+    const curTabName = document.querySelector(
+      `[data-char-id="${currentCharId}"] .char-tab-name`
+    );
+    if (curTabName) curTabName.textContent = inv.getState().charName || 'Unnamed';
+    // Debounced Firebase write
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveChar(currentCharId), 800);
+  }
+
+  function handleCrossCharDrop(item, targetCharId) {
+    if (!targetCharId || targetCharId === currentCharId || !allChars[targetCharId]) return;
+
+    const targetState = JSON.parse(JSON.stringify(allChars[targetCharId].state));
+    const equipped    = targetState.containers.find(c => c.id === 'equipped');
+    if (!equipped) return;
+
+    let placed = false;
+
+    if (inv.checkIsPackable(item)) {
+      // Packable items go into a packableGroup (up to 4 per slot)
+      for (const row of equipped.slots) {
+        for (let c = 0; c < 2; c++) {
+          if (row[c] && row[c].packableGroup && row[c].items.length < 4) {
+            row[c].items.push(item); placed = true; break;
+          }
+        }
+        if (placed) break;
+      }
+      if (!placed) {
+        // Find an empty cell for a new packableGroup
+        for (const row of equipped.slots) {
+          for (let c = 0; c < 2; c++) {
+            if (!row[c]) {
+              row[c] = { packableGroup: true, items: [item] };
+              placed = true; break;
+            }
+          }
+          if (placed) break;
+        }
+      }
+      if (!placed) {
+        equipped.slots.push([{ packableGroup: true, items: [item] }, null]);
+        equipped.rows++;
+      }
+    } else {
+      // Non-packable items go directly into a slot
+      for (const row of equipped.slots) {
+        if (!row[0])                    { row[0] = item; placed = true; break; }
+        if (!row[1] && !isBulky(item))  { row[1] = item; placed = true; break; }
+      }
+      if (!placed) {
+        equipped.slots.push([item, null]);
+        equipped.rows++;
+      }
+    }
+
+    allChars[targetCharId].state = targetState;
+    database.ref(`/inventory_characters/${targetCharId}`).update({
+      state: JSON.stringify(targetState),
+    });
+
+    // Flash the target tab green
+    const tabEl = document.querySelector(`[data-char-id="${targetCharId}"]`);
+    if (tabEl) {
+      tabEl.classList.add('tab-received');
+      setTimeout(() => tabEl.classList.remove('tab-received'), 1200);
+    }
+  }
+
+  function isBulky(item) {
+    if (!item || item.packableGroup) return false;
+    const id = item.bulk?.id || 'stock';
+    return id === 'bulky' || id === 'verybulky';
+  }
+
+  // ── TABS ────────────────────────────────────────────────────────────────
+  function renderTabs() {
+    const tabsEl = document.getElementById('char-tabs');
+    tabsEl.innerHTML = '';
+
+    Object.values(allChars)
+      .sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt))
+      .forEach(char => {
+        const tab = document.createElement('button');
+        tab.className  = 'char-tab' + (char.id === currentCharId ? ' active' : '');
+        tab.dataset.charId = char.id;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className   = 'char-tab-name';
+        nameSpan.textContent = char.state.charName || 'Unnamed';
+        tab.appendChild(nameSpan);
+
+        // Ownership dot
+        if (char.ownerUid === currentUser?.uid) {
+          const dot = document.createElement('span');
+          dot.className = 'char-tab-dot';
+          tab.appendChild(dot);
+        }
+
+        // Delete button (own chars only)
+        if (char.ownerUid === currentUser?.uid) {
+          const del = document.createElement('button');
+          del.className   = 'char-tab-del';
+          del.textContent = '×';
+          del.title       = 'Delete character';
+          del.addEventListener('click', e => {
+            e.stopPropagation();
+            if (confirm(`Delete "${char.state.charName || 'this character'}"?`)) {
+              deleteChar(char.id);
+            }
+          });
+          tab.appendChild(del);
+        }
+
+        tab.addEventListener('click', () => {
+          if (char.id !== currentCharId) switchToChar(char.id, false);
+        });
+
+        tabsEl.appendChild(tab);
+      });
+
+    document.getElementById('add-char-btn').onclick = createChar;
+  }
+
+  // Highlight tab on hover during inventory-item drag
+  document.addEventListener('pointermove', e => {
+    if (!document.body.classList.contains('is-dragging')) return;
+    const el  = document.elementFromPoint(e.clientX, e.clientY);
+    const tab = el && el.closest('[data-char-id]');
+    document.querySelectorAll('[data-char-id]').forEach(t => t.classList.remove('tab-drag-over'));
+    if (tab && tab.dataset.charId !== currentCharId) tab.classList.add('tab-drag-over');
+  });
+
+  // ── TAB REORDER ────────────────────────────────────────────────────────────
+  (function setupTabDrag() {
+    const tabsEl = document.getElementById('char-tabs');
+    const indicator = document.createElement('div');
+    indicator.className = 'tab-drop-indicator';
+
+    let drag = null; // { el, charId, startX, insertBefore }
+
+    tabsEl.addEventListener('pointerdown', e => {
+      const tab = e.target.closest('.char-tab');
+      if (!tab || e.target.closest('.char-tab-del')) return;
+      if (e.button !== 0) return;
+      drag = { el: tab, charId: tab.dataset.charId, startX: e.clientX, active: false, insertBefore: null };
+    });
+
+    document.addEventListener('pointermove', e => {
+      if (!drag) return;
+      if (!drag.active && Math.abs(e.clientX - drag.startX) > 6) {
+        drag.active = true;
+        drag.el.classList.add('tab-reordering');
+      }
+      if (!drag.active) return;
+
+      const tabs = [...tabsEl.querySelectorAll('.char-tab:not(.tab-reordering)')];
+      let insertBefore = null;
+      for (const t of tabs) {
+        const r = t.getBoundingClientRect();
+        if (e.clientX < r.left + r.width / 2) { insertBefore = t; break; }
+      }
+      drag.insertBefore = insertBefore;
+      if (insertBefore) tabsEl.insertBefore(indicator, insertBefore);
+      else tabsEl.appendChild(indicator);
+    });
+
+    document.addEventListener('pointerup', () => {
+      if (!drag) return;
+      if (drag.active) {
+        drag.el.classList.remove('tab-reordering');
+        indicator.remove();
+
+        const allTabs = [...tabsEl.querySelectorAll('.char-tab')];
+        const others  = allTabs.filter(t => t !== drag.el);
+        let insertIdx = drag.insertBefore ? others.indexOf(drag.insertBefore) : -1;
+        if (insertIdx === -1) insertIdx = others.length;
+        others.splice(insertIdx, 0, drag.el);
+
+        others.forEach((t, i) => {
+          const id = t.dataset.charId;
+          const order = i * 1000;
+          if (allChars[id]) allChars[id].sortOrder = order;
+          database.ref(`/inventory_characters/${id}/sortOrder`).set(order);
+        });
+
+        renderTabs();
+      }
+      drag = null;
+    });
+
+    document.addEventListener('pointercancel', () => {
+      if (!drag) return;
+      if (drag.active) { drag.el.classList.remove('tab-reordering'); indicator.remove(); }
+      drag = null;
+    });
+  })();
 };

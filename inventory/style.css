@@ -20,8 +20,242 @@ body {
   color: var(--text);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 16px;
-  min-height: 100svh;
+  height: 100svh;
+  overflow: hidden;
+}
+
+/* ── APP SHELL ───────────────────────────────────────────────── */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100svh;
+  overflow: hidden;
+}
+
+#inv-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding-bottom: 280px;
+}
+
+/* ── LOGIN SCREEN ────────────────────────────────────────────── */
+#login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+#login-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  padding: 40px 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 260px;
+}
+
+#login-card h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+#login-email, #login-password {
+  width: 100%;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 15px;
+  padding: 11px 12px;
+  outline: none;
+}
+
+#login-email:focus, #login-password:focus {
+  border-color: rgba(255,255,255,0.25);
+}
+
+#email-sign-in-btn {
+  width: 100%;
+  background: rgba(255,255,255,0.14);
+  color: var(--text);
+  border: none;
+  border-radius: 10px;
+  padding: 13px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#email-sign-in-btn:active { background: rgba(255,255,255,0.22); }
+
+#login-error {
+  font-size: 13px;
+  color: #ff7777;
+  text-align: left;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--card-border);
+}
+
+#google-sign-in-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 11px 20px;
+  font-size: 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#google-sign-in-btn:active { background: rgba(255,255,255,0.06); }
+
+/* ── AUTH BAR ────────────────────────────────────────────────── */
+
+/* ── CHARACTER TAB BAR ───────────────────────────────────────── */
+#char-tab-bar {
+  display: flex;
+  align-items: stretch;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid var(--card-border);
+  flex-shrink: 0;
+}
+
+#char-tabs-scroll {
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+#char-tabs-scroll::-webkit-scrollbar { display: none; }
+
+#char-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  min-width: min-content;
+}
+
+.char-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.char-tab.active {
+  background: rgba(255,255,255,0.08);
+  border-color: var(--card-border);
+  color: var(--text);
+}
+
+.char-tab:not(.active):hover { background: rgba(255,255,255,0.04); }
+
+.char-tab.tab-drag-over {
+  background: rgba(180,120,255,0.18);
+  border-color: rgba(180,120,255,0.45);
+  color: rgba(200,160,255,0.95);
+}
+
+.char-tab.tab-received {
+  background: rgba(80,210,130,0.18);
+  border-color: rgba(80,210,130,0.45);
+  color: rgba(120,240,160,0.95);
+  transition: background 0.35s, border-color 0.35s, color 0.35s;
+}
+
+.char-tab-name { pointer-events: none; }
+
+.char-tab-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(180,120,255,0.75);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.char-tab-del {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.25);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 0 0 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.char-tab-del:hover { color: #ff6060; }
+
+#add-char-btn {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--card-border);
+  color: var(--muted);
+  font-size: 22px;
+  padding: 0 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#add-char-btn:active { background: rgba(255,255,255,0.06); }
+
+/* During inventory-item drag, show tabs as potential targets */
+.is-dragging .char-tab:not(.active) {
+  border-color: rgba(255,255,255,0.08);
+}
+
+/* Tab reorder drag */
+.char-tab.tab-reordering {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.tab-drop-indicator {
+  width: 2px;
+  min-width: 2px;
+  border-radius: 2px;
+  background: rgba(180,120,255,0.8);
+  align-self: stretch;
+  margin: 4px 0;
+  flex-shrink: 0;
 }
 
 /* ── HEADER ─────────────────────────────────────────────────── */
@@ -32,7 +266,7 @@ body {
   background: rgba(255,255,255,0.03);
   border-bottom: 1px solid var(--card-border);
   position: sticky;
-  top: 0;
+  top: 0;         /* sticks to top of #inv-scroll scroll container */
   z-index: 10;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);

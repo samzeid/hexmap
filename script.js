@@ -619,11 +619,48 @@ function authenticateFromUrl() {
     }
 }
 
+// ── LOGIN ──────────────────────────────────────────────────────────────────
+const loginScreen   = document.getElementById("login-screen");
+const loginError    = document.getElementById("login-error");
+const loginEmail    = document.getElementById("login-email");
+const loginPassword = document.getElementById("login-password");
+
+function showLoginError(msg) {
+    loginError.textContent = msg;
+    loginError.classList.remove("hidden");
+}
+
+document.getElementById("email-sign-in-btn").addEventListener("click", () => {
+    const email    = loginEmail.value.trim();
+    const password = loginPassword.value;
+    if (!email || !password) { showLoginError("Enter email and password."); return; }
+    loginError.classList.add("hidden");
+    auth.signInWithEmailAndPassword(email, password)
+        .catch(err => showLoginError(err.message));
+});
+
+loginPassword.addEventListener("keydown", e => {
+    if (e.key === "Enter") document.getElementById("email-sign-in-btn").click();
+});
+
+document.getElementById("google-sign-in-btn").addEventListener("click", () => {
+    loginError.classList.add("hidden");
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(err => showLoginError(err.message));
+});
+
+const signOutBtn = document.getElementById("sign-out-btn");
+
+signOutBtn.addEventListener("click", () => auth.signOut());
+
 auth.onAuthStateChanged((user) => {
     if (user) {
-        console.log("Auth state changed: User is signed in (UID:", user.uid, ")");
+        loginScreen.classList.add("hidden");
+        signOutBtn.title  = `Sign out (${user.displayName || user.email || 'Player'})`;
+        signOutBtn.hidden = false;
     } else {
-        console.log("Auth state changed: User is signed out.");
+        loginScreen.classList.remove("hidden");
+        signOutBtn.hidden = true;
     }
 
     drawGridLatestActive();
@@ -924,5 +961,20 @@ collapseBtn.addEventListener("click", () => {
         setActiveTool('pan')
     } else {
         icon.classList.add("collapsed");
+    }
+});
+
+const invBtn     = document.getElementById("invBtn");
+const invOverlay = document.getElementById("inv-overlay");
+
+invBtn.addEventListener("click", () => {
+    const open = invOverlay.classList.toggle("open");
+    invBtn.classList.toggle("active", open);
+});
+
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && invOverlay.classList.contains("open")) {
+        invOverlay.classList.remove("open");
+        invBtn.classList.remove("active");
     }
 });

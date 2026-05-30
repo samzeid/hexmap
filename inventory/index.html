@@ -8,62 +8,97 @@
 </head>
 <body>
 
-  <header id="char-header">
-    <div class="char-field grow">
-      <label>Name</label>
-      <input type="text" id="char-name" placeholder="Character name" autocomplete="off" />
+  <!-- ── LOGIN SCREEN ─────────────────────────────────────────── -->
+  <div id="login-screen">
+    <div id="login-card">
+      <h2>Inventory</h2>
+      <input type="email"    id="login-email"    placeholder="Email"    autocomplete="email" />
+      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
+      <button id="email-sign-in-btn">Sign in</button>
+      <p id="login-error" hidden></p>
+      <div class="login-divider"><span>or</span></div>
+      <button id="google-sign-in-btn">Sign in with Google</button>
     </div>
-    <div class="char-field">
-      <label>Carry</label>
-      <div class="carry-row">
-        <span id="carry-used">0</span>
-        <span class="carry-slash">/</span>
-        <input type="text" id="char-carry" placeholder="—" autocomplete="off" />
-      </div>
-    </div>
-  </header>
-
-  <main>
-    <div id="containers"></div>
-  </main>
-
-  <div id="autocomplete-dropdown" hidden></div>
-
-  <div id="inspector" hidden>
-    <div id="insp-header">
-      <h2 id="insp-name"></h2>
-      <button id="insp-close">✕</button>
-    </div>
-    <p id="insp-warn" hidden></p>
-    <p id="insp-desc"></p>
-    <textarea id="insp-desc-edit" hidden placeholder="Description..."></textarea>
-    <div id="insp-size" hidden>
-      <div class="insp-size-row">
-        <button class="size-btn" data-bulk="stock">Stock</button>
-        <button class="size-btn" data-bulk="packable">Packable</button>
-        <button class="size-btn" data-bulk="bulky">Bulky</button>
-      </div>
-    </div>
-    <div id="insp-container-section" hidden>
-      <div class="insp-toggle-row">
-        <span class="insp-toggle-label">Container</span>
-        <button id="insp-container-btn" class="toggle-btn">Off</button>
-      </div>
-      <div id="insp-container-rows-row" hidden class="insp-toggle-row">
-        <span class="insp-toggle-label">Rows</span>
-        <input type="number" id="insp-container-rows" value="2" min="1" max="20" class="insp-num" style="width:60px" />
-      </div>
-    </div>
-    <div id="insp-vars"></div>
-    <button id="insp-remove">Remove item</button>
   </div>
 
+  <!-- ── MAIN APP ──────────────────────────────────────────────── -->
+  <div id="app" hidden>
+
+    <!-- Character tabs -->
+    <div id="char-tab-bar">
+      <div id="char-tabs-scroll">
+        <div id="char-tabs"></div>
+      </div>
+      <button id="add-char-btn" title="New character">＋</button>
+    </div>
+
+    <!-- Scrollable inventory area -->
+    <div id="inv-scroll">
+
+      <header id="char-header">
+        <div class="char-field">
+          <label>Carry</label>
+          <div class="carry-row">
+            <span id="carry-used">0</span>
+            <span class="carry-slash">/</span>
+            <input type="text" id="char-carry" placeholder="—" autocomplete="off" />
+          </div>
+        </div>
+        <div class="char-field grow">
+          <label>Name</label>
+          <input type="text" id="char-name" placeholder="Character name" autocomplete="off" />
+        </div>
+      </header>
+
+      <main>
+        <div id="containers"></div>
+      </main>
+
+      <div id="autocomplete-dropdown" hidden></div>
+
+    </div><!-- /inv-scroll -->
+
+    <div id="inspector" hidden>
+      <div id="insp-header">
+        <h2 id="insp-name"></h2>
+        <button id="insp-close">✕</button>
+      </div>
+      <p id="insp-warn" hidden></p>
+      <p id="insp-desc"></p>
+      <textarea id="insp-desc-edit" hidden placeholder="Description..."></textarea>
+      <div id="insp-size" hidden>
+        <div class="insp-size-row">
+          <button class="size-btn" data-bulk="stock">Stock</button>
+          <button class="size-btn" data-bulk="packable">Packable</button>
+          <button class="size-btn" data-bulk="bulky">Bulky</button>
+        </div>
+      </div>
+      <div id="insp-container-section" hidden>
+        <div class="insp-toggle-row">
+          <span class="insp-toggle-label">Container</span>
+          <button id="insp-container-btn" class="toggle-btn">Off</button>
+        </div>
+        <div id="insp-container-rows-row" hidden class="insp-toggle-row">
+          <span class="insp-toggle-label">Rows</span>
+          <input type="number" id="insp-container-rows" value="2" min="1" max="20" class="insp-num" style="width:60px" />
+        </div>
+      </div>
+      <div id="insp-vars"></div>
+      <button id="insp-remove">Remove item</button>
+    </div>
+
+  </div><!-- /app -->
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <script src="../firebase-setup.js"></script>
   <script src="script.js"></script>
   <script>
-    window.InventorySystem({
-      database: null,
-      auth: { onAuthStateChanged: (cb) => cb(null) }
-    });
+    const { auth, database } = window.FirebaseSetup();
+    window.CharacterManager({ auth, database });
   </script>
 </body>
 </html>
