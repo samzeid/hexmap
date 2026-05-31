@@ -54,14 +54,12 @@
       <div id="insp-header">
         <div id="insp-name-row">
           <h2 id="insp-name"></h2>
+          <span id="insp-cost" hidden></span>
           <div id="insp-inline-vars"></div>
         </div>
         <button id="insp-toggle">∨</button>
       </div>
       <p id="insp-warn" hidden></p>
-      <p id="insp-desc"></p>
-      <textarea id="insp-desc-edit" hidden placeholder="Description..."></textarea>
-      <p id="insp-cost" hidden></p>
       <!-- Compact props: bulk + container + materials + weapon select, built by JS -->
       <div id="insp-props" hidden></div>
       <!-- Container rows input, shown only when container is active -->
@@ -70,6 +68,8 @@
         <input type="number" id="insp-container-rows" value="2" min="1" max="20" class="insp-num" style="width:60px" />
       </div>
       <div id="insp-vars"></div>
+      <p id="insp-desc"></p>
+      <textarea id="insp-desc-edit" hidden placeholder="Description..."></textarea>
       <button id="insp-remove">Remove item</button>
     </div>
 

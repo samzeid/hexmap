@@ -11,8 +11,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   const state = { charName: '', carryCapacity: '', containers: createDefaultContainers() };
 
   // ── ITEM LIBRARY (defined in items.js) ──────────────────────────────────
-  const Bulk         = window.Bulk;
-  const ITEM_LIBRARY = window.ITEM_LIBRARY;
+  const Bulk           = window.Bulk;
+  const ITEM_LIBRARY   = window.ITEM_LIBRARY;
+  const WEAPON_OPTIONS = window.WEAPON_OPTIONS;
 
 
   // ── HELPERS ─────────────────────────────────────────────────────────────
@@ -592,22 +593,25 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     const propsEl = document.getElementById('insp-props');
     propsEl.innerHTML = '';
 
-    // Bulk chips — custom items only
+    // Bulk dropdown — custom items only
     if (slotData.custom) {
       const curBulk = slotData.bulk ? slotData.bulk.id : 'stock';
+      const bulkSel = document.createElement('select');
+      bulkSel.className = 'insp-select';
       [['stock','Stock'], ['packable','Pack'], ['bulky','Bulky']].forEach(([bid, label]) => {
-        const btn = document.createElement('button');
-        btn.className = 'prop-chip' + (bid === curBulk ? ' active' : '');
-        btn.textContent = label;
-        btn.onclick = () => {
-          const newBulk = Bulk[bid.toUpperCase()] || Bulk.STOCK;
-          container.slots[r][c] = null;
-          slotData.bulk = newBulk;
-          placeSlotData(slotData, container, r, c);
-          showInspector(slotData, container, r, c);
-        };
-        propsEl.appendChild(btn);
+        const o = document.createElement('option');
+        o.value = bid; o.textContent = label;
+        if (bid === curBulk) o.selected = true;
+        bulkSel.appendChild(o);
       });
+      bulkSel.addEventListener('change', () => {
+        const newBulk = Bulk[bulkSel.value.toUpperCase()] || Bulk.STOCK;
+        container.slots[r][c] = null;
+        slotData.bulk = newBulk;
+        placeSlotData(slotData, container, r, c);
+        showInspector(slotData, container, r, c);
+      });
+      propsEl.appendChild(bulkSel);
     }
 
     // Container chip — custom items only
@@ -636,8 +640,30 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       propsEl.appendChild(chip);
     }
 
-    // Material chips — weapon items
-    if (isWeapon || (slotData.variables && slotData.variables.weapon)) {
+    // Weapon chip — custom items only
+    if (slotData.custom) {
+      const chip = document.createElement('button');
+      chip.className = 'prop-chip' + (slotData.isWeapon ? ' active' : '');
+      chip.textContent = 'Weapon';
+      chip.onclick = () => {
+        if (slotData.isWeapon) {
+          slotData.isWeapon = false;
+          delete slotData.variables.weapon;
+          slotData.material = null;
+        } else {
+          slotData.isWeapon = true;
+          slotData.variables = slotData.variables || {};
+          if (!slotData.variables.weapon) {
+            slotData.variables.weapon = { control: 'select', value: WEAPON_OPTIONS[0], options: WEAPON_OPTIONS };
+          }
+        }
+        render(); showInspector(slotData, container, r, c);
+      };
+      propsEl.appendChild(chip);
+    }
+
+    // Material chips — library weapons and custom items with Weapon toggle on
+    if (isWeapon || (slotData.custom && slotData.isWeapon)) {
       [['silvered','Silvered'], ['mithral','Mithral'], ['adamantine','Adamantine']].forEach(([mat, label]) => {
         const btn = document.createElement('button');
         const isActive = slotData.material === mat;
@@ -800,9 +826,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     if (charTab && charTab.dataset.charId) {
       document.querySelectorAll('[data-char-id]').forEach(t => t.classList.remove('tab-drag-over'));
       if (onCrossCharDrop) {
+        // Capture linked container before removing from source
+        let linkedContainer = null;
+        if (slotData.containerId) {
+          const linked = state.containers.find(c => c.id === slotData.containerId);
+          if (linked) {
+            linkedContainer = JSON.parse(JSON.stringify(linked));
+            state.containers = state.containers.filter(c => c.id !== slotData.containerId);
+          }
+        }
         removeFromSource();
         render();
-        onCrossCharDrop(slotData, charTab.dataset.charId);
+        onCrossCharDrop(slotData, charTab.dataset.charId, linkedContainer);
       }
       // else: no handler — item stays in slot, nothing to do
       return;
@@ -1211,21 +1246,35 @@ window.CharacterManager = ({ auth, database }) => {
     saveChar(currentCharId);
   }
 
-  function handleCrossCharDrop(item, targetCharId) {
+  function handleCrossCharDrop(item, targetCharId, linkedContainer) {
     if (!targetCharId || targetCharId === currentCharId || !allChars[targetCharId]) return;
 
     const targetState = JSON.parse(JSON.stringify(allChars[targetCharId].state));
     const equipped    = targetState.containers.find(c => c.id === 'equipped');
     if (!equipped) return;
 
-    let placed = false;
-    for (const row of equipped.slots) {
-      if (!row[0])                   { row[0] = item; placed = true; break; }
-      if (!row[1] && !isBulky(item)) { row[1] = item; placed = true; break; }
+    let finalR = 0, finalC = 0, placed = false;
+    for (let r = 0; r < equipped.slots.length; r++) {
+      if (!equipped.slots[r][0]) {
+        equipped.slots[r][0] = item; finalR = r; finalC = 0; placed = true; break;
+      }
+      if (!equipped.slots[r][1] && !isBulky(item)) {
+        equipped.slots[r][1] = item; finalR = r; finalC = 1; placed = true; break;
+      }
     }
     if (!placed) {
       equipped.slots.push([item, null]);
       equipped.rows++;
+      finalR = equipped.slots.length - 1; finalC = 0;
+    }
+
+    // Transfer the linked container and its contents to the target character
+    if (linkedContainer) {
+      const newId = `linked-${Date.now()}`;
+      linkedContainer.id      = newId;
+      linkedContainer.linkedTo = { containerId: 'equipped', r: finalR, c: finalC };
+      item.containerId = newId;
+      targetState.containers.push(linkedContainer);
     }
 
     allChars[targetCharId].state = targetState;
