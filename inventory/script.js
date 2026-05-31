@@ -19,7 +19,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   // ── HELPERS ─────────────────────────────────────────────────────────────
   function getLibraryItem(name) {
     if (!name || typeof name !== 'string') return null;
-    return ITEM_LIBRARY.find(i => i.name.toLowerCase() === name.trim().toLowerCase()) || null;
+    return ITEM_LIBRARY.find(i => i.name && i.name.toLowerCase() === name.trim().toLowerCase()) || null;
   }
 
   function isNoCarry(slotData) {
@@ -303,7 +303,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
         + (conflict     ? ' slot-label-conflict'   : '')
         + (isContainer  ? ' slot-label-container'  : '');
       const vars = Object.values(slotData.variables || {});
-      const numVar = vars.length === 1 && typeof vars[0].value === 'number' ? vars[0] : null;
+      const numVar = vars.find(v => (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number') || null;
       const selVar = vars.find(v => v.control === 'select' && v.value);
       const matPfx = slotData.material ? slotData.material.charAt(0).toUpperCase() + slotData.material.slice(1) + ' ' : '';
       label.textContent = numVar  ? `${matPfx}${numVar.value} × ${slotData.name}`
@@ -382,7 +382,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     const variables = sameItem
       ? existing.variables
       : (libItem ? JSON.parse(JSON.stringify(libItem.variables || {}))
-                 : { count: { value: 1, control: 'both', min: 0 } });
+                 : {});
 
     const slotData = {
       name: canonName,
@@ -465,8 +465,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     query = (query || '').trim().toLowerCase();
     if (!query) { closeDropdown(); return; }
 
-    let matches = ITEM_LIBRARY.filter(i => i.name.toLowerCase().includes(query));
-    matches = matches.filter(i => !i.hidden);
+    let matches = ITEM_LIBRARY.filter(i => i.name && i.name.toLowerCase().includes(query));
     if (!window._isDM) matches = matches.filter(i => !i.dmOnly);
     matches = matches.slice(0, 10);
     if (!matches.length) { closeDropdown(); return; }
@@ -517,7 +516,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   // ── INSPECTOR ────────────────────────────────────────────────────────────
   function showInspector(slotData, container, r, c, packIdx) {
     const lib = getLibraryItem(slotData.name);
-    const isWeapon = !!(lib && lib.description && lib.description.includes('Weapon'));
 
     // ── Name ──
     document.getElementById('insp-name').textContent = slotData.name;
@@ -572,13 +570,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     // ── Description ──
     const descP = document.getElementById('insp-desc');
     const descEdit = document.getElementById('insp-desc-edit');
+    const notesEl = document.getElementById('insp-notes');
     if (slotData.custom) {
-      descP.hidden = true; descEdit.hidden = false;
+      descP.hidden = true; descEdit.hidden = false; notesEl.hidden = true;
       descEdit.value = slotData.description || '';
       descEdit.oninput = () => { slotData.description = descEdit.value; };
     } else {
-      descP.hidden = false; descEdit.hidden = true;
+      descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
       descP.innerHTML = lib ? lib.description : '';
+      if (container) {
+        notesEl.value = slotData.notes || '';
+        notesEl.oninput = () => { slotData.notes = notesEl.value; };
+      }
     }
 
     // ── Cost ──
@@ -587,7 +590,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     if (lib && lib.cost) costEl.textContent = lib.cost;
 
     // ── Remove ──
-    document.getElementById('insp-remove').onclick = () => { clearSlot(container, r, c); };
+    const removeBtnEl = document.getElementById('insp-remove');
+    removeBtnEl.hidden = !container;
+    if (container) removeBtnEl.onclick = () => { clearSlot(container, r, c); };
 
     // ── Compact props row ──
     const propsEl = document.getElementById('insp-props');
@@ -662,22 +667,44 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       propsEl.appendChild(chip);
     }
 
-    // Material chips — library weapons and custom items with Weapon toggle on
-    if (isWeapon || (slotData.custom && slotData.isWeapon)) {
-      [['silvered','Silvered'], ['mithral','Mithral'], ['adamantine','Adamantine']].forEach(([mat, label]) => {
-        const btn = document.createElement('button');
-        const isActive = slotData.material === mat;
-        btn.className = 'prop-chip' + (isActive ? ` active-${mat}` : '');
-        btn.textContent = label;
-        btn.onclick = () => {
-          slotData.material = slotData.material === mat ? null : mat;
-          render(); showInspector(slotData, container, r, c, packIdx);
-        };
-        propsEl.appendChild(btn);
-      });
+    // Material chips — all items
+    [['silvered','Silvered'], ['mithral','Mithral'], ['adamantine','Adamantine']].forEach(([mat, label]) => {
+      const btn = document.createElement('button');
+      const isActive = slotData.material === mat;
+      btn.className = 'prop-chip' + (isActive ? ` active-${mat}` : '');
+      btn.textContent = label;
+      btn.onclick = () => {
+        slotData.material = slotData.material === mat ? null : mat;
+        render(); showInspector(slotData, container, r, c, packIdx);
+      };
+      propsEl.appendChild(btn);
+    });
+
+    // Has Uses toggle — custom items only
+    if (slotData.custom) {
+      const vars = slotData.variables || {};
+      const hasUsesActive = !!(slotData.hasUses || vars.uses || vars.count);
+      const chip = document.createElement('button');
+      chip.className = 'prop-chip' + (hasUsesActive ? ' active' : '');
+      chip.textContent = 'Has Uses';
+      chip.onclick = () => {
+        if (hasUsesActive) {
+          slotData.hasUses = false;
+          delete slotData.variables.uses;
+          delete slotData.variables.count;
+        } else {
+          slotData.hasUses = true;
+          slotData.variables = slotData.variables || {};
+          if (!slotData.variables.uses && !slotData.variables.count) {
+            slotData.variables.uses = { value: 1, control: 'both', min: 0 };
+          }
+        }
+        render(); showInspector(slotData, container, r, c);
+      };
+      propsEl.appendChild(chip);
     }
 
-    // Weapon select chip — items with a weapon variable
+    // Weapon select dropdown — items with a weapon variable
     const weaponMeta = slotData.variables && slotData.variables.weapon;
     if (weaponMeta && weaponMeta.control === 'select') {
       const sel = document.createElement('select');
@@ -692,7 +719,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       propsEl.appendChild(sel);
     }
 
-    propsEl.hidden = propsEl.children.length === 0;
+    propsEl.hidden = !container || propsEl.children.length === 0;
 
     // Container rows input (only when container chip is active)
     const rowsRowEl = document.getElementById('insp-container-rows-row');
@@ -762,7 +789,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   document.addEventListener('pointerdown', e => {
     if (!inspectorEl.classList.contains('inspector-collapsed')
         && !inspectorEl.contains(e.target)
-        && !e.target.closest('.slot')) {
+        && !e.target.closest('.slot')
+        && !e.target.closest('.shop-item-row')) {
       hideInspector();
     }
   });
@@ -967,6 +995,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
     // Auto-scroll #inv-scroll when dragging near top/bottom edges
     const scrollEl = document.getElementById('inv-scroll');
+    if (scrollEl.hidden) { dragScrollVel = 0; return; }
     const rect = scrollEl.getBoundingClientRect();
     const ZONE = 100;
     const MAX  = 12;
@@ -1008,6 +1037,40 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       }));
     },
     flattenGroups(containers) { flattenPackableGroups(containers); },
+
+    // ── SHOP API ────────────────────────────────────────────────
+    showShopItem(slotData) {
+      // Show inspector in read-only mode (no container context)
+      showInspector(slotData, null, -1, -1);
+    },
+    startShopDrag(slotData, x, y) {
+      startDrag(slotData, null, -1, -1, x, y, null, () => {});
+      dragState._shopDrag = true;
+    },
+    addItem(slotData) {
+      // Place item into the first available slot in equipped, then strapped
+      const targets = state.containers.filter(c => c.id === 'equipped' || c.id === 'strapped');
+      for (const container of targets) {
+        let placed = false;
+        for (let r = 0; r < container.slots.length; r++) {
+          if (!container.slots[r][0]) {
+            placeSlotData(slotData, container, r, 0); placed = true; break;
+          }
+          if (!container.slots[r][1] && !isSlotBulky(slotData)) {
+            placeSlotData(slotData, container, r, 1); placed = true; break;
+          }
+        }
+        if (placed) return;
+      }
+      // All slots full — append a row to strapped
+      const strapped = state.containers.find(c => c.id === 'strapped');
+      if (strapped) {
+        strapped.slots.push([null, null]);
+        strapped.rows++;
+        placeSlotData(slotData, strapped, strapped.slots.length - 1, 0);
+      }
+    },
+
     cancelDrag() {
       if (!dragState) return;
       dragScrollVel = 0;
@@ -1067,6 +1130,154 @@ window.CharacterManager = ({ auth, database }) => {
       auth.signInWithEmailAndPassword(e.data.email, e.data.password)
         .catch(() => {});
     }
+  });
+
+  // ── SHOP ────────────────────────────────────────────────────────────────
+  let shopOpen = false;
+  const shopTabBtn  = document.getElementById('shop-tab-btn');
+  const shopPanel   = document.getElementById('shop-panel');
+  const invScrollEl = document.getElementById('inv-scroll');
+  const charHeaderEl= document.getElementById('char-header');
+
+  function buildShop() {
+    const scroll = document.getElementById('shop-scroll');
+    scroll.innerHTML = '';
+    let currentSection = null;
+    const HIDDEN_SECTIONS = new Set(['Valuables', 'Currency']);
+    const visibleSections = [];
+
+    ITEM_LIBRARY.forEach(item => {
+      if (item._section) {
+        currentSection = item._section;
+        if (HIDDEN_SECTIONS.has(currentSection)) return;
+        visibleSections.push(currentSection);
+        const h = document.createElement('div');
+        h.className = 'shop-section-heading';
+        h.textContent = item._section;
+        scroll.appendChild(h);
+        return;
+      }
+      if (!item.name) return;
+      if (HIDDEN_SECTIONS.has(currentSection)) return;
+
+      const row = document.createElement('div');
+      row.className = 'shop-item-row';
+      row.dataset.section = currentSection;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'shop-item-name';
+      nameSpan.textContent = item.name;
+
+      const costSpan = document.createElement('span');
+      costSpan.className = 'shop-item-cost';
+      costSpan.textContent = item.cost || '';
+
+      row.appendChild(nameSpan);
+      row.appendChild(costSpan);
+
+      // Tap → show in inspector (read-only)
+      row.addEventListener('click', e => {
+        if (row._shopDragging) return;
+        const slotData = buildShopSlotData(item);
+        inv.showShopItem(slotData);
+      });
+
+      // Long-press → drag to character tab
+      let lpTimer = null, lpX, lpY, lpPointerId;
+      row.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        lpX = e.clientX; lpY = e.clientY; lpPointerId = e.pointerId;
+        lpTimer = setTimeout(() => {
+          lpTimer = null;
+          row._shopDragging = true;
+          row.classList.add('shop-item-dragging');
+          document.documentElement.setPointerCapture(lpPointerId);
+          inv.startShopDrag(buildShopSlotData(item), e.clientX, e.clientY);
+        }, 380);
+      });
+      row.addEventListener('pointermove', e => {
+        if (!lpTimer) return;
+        if ((e.clientX - lpX) ** 2 + (e.clientY - lpY) ** 2 > 64) {
+          clearTimeout(lpTimer); lpTimer = null;
+        }
+      });
+      const cancelLP = () => {
+        if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+        row._shopDragging = false;
+        row.classList.remove('shop-item-dragging');
+      };
+      row.addEventListener('pointerup',     cancelLP);
+      row.addEventListener('pointercancel', cancelLP);
+
+      scroll.appendChild(row);
+    });
+
+    // Populate category dropdown
+    const categorySelect = document.getElementById('shop-category');
+    const prevVal = categorySelect.value;
+    categorySelect.innerHTML = '<option value="">All categories</option>';
+    visibleSections.forEach(section => {
+      const opt = document.createElement('option');
+      opt.value = section;
+      opt.textContent = section;
+      if (section === prevVal) opt.selected = true;
+      categorySelect.appendChild(opt);
+    });
+  }
+
+  function buildShopSlotData(libItem) {
+    return {
+      name:      libItem.name,
+      variables: JSON.parse(JSON.stringify(libItem.variables || {})),
+      _shopItem: true,
+    };
+  }
+
+  function filterShop() {
+    const query    = (document.getElementById('shop-search').value || '').trim().toLowerCase();
+    const category = document.getElementById('shop-category').value;
+    const scroll   = document.getElementById('shop-scroll');
+    scroll.querySelectorAll('.shop-item-row').forEach(row => {
+      const nameMatch = !query || row.querySelector('.shop-item-name').textContent.toLowerCase().includes(query);
+      const catMatch  = !category || row.dataset.section === category;
+      row.hidden = !(nameMatch && catMatch);
+    });
+    // Hide section headings whose items are all filtered out
+    scroll.querySelectorAll('.shop-section-heading').forEach(heading => {
+      let next = heading.nextElementSibling;
+      let hasVisible = false;
+      while (next && !next.classList.contains('shop-section-heading')) {
+        if (!next.hidden && next.classList.contains('shop-item-row')) { hasVisible = true; break; }
+        next = next.nextElementSibling;
+      }
+      heading.hidden = !hasVisible;
+    });
+  }
+
+  document.getElementById('shop-search').addEventListener('input', filterShop);
+  document.getElementById('shop-category').addEventListener('change', filterShop);
+
+  function openShop() {
+    shopOpen = true;
+    shopTabBtn.classList.add('active');
+    invScrollEl.hidden  = true;
+    charHeaderEl.hidden = true;
+    shopPanel.hidden    = false;
+    document.getElementById('shop-search').value = '';
+    document.getElementById('shop-category').value = '';
+    buildShop();
+  }
+
+  function closeShop() {
+    shopOpen = false;
+    shopTabBtn.classList.remove('active');
+    shopPanel.hidden    = true;
+    invScrollEl.hidden  = false;
+    charHeaderEl.hidden = false;
+  }
+
+  shopTabBtn.addEventListener('click', () => {
+    if (shopOpen) closeShop(); else openShop();
   });
 
   // ── ROLE (DM / PLAYER) ──────────────────────────────────────────────────
@@ -1169,6 +1380,7 @@ window.CharacterManager = ({ auth, database }) => {
 
   // ── CHARACTER SWITCHING ──────────────────────────────────────────────────
   function switchToChar(charId, skipSave) {
+    if (shopOpen) closeShop();
     inv.cancelDrag();
     if (!skipSave && currentCharId) saveChar(currentCharId, true);
     dirty = false;
@@ -1247,7 +1459,24 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   function handleCrossCharDrop(item, targetCharId, linkedContainer) {
-    if (!targetCharId || targetCharId === currentCharId || !allChars[targetCharId]) return;
+    if (!targetCharId || !allChars[targetCharId]) return;
+
+    // Strip the shop marker before storing
+    const cleanItem = Object.assign({}, item);
+    delete cleanItem._shopItem;
+
+    // Shop drop onto the currently-open character
+    if (targetCharId === currentCharId) {
+      if (item._shopItem) {
+        inv.addItem(cleanItem);
+        const tabEl = document.querySelector(`[data-char-id="${currentCharId}"]`);
+        if (tabEl) {
+          tabEl.classList.add('tab-received');
+          setTimeout(() => tabEl.classList.remove('tab-received'), 1200);
+        }
+      }
+      return;
+    }
 
     const targetState = JSON.parse(JSON.stringify(allChars[targetCharId].state));
     const equipped    = targetState.containers.find(c => c.id === 'equipped');
@@ -1256,14 +1485,14 @@ window.CharacterManager = ({ auth, database }) => {
     let finalR = 0, finalC = 0, placed = false;
     for (let r = 0; r < equipped.slots.length; r++) {
       if (!equipped.slots[r][0]) {
-        equipped.slots[r][0] = item; finalR = r; finalC = 0; placed = true; break;
+        equipped.slots[r][0] = cleanItem; finalR = r; finalC = 0; placed = true; break;
       }
-      if (!equipped.slots[r][1] && !isBulky(item)) {
-        equipped.slots[r][1] = item; finalR = r; finalC = 1; placed = true; break;
+      if (!equipped.slots[r][1] && !isBulky(cleanItem)) {
+        equipped.slots[r][1] = cleanItem; finalR = r; finalC = 1; placed = true; break;
       }
     }
     if (!placed) {
-      equipped.slots.push([item, null]);
+      equipped.slots.push([cleanItem, null]);
       equipped.rows++;
       finalR = equipped.slots.length - 1; finalC = 0;
     }
@@ -1273,7 +1502,7 @@ window.CharacterManager = ({ auth, database }) => {
       const newId = `linked-${Date.now()}`;
       linkedContainer.id      = newId;
       linkedContainer.linkedTo = { containerId: 'equipped', r: finalR, c: finalC };
-      item.containerId = newId;
+      cleanItem.containerId = newId;
       targetState.containers.push(linkedContainer);
     }
 

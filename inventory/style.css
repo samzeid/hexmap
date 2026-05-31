@@ -32,6 +32,8 @@ input, textarea, select { font-size: max(16px, 1em); }
   flex-direction: column;
   height: 100svh;
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #inv-scroll {
@@ -167,6 +169,145 @@ input, textarea, select { font-size: max(16px, 1em); }
   cursor: pointer;
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
+}
+
+#shop-tab-btn {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--card-border);
+  color: var(--muted);
+  font-size: 18px;
+  min-height: 44px;
+  padding: 0 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.12s;
+}
+#shop-tab-btn.active { color: var(--text); background: rgba(255,255,255,0.08); }
+#shop-tab-btn:active  { background: rgba(255,255,255,0.06); }
+
+/* ── SHOP PANEL ──────────────────────────────────────────────── */
+#shop-panel {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#shop-filter-bar {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--card-border);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: center;
+}
+
+#shop-search {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 16px;
+  padding: 10px 14px;
+  outline: none;
+  font-family: inherit;
+}
+
+#shop-search:focus {
+  border-color: rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.1);
+}
+
+#shop-search::placeholder { color: var(--muted); }
+
+#shop-category {
+  flex-shrink: 0;
+  width: 44%;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 15px;
+  padding: 8px 14px;
+  outline: none;
+  font-family: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+}
+
+#shop-category:focus {
+  border-color: rgba(255,255,255,0.25);
+  background-color: rgba(255,255,255,0.1);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+
+#shop-category option {
+  background: #1a1a2e;
+  color: var(--text);
+}
+
+#shop-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 20px;
+}
+
+.shop-section-heading {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  padding: 16px 14px 6px;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 2;
+}
+
+.shop-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+  gap: 10px;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.shop-item-row:active  { background: rgba(255,255,255,0.06); }
+.shop-item-row.shop-item-dragging { opacity: 0.4; }
+
+.shop-item-name {
+  font-size: 15px;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shop-item-cost {
+  font-size: 13px;
+  color: rgba(180,210,120,0.8);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 #add-char-btn:active { background: rgba(255,255,255,0.06); }
@@ -849,6 +990,26 @@ main {
 
 #insp-desc-edit:focus { border-color: rgba(255,255,255,0.25); }
 #insp-desc-edit::placeholder { color: var(--muted); }
+
+#insp-notes {
+  width: 100%;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.6);
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.5;
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 52px;
+  outline: none;
+  margin-top: 8px;
+  margin-bottom: 12px;
+}
+
+#insp-notes:focus { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.05); }
+#insp-notes::placeholder { color: rgba(255,255,255,0.2); }
 
 #insp-remove {
   width: 100%;

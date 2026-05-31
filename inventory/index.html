@@ -21,7 +21,17 @@
         <div id="char-tabs"></div>
       </div>
       <button id="add-char-btn" title="New character">＋</button>
+      <button id="shop-tab-btn" title="Item shop">🛒</button>
       <button id="role-btn" title="Toggle DM / Player role"></button>
+    </div>
+
+    <!-- Shop panel (shown instead of inv-scroll when shop tab is active) -->
+    <div id="shop-panel" hidden>
+      <div id="shop-filter-bar">
+        <input id="shop-search" type="text" placeholder="Search items…" autocomplete="off" spellcheck="false" />
+        <select id="shop-category"><option value="">All categories</option></select>
+      </div>
+      <div id="shop-scroll"></div>
     </div>
 
     <!-- Scrollable inventory area -->
@@ -70,6 +80,7 @@
       <div id="insp-vars"></div>
       <p id="insp-desc"></p>
       <textarea id="insp-desc-edit" hidden placeholder="Description..."></textarea>
+      <textarea id="insp-notes" hidden placeholder="Notes..."></textarea>
       <button id="insp-remove">Remove item</button>
     </div>
 
