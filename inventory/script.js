@@ -17,21 +17,44 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
   // ── HELPERS ─────────────────────────────────────────────────────────────
   function getLibraryItem(name) {
+    if (!name || typeof name !== 'string') return null;
     return ITEM_LIBRARY.find(i => i.name.toLowerCase() === name.trim().toLowerCase()) || null;
   }
 
   function isNoCarry(slotData) {
-    if (!slotData || slotData.packableGroup) return false;
+    if (!slotData) return false;
     if (slotData.isContainer) return true;
     const lib = getLibraryItem(slotData.name);
     return !!(lib && lib.noCarry);
   }
 
   function isContainerItem(slotData) {
-    if (!slotData || slotData.packableGroup) return false;
+    if (!slotData) return false;
     if (slotData.isContainer) return true;
     const lib = getLibraryItem(slotData.name);
     return !!(lib && lib.containerRows);
+  }
+
+  // Migrate old packableGroup data — flatten groups into individual items in slots
+  function flattenPackableGroups(containers) {
+    containers.forEach(container => {
+      for (let r = 0; r < container.slots.length; r++) {
+        for (let c = 0; c < 2; c++) {
+          const slot = container.slots[r][c];
+          if (!slot || !slot.packableGroup) continue;
+          const items = slot.items || [];
+          container.slots[r][c] = items[0] || null;
+          for (let i = 1; i < items.length; i++) {
+            let placed = false;
+            for (let rr = 0; rr < container.slots.length; rr++) {
+              if (!container.slots[rr][0]) { container.slots[rr][0] = items[i]; placed = true; break; }
+              if (!container.slots[rr][1]) { container.slots[rr][1] = items[i]; placed = true; break; }
+            }
+            if (!placed) { container.slots.push([items[i], null]); container.rows++; }
+          }
+        }
+      }
+    });
   }
 
   function containerHasItems(container) {
@@ -84,17 +107,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   }
 
   function isSlotBulky(slotData) {
-    if (!slotData || slotData.packableGroup) return false;
+    if (!slotData) return false;
     const id = slotData.bulk ? slotData.bulk.id
               : (getLibraryItem(slotData.name) || {bulk: Bulk.STOCK}).bulk.id;
     return id === 'bulky' || id === 'verybulky';
-  }
-
-  function isPackable(slotData) {
-    if (!slotData || slotData.packableGroup) return false;
-    const lib = getLibraryItem(slotData.name);
-    const id = slotData.bulk ? slotData.bulk.id : lib ? lib.bulk.id : 'stock';
-    return id === 'packable';
   }
 
   // ── DOM REFS ────────────────────────────────────────────────────────────
@@ -105,7 +121,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   // Active autocomplete context
   let acContainer = null, acRow = -1, acCol = -1, acInput = null;
   let ignoreNextBlur = false;
-  let acPackableOnly = false;
 
   // Drag state
   let dragState      = null;
@@ -216,8 +231,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   }
 
   function buildSlot(container, r, c, slotData, full) {
-    // Hidden items are invisible to players — render as empty slot
-    if (slotData && slotData.hidden && !window._isDM) slotData = null;
     const conflict = slotData && slotData.conflict;
 
     const wrap = document.createElement('div');
@@ -226,14 +239,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     wrap.dataset.r = r;
     wrap.dataset.c = c;
 
-    if (slotData && slotData.packableGroup) {
-      return buildPackableGroupSlot(wrap, container, r, c, slotData);
-    }
-
     const input = document.createElement('input');
     input.type = 'text';
-    const isHidden = slotData && slotData.hidden;
-    input.className = 'slot-input' + (slotData ? ' slot-filled' : '') + (conflict ? ' slot-conflict' : '') + (isHidden ? ' slot-hidden' : '');
+    input.className = 'slot-input' + (slotData ? ' slot-filled' : '') + (conflict ? ' slot-conflict' : '');
     input.value = slotData ? slotData.name : '';
     input.placeholder = '—';
     input.autocomplete = 'off';
@@ -243,6 +251,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
     input.addEventListener('focus', () => {
       acContainer = container; acRow = r; acCol = c; acInput = input;
+      // For filled slots in edit mode: show inspector + dropdown
+      // For empty slots: just show dropdown
       if (slotData) showInspector(slotData, container, r, c);
       updateDropdown(input.value);
     });
@@ -264,6 +274,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     });
 
     input.addEventListener('blur', () => {
+      input.classList.remove('slot-editing');
       if (ignoreNextBlur) { ignoreNextBlur = false; return; }
       input.value = prev;
       closeDropdown();
@@ -272,6 +283,19 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     wrap.appendChild(input);
 
     if (slotData) {
+      // Edit button — tap to enter rename/edit mode (opens keyboard)
+      const editBtn = document.createElement('button');
+      editBtn.className = 'slot-edit';
+      editBtn.textContent = '✎';
+      editBtn.title = 'Rename';
+      editBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        input.classList.add('slot-editing');
+        input.focus();
+        input.select();
+      });
+      wrap.appendChild(editBtn);
+
       const label = document.createElement('span');
       const isContainer = isNoCarry(slotData);
       label.className = 'slot-label'
@@ -280,9 +304,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       const vars = Object.values(slotData.variables || {});
       const numVar = vars.length === 1 && typeof vars[0].value === 'number' ? vars[0] : null;
       const selVar = vars.find(v => v.control === 'select' && v.value);
-      label.textContent = numVar  ? `${numVar.value} × ${slotData.name}`
-                        : selVar  ? `${slotData.name} — ${selVar.value}`
-                        : slotData.name;
+      const matPfx = slotData.material ? slotData.material.charAt(0).toUpperCase() + slotData.material.slice(1) + ' ' : '';
+      label.textContent = numVar  ? `${matPfx}${numVar.value} × ${slotData.name}`
+                        : selVar  ? `${matPfx}${slotData.name} — ${selVar.value}`
+                        : `${matPfx}${slotData.name}`;
       wrap.appendChild(label);
     }
 
@@ -303,9 +328,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
         clearSlot(container, r, c);
       });
       wrap.appendChild(removeBtn);
-    }
 
-    if (slotData) {
+      // Short tap → show inspector (long press → drag, handled below)
+      wrap.addEventListener('click', e => {
+        if (e.target.closest('.slot-remove') || e.target.closest('.slot-edit')) return;
+        showInspector(slotData, container, r, c);
+      });
+
       let downX, downY, downPointerId;
 
       wrap.addEventListener('pointerdown', e => {
@@ -339,133 +368,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     return wrap;
   }
 
-  function buildPackableGroupSlot(wrap, container, r, c, group) {
-    wrap.classList.add('slot-packable');
-
-    for (let i = 0; i < 4; i++) {
-      const item = group.items[i];
-      const cell = document.createElement('div');
-      cell.className = 'pack-cell';
-
-      const visibleItem = item && (window._isDM || !item.hidden) ? item : null;
-      if (visibleItem) {
-        cell.classList.add('pack-cell-filled');
-        if (item.hidden) cell.classList.add('pack-cell-hidden');
-
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'pack-cell-name' + (item.conflict ? ' pack-cell-conflict' : '');
-        const vars = Object.values(item.variables || {});
-        const numVar = vars.length === 1 && typeof vars[0].value === 'number' ? vars[0] : null;
-        const selVar = vars.find(v => v.control === 'select' && v.value);
-        nameSpan.textContent = numVar ? `${numVar.value}× ${item.name}`
-                             : selVar ? `${item.name} — ${selVar.value}`
-                             : item.name;
-
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'pack-cell-remove';
-        removeBtn.textContent = '−';
-        removeBtn.addEventListener('click', e => {
-          e.stopPropagation();
-          group.items.splice(i, 1);
-          if (group.items.length === 0) container.slots[r][c] = null;
-          render();
-          hideInspector();
-        });
-
-        cell.appendChild(nameSpan);
-        cell.appendChild(removeBtn);
-
-        cell.addEventListener('click', e => {
-          if (e.target === removeBtn) return;
-          showInspector(item, container, r, c, i);
-        });
-
-        let downX, downY, downPointerId;
-        cell.addEventListener('pointerdown', e => {
-          if (dragState || e.target.tagName === 'BUTTON') return;
-          downX = e.clientX; downY = e.clientY; downPointerId = e.pointerId;
-          longPressTimer = setTimeout(() => {
-            longPressTimer = null;
-            document.documentElement.setPointerCapture(downPointerId);
-            const sr = cell.getBoundingClientRect();
-            startDrag(item, container, r, c, downX, downY,
-              { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 },
-              () => {
-                const idx = group.items.indexOf(item);
-                if (idx !== -1) group.items.splice(idx, 1);
-                if (group.items.length === 0) container.slots[r][c] = null;
-              });
-          }, 380);
-        });
-
-        cell.addEventListener('pointermove', e => {
-          if (!longPressTimer) return;
-          if ((e.clientX - downX) ** 2 + (e.clientY - downY) ** 2 > 64) {
-            clearTimeout(longPressTimer); longPressTimer = null;
-          }
-        });
-
-        const cancelLong = () => {
-          if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-        };
-        cell.addEventListener('pointerup',     cancelLong);
-        cell.addEventListener('pointercancel', cancelLong);
-
-      } else {
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'pack-cell-input';
-        input.placeholder = '—';
-        input.autocomplete = 'off';
-        input.spellcheck = false;
-
-        input.addEventListener('focus', () => {
-          acContainer = container; acRow = r; acCol = c; acInput = input;
-          acPackableOnly = true;
-          updateDropdown(input.value);
-        });
-
-        input.addEventListener('blur', () => {
-          if (ignoreNextBlur) { ignoreNextBlur = false; return; }
-          input.value = '';
-          closeDropdown();
-        });
-
-        input.addEventListener('input', () => updateDropdown(input.value));
-
-        input.addEventListener('keydown', e => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            const val = input.value.trim();
-            if (val) commitSlot(val, container, r, c);
-            else closeDropdown();
-          } else if (e.key === 'Escape') {
-            input.value = '';
-            closeDropdown();
-            input.blur();
-          }
-        });
-
-        cell.appendChild(input);
-      }
-
-      wrap.appendChild(cell);
-    }
-
-    return wrap;
-  }
 
   // ── SLOT MANAGEMENT ──────────────────────────────────────────────────────
   function commitSlot(name, container, r, c) {
     ignoreNextBlur = true;
-    const rawLib  = getLibraryItem(name);
-    // Players get a custom item if they type the name of a hidden library item
-    const libItem = (rawLib && rawLib.hidden && !window._isDM) ? null : rawLib;
+    const libItem = getLibraryItem(name);
     const canonName = libItem ? libItem.name : name;
     const row = container.slots[r];
     const existing = row[c];
 
-    const sameItem = existing && !existing.packableGroup && existing.name === canonName;
+    const sameItem = existing && existing.name === canonName;
     const variables = sameItem
       ? existing.variables
       : (libItem ? JSON.parse(JSON.stringify(libItem.variables || {}))
@@ -480,58 +392,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
         description: sameItem ? (existing.description || '') : '',
       }),
     };
-
-    // Packable items go into a packable group (up to 4 per slot)
-    if (isPackable(slotData)) {
-      let finalR = r, finalC = c, finalIdx = 0;
-
-      if (existing && existing.packableGroup) {
-        if (existing.items.length < 4) {
-          finalIdx = existing.items.length;
-          existing.items.push(slotData);
-        } else {
-          closeDropdown(); render(); return;
-        }
-      } else if (!existing) {
-        row[c] = { packableGroup: true, items: [slotData] };
-        finalIdx = 0;
-      } else {
-        // Target slot occupied; find a packable group with room, then an empty slot
-        let placed = false;
-        outer: for (let ri = 0; ri < container.slots.length; ri++) {
-          for (let ci = 0; ci < 2; ci++) {
-            const s = container.slots[ri][ci];
-            if (s && s.packableGroup && s.items.length < 4) {
-              finalR = ri; finalC = ci; finalIdx = s.items.length;
-              s.items.push(slotData); placed = true; break outer;
-            }
-          }
-        }
-        if (!placed) {
-          const empty = findEmptySlot(container, -1);
-          if (empty) {
-            finalR = empty.r; finalC = empty.c; finalIdx = 0;
-            container.slots[empty.r][empty.c] = { packableGroup: true, items: [slotData] };
-          }
-        }
-      }
-
-      closeDropdown();
-      render();
-      showInspector(slotData, container, finalR, finalC, finalIdx);
-      return;
-    }
-
-    // Non-packable typed into a packable group slot — add it in with a warning
-    if (existing && existing.packableGroup) {
-      slotData.conflict = true;
-      slotData.conflictMsg = 'This item is too large for a packable slot.';
-      existing.items.push(slotData);
-      closeDropdown();
-      render();
-      showInspector(slotData, container, r, c, existing.items.length - 1);
-      return;
-    }
 
     if (isSlotBulky(slotData)) {
       const otherCol = 1 - c;
@@ -605,8 +465,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     if (!query) { closeDropdown(); return; }
 
     let matches = ITEM_LIBRARY.filter(i => i.name.toLowerCase().includes(query));
-    if (acPackableOnly) matches = matches.filter(i => i.bulk.id === 'packable');
-    if (!window._isDM) matches = matches.filter(i => !i.dmOnly && !i.hidden);
+    matches = matches.filter(i => !i.hidden);
+    if (!window._isDM) matches = matches.filter(i => !i.dmOnly);
     matches = matches.slice(0, 10);
     if (!matches.length) { closeDropdown(); return; }
 
@@ -649,7 +509,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   }
 
   function closeDropdown() {
-    acPackableOnly = false;
     dropdownEl.hidden = true;
     dropdownEl.innerHTML = '';
   }
@@ -657,101 +516,107 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   // ── INSPECTOR ────────────────────────────────────────────────────────────
   function showInspector(slotData, container, r, c, packIdx) {
     const lib = getLibraryItem(slotData.name);
+    const isWeapon = !!(lib && lib.description && lib.description.includes('Weapon'));
+
+    // ── Name ──
     document.getElementById('insp-name').textContent = slotData.name;
 
-    const warnEl = document.getElementById('insp-warn');
-    if (slotData.conflict) {
-      warnEl.textContent = '⚠ ' + (slotData.conflictMsg || 'This item is in a conflicting slot.');
-      warnEl.hidden = false;
-    } else {
-      warnEl.hidden = true;
+    // ── Inline numeric vars (count / charges) next to the name ──
+    const inlineEl = document.getElementById('insp-inline-vars');
+    inlineEl.innerHTML = '';
+    for (const [key, meta] of Object.entries(slotData.variables || {})) {
+      if (meta.control !== 'plusminus' && meta.control !== 'both') continue;
+      const canStep = true;
+      const wrap = document.createElement('div');
+      wrap.className = 'insp-inline-var';
+      wrap.innerHTML = `
+        <span class="insp-inline-label">${key}</span>
+        <button class="insp-btn-sm" data-k="${key}" data-d="-1">−</button>
+        <input class="insp-num-sm" type="number" value="${meta.value}" data-k="${key}"
+          ${typeof meta.min === 'number' ? `min="${meta.min}"` : ''}
+          ${typeof meta.max === 'number' ? `max="${meta.max}"` : ''} />
+        <button class="insp-btn-sm" data-k="${key}" data-d="1">+</button>
+      `;
+      inlineEl.appendChild(wrap);
     }
+    inlineEl.querySelectorAll('.insp-btn-sm').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const m = slotData.variables[btn.dataset.k];
+        let v = m.value + parseInt(btn.dataset.d);
+        if (typeof m.min === 'number') v = Math.max(m.min, v);
+        if (typeof m.max === 'number') v = Math.min(m.max, v);
+        m.value = v;
+        inlineEl.querySelector(`.insp-num-sm[data-k="${btn.dataset.k}"]`).value = v;
+        render();
+      });
+    });
+    inlineEl.querySelectorAll('.insp-num-sm').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const m = slotData.variables[inp.dataset.k];
+        let v = parseInt(inp.value);
+        if (isNaN(v)) return;
+        if (typeof m.min === 'number') v = Math.max(m.min, v);
+        if (typeof m.max === 'number') v = Math.min(m.max, v);
+        m.value = v;
+        render();
+      });
+      inp.addEventListener('blur', () => { inp.value = slotData.variables[inp.dataset.k].value; });
+    });
 
-    const descP    = document.getElementById('insp-desc');
+    // ── Warning ──
+    const warnEl = document.getElementById('insp-warn');
+    warnEl.hidden = !slotData.conflict;
+    if (slotData.conflict) warnEl.textContent = '⚠ ' + (slotData.conflictMsg || 'This item is in a conflicting slot.');
+
+    // ── Description ──
+    const descP = document.getElementById('insp-desc');
     const descEdit = document.getElementById('insp-desc-edit');
     if (slotData.custom) {
-      descP.hidden = true;
-      descEdit.hidden = false;
+      descP.hidden = true; descEdit.hidden = false;
       descEdit.value = slotData.description || '';
       descEdit.oninput = () => { slotData.description = descEdit.value; };
     } else {
-      descP.hidden = false;
-      descEdit.hidden = true;
+      descP.hidden = false; descEdit.hidden = true;
       descP.innerHTML = lib ? lib.description : '';
     }
 
+    // ── Cost ──
     const costEl = document.getElementById('insp-cost');
-    if (lib && lib.cost) {
-      costEl.textContent = lib.cost;
-      costEl.hidden = false;
-    } else {
-      costEl.hidden = true;
-    }
+    costEl.hidden = !(lib && lib.cost);
+    if (lib && lib.cost) costEl.textContent = lib.cost;
 
-    document.getElementById('insp-remove').onclick = () => {
-      if (typeof packIdx === 'number') {
-        const group = container.slots[r][c];
-        if (group && group.packableGroup) {
-          group.items.splice(packIdx, 1);
-          if (group.items.length === 0) container.slots[r][c] = null;
-          render(); hideInspector();
-        }
-      } else {
-        clearSlot(container, r, c);
-      }
-    };
+    // ── Remove ──
+    document.getElementById('insp-remove').onclick = () => { clearSlot(container, r, c); };
 
-    // Size selector — custom items only
-    const sizeEl = document.getElementById('insp-size');
+    // ── Compact props row ──
+    const propsEl = document.getElementById('insp-props');
+    propsEl.innerHTML = '';
+
+    // Bulk chips — custom items only
     if (slotData.custom) {
-      sizeEl.hidden = false;
-      const currentId = slotData.bulk ? slotData.bulk.id : 'stock';
-      sizeEl.querySelectorAll('.size-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.bulk === currentId);
+      const curBulk = slotData.bulk ? slotData.bulk.id : 'stock';
+      [['stock','Stock'], ['packable','Pack'], ['bulky','Bulky']].forEach(([bid, label]) => {
+        const btn = document.createElement('button');
+        btn.className = 'prop-chip' + (bid === curBulk ? ' active' : '');
+        btn.textContent = label;
         btn.onclick = () => {
-          const newBulk = Bulk[btn.dataset.bulk.toUpperCase()] || Bulk.STOCK;
-          if (typeof packIdx === 'number') {
-            // Extract from packable group, re-place with new bulk
-            const group = container.slots[r][c];
-            if (group && group.packableGroup) {
-              group.items.splice(packIdx, 1);
-              if (group.items.length === 0) container.slots[r][c] = null;
-            }
-            slotData.bulk = newBulk;
-            placeSlotData(slotData, container, r, c);
-            hideInspector();
-          } else {
-            const row = container.slots[r];
-            if (isSlotBulky(slotData) && !slotData.conflict && c === 0 && row[1] === null) {
-              row[1] = null;
-            }
-            row[c] = null;
-            slotData.bulk = newBulk;
-            placeSlotData(slotData, container, r, c);
-            showInspector(slotData, container, r, c);
-          }
+          const newBulk = Bulk[bid.toUpperCase()] || Bulk.STOCK;
+          container.slots[r][c] = null;
+          slotData.bulk = newBulk;
+          placeSlotData(slotData, container, r, c);
+          showInspector(slotData, container, r, c);
         };
+        propsEl.appendChild(btn);
       });
-    } else {
-      sizeEl.hidden = true;
     }
 
-    // Container toggle — custom non-packable items only
-    const containerSectionEl = document.getElementById('insp-container-section');
-    if (slotData.custom && !isPackable(slotData)) {
-      containerSectionEl.hidden = false;
-      const toggleBtn  = document.getElementById('insp-container-btn');
-      const rowsRowEl  = document.getElementById('insp-container-rows-row');
-      const rowsInput  = document.getElementById('insp-container-rows');
-
-      toggleBtn.classList.toggle('active', !!slotData.isContainer);
-      toggleBtn.textContent = slotData.isContainer ? 'On' : 'Off';
-      rowsRowEl.hidden = !slotData.isContainer;
-      rowsInput.value  = slotData.containerRows || 2;
-
-      toggleBtn.onclick = () => {
+    // Container chip — custom items only
+    if (slotData.custom) {
+      const chip = document.createElement('button');
+      chip.className = 'prop-chip' + (slotData.isContainer ? ' active' : '');
+      chip.textContent = 'Container';
+      chip.onclick = () => {
         if (slotData.isContainer) {
-          // Turn container off
           if (slotData.containerId) {
             const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
             if (linked && containerHasItems(linked)) {
@@ -762,15 +627,53 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
           }
           slotData.isContainer = false;
         } else {
-          // Turn container on
           slotData.isContainer = true;
           slotData.containerRows = slotData.containerRows || 2;
           if (!slotData.containerId) createLinkedContainer(slotData, container.id, r, c);
         }
-        render();
-        showInspector(slotData, container, r, c);
+        render(); showInspector(slotData, container, r, c);
       };
+      propsEl.appendChild(chip);
+    }
 
+    // Material chips — weapon items
+    if (isWeapon || (slotData.variables && slotData.variables.weapon)) {
+      [['silvered','Silvered'], ['mithral','Mithral'], ['adamantine','Adamantine']].forEach(([mat, label]) => {
+        const btn = document.createElement('button');
+        const isActive = slotData.material === mat;
+        btn.className = 'prop-chip' + (isActive ? ` active-${mat}` : '');
+        btn.textContent = label;
+        btn.onclick = () => {
+          slotData.material = slotData.material === mat ? null : mat;
+          render(); showInspector(slotData, container, r, c, packIdx);
+        };
+        propsEl.appendChild(btn);
+      });
+    }
+
+    // Weapon select chip — items with a weapon variable
+    const weaponMeta = slotData.variables && slotData.variables.weapon;
+    if (weaponMeta && weaponMeta.control === 'select') {
+      const sel = document.createElement('select');
+      sel.className = 'insp-select';
+      (weaponMeta.options || []).forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt; o.textContent = opt;
+        if (opt === weaponMeta.value) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => { slotData.variables.weapon.value = sel.value; render(); });
+      propsEl.appendChild(sel);
+    }
+
+    propsEl.hidden = propsEl.children.length === 0;
+
+    // Container rows input (only when container chip is active)
+    const rowsRowEl = document.getElementById('insp-container-rows-row');
+    const rowsInput = document.getElementById('insp-container-rows');
+    rowsRowEl.hidden = !slotData.isContainer;
+    if (slotData.isContainer) {
+      rowsInput.value = slotData.containerRows || 2;
       rowsInput.onchange = () => {
         slotData.containerRows = Math.max(1, Math.min(20, parseInt(rowsInput.value) || 2));
         if (slotData.containerId) {
@@ -783,113 +686,46 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
               if (last[0] === null && last[1] === null) linked.slots.pop();
               else break;
             }
-            linked.rows = linked.slots.length;
-            render();
+            linked.rows = linked.slots.length; render();
           }
         }
       };
-    } else {
-      containerSectionEl.hidden = true;
     }
 
-    // Hidden toggle — DM only
-    const hiddenSectionEl = document.getElementById('insp-hidden-section');
-    const hiddenBtn       = document.getElementById('insp-hidden-btn');
-    if (window._isDM) {
-      hiddenSectionEl.hidden = false;
-      hiddenBtn.classList.toggle('active', !!slotData.hidden);
-      hiddenBtn.textContent = slotData.hidden ? 'On' : 'Off';
-      hiddenBtn.onclick = () => {
-        slotData.hidden = !slotData.hidden;
-        hiddenBtn.classList.toggle('active', slotData.hidden);
-        hiddenBtn.textContent = slotData.hidden ? 'On' : 'Off';
-        render();
-      };
-    } else {
-      hiddenSectionEl.hidden = true;
-    }
-
+    // ── Remaining variables (non-numeric, non-weapon select) ──
     const varsEl = document.getElementById('insp-vars');
     varsEl.innerHTML = '';
-
     for (const [key, meta] of Object.entries(slotData.variables || {})) {
+      // Numeric → shown inline; weapon select → shown in props row
+      if (meta.control === 'plusminus' || meta.control === 'both') continue;
+      if (key === 'weapon' && meta.control === 'select') continue;
+
       const div = document.createElement('div');
       div.className = 'insp-var';
-
-      if (meta.control === 'select') {
-        const label = document.createElement('span');
-        label.className = 'insp-var-label';
-        label.textContent = key;
-        const sel = document.createElement('select');
-        sel.className = 'insp-select';
-        sel.dataset.k = key;
-        (meta.options || []).forEach(opt => {
-          const o = document.createElement('option');
-          o.value = opt;
-          o.textContent = opt;
-          if (opt === meta.value) o.selected = true;
-          sel.appendChild(o);
-        });
-        sel.addEventListener('change', () => {
-          slotData.variables[key].value = sel.value;
-          render();
-        });
-        div.appendChild(label);
-        div.appendChild(sel);
-      } else {
-        const canStep = meta.control === 'plusminus' || meta.control === 'both';
-        div.innerHTML = `
-          <span class="insp-var-label">${key}</span>
-          <div class="insp-ctrl">
-            ${canStep ? `<button class="insp-btn" data-k="${key}" data-d="-1">−</button>` : ''}
-            <input class="insp-num" type="number" value="${meta.value}" data-k="${key}"
-              ${typeof meta.min === 'number' ? `min="${meta.min}"` : ''}
-              ${typeof meta.max === 'number' ? `max="${meta.max}"` : ''} />
-            ${canStep ? `<button class="insp-btn" data-k="${key}" data-d="1">+</button>` : ''}
-          </div>
-        `;
-      }
-
+      const label = document.createElement('span');
+      label.className = 'insp-var-label';
+      label.textContent = key;
+      const sel = document.createElement('select');
+      sel.className = 'insp-select';
+      (meta.options || []).forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt; o.textContent = opt;
+        if (opt === meta.value) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => { slotData.variables[key].value = sel.value; render(); });
+      div.appendChild(label); div.appendChild(sel);
       varsEl.appendChild(div);
     }
 
-    varsEl.querySelectorAll('.insp-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const m = slotData.variables[btn.dataset.k];
-        let v = m.value + parseInt(btn.dataset.d);
-        if (typeof m.min === 'number') v = Math.max(m.min, v);
-        if (typeof m.max === 'number') v = Math.min(m.max, v);
-        m.value = v;
-        const inp = btn.closest('.insp-ctrl').querySelector('.insp-num');
-        if (inp) inp.value = v;
-        render();
-      });
-    });
-
-    varsEl.querySelectorAll('.insp-num').forEach(inp => {
-      inp.addEventListener('input', () => {
-        const m = slotData.variables[inp.dataset.k];
-        let v = parseInt(inp.value);
-        if (isNaN(v)) return;
-        if (typeof m.min === 'number') v = Math.max(m.min, v);
-        if (typeof m.max === 'number') v = Math.min(m.max, v);
-        m.value = v;
-        render();
-      });
-      inp.addEventListener('blur', () => {
-        const m = slotData.variables[inp.dataset.k];
-        inp.value = m.value;
-      });
-    });
-
-    inspectorEl.hidden = false;
     inspectorEl.classList.remove('inspector-collapsed');
     document.getElementById('insp-toggle').textContent = '∧';
   }
 
   function hideInspector() {
-    inspectorEl.hidden = true;
-    inspectorEl.classList.remove('inspector-collapsed');
+    inspectorEl.classList.add('inspector-collapsed');
+    document.getElementById('insp-toggle').textContent = '∨';
+    document.getElementById('insp-name').textContent = '';
   }
 
   document.getElementById('insp-toggle').addEventListener('click', () => {
@@ -898,13 +734,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   });
 
   document.addEventListener('pointerdown', e => {
-    if (!inspectorEl.hidden && !inspectorEl.contains(e.target) && !e.target.classList.contains('slot-input')) {
-      if (inspectorEl.classList.contains('inspector-collapsed')) {
-        // Tapping outside a collapsed inspector fully closes it
-        hideInspector();
-      } else {
-        hideInspector();
-      }
+    if (!inspectorEl.classList.contains('inspector-collapsed')
+        && !inspectorEl.contains(e.target)
+        && !e.target.closest('.slot')) {
+      hideInspector();
     }
   });
 
@@ -986,16 +819,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       }
 
       const targetItem = targetContainer.slots[tR][tC];
-      const draggingPackable = isPackable(slotData);
-      const targetIsGroup = targetItem && targetItem.packableGroup;
-      const srcSlot = srcContainer.slots[srcR][srcC];
-      const srcIsGroup = srcSlot && srcSlot.packableGroup;
-
-      // Packable from a group dropped on an occupied non-group slot — can't swap, leave in place
-      if (targetItem && !targetIsGroup && !draggingPackable && srcIsGroup) {
-        render();
-        return;
-      }
 
       // Capture dest rect before render() rebuilds the DOM
       const destRect = wrap.getBoundingClientRect();
@@ -1004,10 +827,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       // Commit: remove item from source now that we know the drop is valid
       removeFromSource();
 
-      if (targetIsGroup && !draggingPackable) {
-        targetContainer.slots[tR][tC] = null;
-        srcContainer.slots[srcR][srcC] = targetItem;
-      } else if (targetItem && !targetIsGroup && !draggingPackable) {
+      if (targetItem) {
         // Swap — fly both items between their old and new slots
         const swapName = targetItem.name;
         targetContainer.slots[tR][tC] = null;
@@ -1073,42 +893,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     slotData.conflict = false;
     const row = container.slots[r];
     let finalC = c;
-
-    if (isPackable(slotData)) {
-      const existing = row[c];
-      if (existing && existing.packableGroup && existing.items.length < 4) {
-        existing.items.push(slotData);
-      } else if (!existing) {
-        row[c] = { packableGroup: true, items: [slotData] };
-      } else {
-        let placed = false;
-        outer: for (let ri = 0; ri < container.slots.length; ri++) {
-          for (let ci = 0; ci < 2; ci++) {
-            const s = container.slots[ri][ci];
-            if (s && s.packableGroup && s.items.length < 4) {
-              s.items.push(slotData); placed = true; break outer;
-            }
-          }
-        }
-        if (!placed) {
-          const empty = findEmptySlot(container, -1);
-          if (empty) container.slots[empty.r][empty.c] = { packableGroup: true, items: [slotData] };
-        }
-      }
-      render();
-      return;
-    }
-
-    // Non-packable landing on a packable group — rejoin rather than overwrite
-    if (row[c] && row[c].packableGroup) {
-      if (!slotData.conflict) {
-        slotData.conflict = true;
-        slotData.conflictMsg = 'This item is too large for a packable slot.';
-      }
-      row[c].items.push(slotData);
-      render();
-      return;
-    }
 
     if (isSlotBulky(slotData)) {
       const otherCol = 1 - c;
@@ -1188,7 +972,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
         containers:    state.containers,
       }));
     },
-    checkIsPackable(item) { return isPackable(item); },
+    flattenGroups(containers) { flattenPackableGroups(containers); },
     cancelDrag() {
       if (!dragState) return;
       dragScrollVel = 0;
@@ -1211,6 +995,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       state.carryCapacity = newState.carryCapacity || '';
       state.containers    = (newState.containers && newState.containers.length)
                             ? newState.containers : createDefaultContainers();
+      flattenPackableGroups(state.containers);
       document.getElementById('char-name').value  = state.charName;
       document.getElementById('char-carry').value = state.carryCapacity;
       render();
@@ -1236,34 +1021,17 @@ window.CharacterManager = ({ auth, database }) => {
     onCrossCharDrop:  handleCrossCharDrop,
   });
 
-  // ── AUTH ────────────────────────────────────────────────────────────────
-  // ── AUTH ────────────────────────────────────────────────────────────────
-  function showLoginError(msg) {
-    const el = document.getElementById('login-error');
-    el.textContent = msg;
-    el.hidden = false;
-  }
-
-  // Email / password sign-in
-  document.getElementById('email-sign-in-btn').addEventListener('click', () => {
-    const email    = document.getElementById('login-email').value.trim();
-    const password = document.getElementById('login-password').value;
-    if (!email || !password) { showLoginError('Enter email and password.'); return; }
-    document.getElementById('login-error').hidden = true;
-    const btn = document.getElementById('email-sign-in-btn');
-    btn.textContent = 'Signing in…';
-    btn.disabled = true;
-    auth.signInWithEmailAndPassword(email, password)
-      .catch(err => {
-        showLoginError(err.message);
-        btn.textContent = 'Sign in';
-        btn.disabled = false;
-      });
+  // ── CLOSE / LOGOUT ──────────────────────────────────────────────────────
+  document.getElementById('inv-close-btn').addEventListener('click', () => {
+    window.parent.postMessage({ type: 'closeInventory' }, '*');
   });
 
-  // Allow pressing Enter in password field to submit
-  document.getElementById('login-password').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('email-sign-in-btn').click();
+  // Receive sign-in credentials forwarded from the parent page
+  window.addEventListener('message', e => {
+    if (e.data && e.data.type === 'signIn' && !auth.currentUser) {
+      auth.signInWithEmailAndPassword(e.data.email, e.data.password)
+        .catch(() => {});
+    }
   });
 
   // ── ROLE (DM / PLAYER) ──────────────────────────────────────────────────
@@ -1286,16 +1054,11 @@ window.CharacterManager = ({ auth, database }) => {
   auth.onAuthStateChanged(user => {
     currentUser = user;
     if (user) {
-      document.getElementById('login-screen').hidden = true;
-      document.getElementById('app').hidden = false;
-      // Load this user's role from Firebase, defaulting to player
       database.ref(`/inventory_roles/${user.uid}`).once('value', snap => {
         applyRole(snap.val() || 'player');
       });
       subscribeToChars();
     } else {
-      document.getElementById('login-screen').hidden = false;
-      document.getElementById('app').hidden = true;
       window._isDM  = false;
       currentCharId = null;
       allChars      = {};
@@ -1330,7 +1093,7 @@ window.CharacterManager = ({ auth, database }) => {
         } else {
           // Nothing pending locally — apply whatever Firebase has (another user's edit)
           suppressSave = true;
-          inv.loadState(allChars[currentCharId].state);
+          try { inv.loadState(allChars[currentCharId].state); } catch (e) { console.warn('loadState error:', e); }
           suppressSave = false;
         }
       }
@@ -1353,6 +1116,7 @@ window.CharacterManager = ({ auth, database }) => {
       const s = JSON.parse(str || 'null');
       if (!s) return blankState();
       if (!s.containers || !s.containers.length) s.containers = defaultContainers();
+      inv.flattenGroups(s.containers);
       return s;
     } catch { return blankState(); }
   }
@@ -1375,7 +1139,7 @@ window.CharacterManager = ({ auth, database }) => {
     dirty = false;
     currentCharId = charId;
     suppressSave = true;
-    inv.loadState(allChars[charId].state);
+    try { inv.loadState(allChars[charId].state); } catch (e) { console.warn('loadState error:', e); }
     suppressSave = false;
     renderTabs();
   }
@@ -1409,7 +1173,7 @@ window.CharacterManager = ({ auth, database }) => {
     };
     currentCharId = newId;
     suppressSave = true;
-    inv.loadState(blank);
+    try { inv.loadState(blank); } catch (e) { console.warn('loadState error:', e); }
     suppressSave = false;
     renderTabs();
   }
@@ -1455,43 +1219,13 @@ window.CharacterManager = ({ auth, database }) => {
     if (!equipped) return;
 
     let placed = false;
-
-    if (inv.checkIsPackable(item)) {
-      // Packable items go into a packableGroup (up to 4 per slot)
-      for (const row of equipped.slots) {
-        for (let c = 0; c < 2; c++) {
-          if (row[c] && row[c].packableGroup && row[c].items.length < 4) {
-            row[c].items.push(item); placed = true; break;
-          }
-        }
-        if (placed) break;
-      }
-      if (!placed) {
-        // Find an empty cell for a new packableGroup
-        for (const row of equipped.slots) {
-          for (let c = 0; c < 2; c++) {
-            if (!row[c]) {
-              row[c] = { packableGroup: true, items: [item] };
-              placed = true; break;
-            }
-          }
-          if (placed) break;
-        }
-      }
-      if (!placed) {
-        equipped.slots.push([{ packableGroup: true, items: [item] }, null]);
-        equipped.rows++;
-      }
-    } else {
-      // Non-packable items go directly into a slot
-      for (const row of equipped.slots) {
-        if (!row[0])                    { row[0] = item; placed = true; break; }
-        if (!row[1] && !isBulky(item))  { row[1] = item; placed = true; break; }
-      }
-      if (!placed) {
-        equipped.slots.push([item, null]);
-        equipped.rows++;
-      }
+    for (const row of equipped.slots) {
+      if (!row[0])                   { row[0] = item; placed = true; break; }
+      if (!row[1] && !isBulky(item)) { row[1] = item; placed = true; break; }
+    }
+    if (!placed) {
+      equipped.slots.push([item, null]);
+      equipped.rows++;
     }
 
     allChars[targetCharId].state = targetState;
@@ -1508,7 +1242,7 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   function isBulky(item) {
-    if (!item || item.packableGroup) return false;
+    if (!item) return false;
     const id = item.bulk?.id || 'stock';
     return id === 'bulky' || id === 'verybulky';
   }

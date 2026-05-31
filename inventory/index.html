@@ -5,25 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Inventory</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
 
-  <!-- ── LOGIN SCREEN ─────────────────────────────────────────── -->
-  <div id="login-screen">
-    <div id="login-card">
-      <h2>Inventory</h2>
-      <input type="email"    id="login-email"    placeholder="Email"    autocomplete="email"            value="guest@bytespritegames.com" />
-      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" value="nox999" />
-      <button id="email-sign-in-btn">Sign in</button>
-      <p id="login-error" hidden></p>
-    </div>
-  </div>
-
   <!-- ── MAIN APP ──────────────────────────────────────────────── -->
-  <div id="app" hidden>
+  <div id="app">
 
     <!-- Character tabs -->
     <div id="char-tab-bar">
+      <div id="tab-bar-left">
+        <button id="inv-close-btn" title="Close inventory"><i class="fa-solid fa-scroll"></i></button>
+      </div>
       <div id="char-tabs-scroll">
         <div id="char-tabs"></div>
       </div>
@@ -57,37 +50,24 @@
 
     </div><!-- /inv-scroll -->
 
-    <div id="inspector" hidden>
+    <div id="inspector" class="inspector-collapsed">
       <div id="insp-header">
-        <h2 id="insp-name"></h2>
-        <button id="insp-toggle">∧</button>
+        <div id="insp-name-row">
+          <h2 id="insp-name"></h2>
+          <div id="insp-inline-vars"></div>
+        </div>
+        <button id="insp-toggle">∨</button>
       </div>
       <p id="insp-warn" hidden></p>
       <p id="insp-desc"></p>
       <textarea id="insp-desc-edit" hidden placeholder="Description..."></textarea>
       <p id="insp-cost" hidden></p>
-      <div id="insp-size" hidden>
-        <div class="insp-size-row">
-          <button class="size-btn" data-bulk="stock">Stock</button>
-          <button class="size-btn" data-bulk="packable">Packable</button>
-          <button class="size-btn" data-bulk="bulky">Bulky</button>
-        </div>
-      </div>
-      <div id="insp-container-section" hidden>
-        <div class="insp-toggle-row">
-          <span class="insp-toggle-label">Container</span>
-          <button id="insp-container-btn" class="toggle-btn">Off</button>
-        </div>
-        <div id="insp-container-rows-row" hidden class="insp-toggle-row">
-          <span class="insp-toggle-label">Rows</span>
-          <input type="number" id="insp-container-rows" value="2" min="1" max="20" class="insp-num" style="width:60px" />
-        </div>
-      </div>
-      <div id="insp-hidden-section" hidden>
-        <div class="insp-toggle-row">
-          <span class="insp-toggle-label">Hidden from players</span>
-          <button id="insp-hidden-btn" class="toggle-btn">Off</button>
-        </div>
+      <!-- Compact props: bulk + container + materials + weapon select, built by JS -->
+      <div id="insp-props" hidden></div>
+      <!-- Container rows input, shown only when container is active -->
+      <div id="insp-container-rows-row" hidden class="insp-toggle-row">
+        <span class="insp-toggle-label">Container rows</span>
+        <input type="number" id="insp-container-rows" value="2" min="1" max="20" class="insp-num" style="width:60px" />
       </div>
       <div id="insp-vars"></div>
       <button id="insp-remove">Remove item</button>

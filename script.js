@@ -973,10 +973,27 @@ invBtn.addEventListener("click", () => {
     const open = invOverlay.classList.toggle("open");
     invBtn.classList.toggle("active", open);
     controls.classList.toggle("inv-open", open);
+    if (open) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const email    = urlParams.get('email')    || loginEmail.value.trim();
+        const password = urlParams.get('password') || loginPassword.value;
+        if (email && password) {
+            document.getElementById('inv-frame')
+                ?.contentWindow?.postMessage({ type: 'signIn', email, password }, '*');
+        }
+    }
 });
 
 document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && invOverlay.classList.contains("open")) {
+        invOverlay.classList.remove("open");
+        invBtn.classList.remove("active");
+        controls.classList.remove("inv-open");
+    }
+});
+
+window.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "closeInventory") {
         invOverlay.classList.remove("open");
         invBtn.classList.remove("active");
         controls.classList.remove("inv-open");

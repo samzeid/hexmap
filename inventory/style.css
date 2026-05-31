@@ -12,7 +12,6 @@
   --muted:        rgba(255,255,255,0.4);
   --radius:       14px;
   --slot-h:       80px;
-  --pack-cell-h:  40px;
 }
 
 body {
@@ -42,103 +41,6 @@ input, textarea, select { font-size: max(16px, 1em); }
   padding-bottom: 280px;
 }
 
-/* ── LOGIN SCREEN ────────────────────────────────────────────── */
-#login-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-}
-
-#login-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 18px;
-  padding: 40px 32px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  width: min(340px, calc(100vw - 48px));
-}
-
-#login-card h2 {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-
-#login-email, #login-password {
-  width: 100%;
-  background: rgba(255,255,255,0.07);
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 16px;
-  padding: 13px 12px;
-  outline: none;
-}
-
-#login-email:focus, #login-password:focus {
-  border-color: rgba(255,255,255,0.25);
-}
-
-#email-sign-in-btn {
-  width: 100%;
-  min-height: 50px;
-  background: rgba(255,255,255,0.14);
-  color: var(--text);
-  border: none;
-  border-radius: 10px;
-  padding: 14px 20px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-#email-sign-in-btn:active { background: rgba(255,255,255,0.22); }
-
-#login-error {
-  font-size: 14px;
-  color: #ff7777;
-  text-align: left;
-}
-
-.login-divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.login-divider::before,
-.login-divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--card-border);
-}
-
-#google-sign-in-btn {
-  min-height: 50px;
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--card-border);
-  border-radius: 10px;
-  padding: 14px 20px;
-  font-size: 16px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-#google-sign-in-btn:active { background: rgba(255,255,255,0.06); }
-
 /* ── AUTH BAR ────────────────────────────────────────────────── */
 
 /* ── CHARACTER TAB BAR ───────────────────────────────────────── */
@@ -149,6 +51,27 @@ input, textarea, select { font-size: max(16px, 1em); }
   border-bottom: 1px solid var(--card-border);
   flex-shrink: 0;
 }
+
+#tab-bar-left {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-right: 1px solid var(--card-border);
+}
+
+#inv-close-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  min-height: 44px;
+  padding: 0 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#inv-close-btn:active { background: rgba(255,255,255,0.06); }
 
 #char-tabs-scroll {
   flex: 1;
@@ -311,7 +234,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 .char-field.grow { flex: 1; }
 
 .char-field label {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
@@ -322,7 +245,8 @@ input, textarea, select { font-size: max(16px, 1em); }
   border: 1px solid var(--card-border);
   border-radius: 8px;
   color: var(--text);
-  font-size: 16px;
+  font-size: 20px;
+  font-weight: 600;
   padding: 8px 10px;
   outline: none;
   width: 100%;
@@ -339,13 +263,13 @@ input, textarea, select { font-size: max(16px, 1em); }
   gap: 4px;
 }
 
-.carry-slash { color: var(--muted); font-size: 15px; }
+.carry-slash { color: var(--muted); font-size: 20px; }
 
 #carry-used {
-  font-size: 16px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--text);
-  min-width: 20px;
+  min-width: 24px;
   text-align: right;
   transition: color 0.2s;
 }
@@ -358,7 +282,7 @@ input, textarea, select { font-size: max(16px, 1em); }
   transition: background 0.3s, border-bottom-color 0.3s;
 }
 
-#char-carry { width: 48px; }
+#char-carry { width: 56px; }
 
 /* ── MAIN ────────────────────────────────────────────────────── */
 main {
@@ -501,19 +425,47 @@ main {
   color: transparent;
 }
 
+/* Filled slots: block direct tap — use the edit button to enter edit mode */
+.slot-input.slot-filled:not(.slot-editing) { pointer-events: none; }
+
 .slot-input.slot-filled:focus { color: var(--text); }
 .slot-input.slot-conflict:focus { color: #ff6060; }
 
 .slot-input:focus { background: rgba(255,255,255,0.05); }
 
+/* ── SLOT EDIT BUTTON ────────────────────────────────────────── */
+.slot-edit {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 100%;
+  background: none;
+  border: none;
+  border-right: 1px solid rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.22);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+
+.slot-edit:active { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.06); }
+
+/* Hide edit button and label while editing, let the raw input show */
+.slot-input:focus ~ .slot-edit  { display: none; }
+
 /* Label overlay — hidden when input is focused */
 .slot-label {
   position: absolute;
-  left: 16px;
+  left: 36px;
   right: 52px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 17px;
+  font-size: 19px;
   color: var(--text);
   pointer-events: none;
   user-select: none;
@@ -527,10 +479,6 @@ main {
 
 .slot-input:focus ~ .slot-label { display: none; }
 
-/* Hidden items — DM sees them dimmed */
-.slot-input.slot-hidden,
-.slot-input.slot-hidden ~ .slot-label { opacity: 0.35; }
-.pack-cell-hidden { opacity: 0.35; }
 
 .slot-conflict {
   border-left-color: rgba(255,80,80,0.7) !important;
@@ -724,17 +672,81 @@ main {
 #insp-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   margin-bottom: 10px;
+}
+
+#insp-name-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 #insp-name {
   font-size: 20px;
   font-weight: 700;
   line-height: 1.2;
-  flex: 1;
 }
+
+/* Inline count/charges stepper next to item name */
+#insp-inline-vars {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.insp-inline-var {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.insp-inline-label {
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: capitalize;
+  margin-right: 2px;
+}
+
+.insp-btn-sm {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  color: var(--text);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.insp-btn-sm:active { background: rgba(255,255,255,0.2); }
+
+.insp-num-sm {
+  width: 52px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  padding: 6px 4px;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.insp-num-sm::-webkit-inner-spin-button,
+.insp-num-sm::-webkit-outer-spin-button { -webkit-appearance: none; }
 
 #insp-toggle {
   background: rgba(255,255,255,0.1);
@@ -752,63 +764,71 @@ main {
   -webkit-tap-highlight-color: transparent;
 }
 
-#insp-size, #insp-container-section { margin-bottom: 12px; }
+/* Compact props row: bulk chips + container + materials + weapon select */
+#insp-props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  align-items: center;
+}
 
+.prop-chip {
+  padding: 7px 13px;
+  border-radius: 20px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
+}
+
+.prop-chip.active {
+  background: rgba(255,255,255,0.14);
+  border-color: rgba(255,255,255,0.35);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.prop-chip.active-silvered {
+  background: rgba(210,210,230,0.15);
+  border-color: rgba(210,210,230,0.4);
+  color: #c8c8e0;
+  font-weight: 600;
+}
+
+.prop-chip.active-mithral {
+  background: rgba(100,180,255,0.15);
+  border-color: rgba(100,180,255,0.4);
+  color: #80c8ff;
+  font-weight: 600;
+}
+
+.prop-chip.active-adamantine {
+  background: rgba(80,220,160,0.15);
+  border-color: rgba(80,220,160,0.4);
+  color: #60dba0;
+  font-weight: 600;
+}
+
+.prop-chip:active { opacity: 0.7; }
+
+/* Container rows row (shown below props when container is active) */
 .insp-toggle-row {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 6px 0;
+  margin-bottom: 8px;
 }
 
 .insp-toggle-label {
-  font-size: 16px;
+  font-size: 15px;
   color: var(--muted);
   flex: 1;
-}
-
-.toggle-btn {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
-  color: var(--muted);
-  font-size: 16px;
-  padding: 14px 20px;
-  min-height: 44px;
-  cursor: pointer;
-  min-width: 70px;
-}
-
-.toggle-btn.active {
-  background: rgba(180,120,255,0.2);
-  border-color: rgba(180,120,255,0.5);
-  color: rgba(200,160,255,0.95);
-  font-weight: 600;
-}
-
-.insp-size-row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.size-btn {
-  width: 100%;
-  min-height: 50px;
-  padding: 16px;
-  border-radius: 8px;
-  border: 1px solid var(--card-border);
-  background: transparent;
-  color: var(--muted);
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.size-btn.active {
-  background: rgba(255,255,255,0.14);
-  border-color: rgba(255,255,255,0.35);
-  color: var(--text);
-  font-weight: 600;
 }
 
 #insp-desc-edit {
@@ -913,81 +933,6 @@ main {
   font-size: 22px;
 }
 
-/* ── PACKABLE GROUP (2×2 grid, fits standard slot height) ────── */
-.slot-packable {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: var(--pack-cell-h) var(--pack-cell-h);
-  align-content: center;
-}
-
-.pack-cell {
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-  min-width: 0;
-}
-
-.pack-cell:nth-child(odd)           { border-right: 1px solid var(--slot-border); }
-.pack-cell:nth-child(1),
-.pack-cell:nth-child(2)             { border-bottom: 1px solid var(--slot-border); }
-
-.pack-cell-input {
-  width: 100%;
-  height: 100%;
-  background: transparent;
-  border: none;
-  color: var(--text);
-  font-size: 14px;
-  padding: 0 8px;
-  outline: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.pack-cell-input::placeholder { color: rgba(255,255,255,0.12); }
-.pack-cell-input:focus { background: rgba(255,255,255,0.05); }
-
-.pack-cell.pack-cell-filled {
-  cursor: pointer;
-  padding: 0 4px 0 8px;
-  gap: 4px;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.pack-cell.pack-cell-filled:active { background: rgba(255,255,255,0.04); }
-
-.pack-cell-name {
-  flex: 1;
-  font-size: 13px;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  pointer-events: none;
-}
-
-.pack-cell-name.pack-cell-conflict { color: #ff6060; }
-
-.pack-cell-remove {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: rgba(200, 50, 50, 0.75);
-  border: none;
-  color: white;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  opacity: 0.65;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.pack-cell-remove:active { opacity: 1; background: #cc2222; }
 
 /* ── DRAG ────────────────────────────────────────────────────── */
 .drag-ghost {

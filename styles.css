@@ -277,8 +277,7 @@ body {
   transition: max-width 0.3s ease, opacity 0.2s ease;
 }
 
-/* When inventory is open, fold the tools group away */
-#controls.inv-open #controls-tools {
-  max-width: 0;
-  opacity: 0;
+/* When inventory is open, hide the entire controls bar */
+#controls.inv-open {
+  display: none;
 }
