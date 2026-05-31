@@ -1,4 +1,4 @@
-window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
+window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenFromPlayer }) => {
 
   // ── STATE ──────────────────────────────────────────────────────────────
   function createDefaultContainers() {
@@ -14,12 +14,51 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   const Bulk           = window.Bulk;
   const ITEM_LIBRARY   = window.ITEM_LIBRARY;
   const WEAPON_OPTIONS = window.WEAPON_OPTIONS;
+  const ARMOR_OPTIONS    = window.ARMOR_OPTIONS;
+  const ELEMENT_OPTIONS  = window.ELEMENT_OPTIONS;
 
 
   // ── HELPERS ─────────────────────────────────────────────────────────────
   function getLibraryItem(name) {
     if (!name || typeof name !== 'string') return null;
     return ITEM_LIBRARY.find(i => i.name && i.name.toLowerCase() === name.trim().toLowerCase()) || null;
+  }
+
+  function getLibraryItemSection(name) {
+    let section = null;
+    for (const item of ITEM_LIBRARY) {
+      if (item._section) section = item._section;
+      if (item.name && item.name === name) return section;
+    }
+    return null;
+  }
+
+  function getEffectiveCategory(slotData) {
+    if (slotData.custom) {
+      return slotData.category || (slotData.isContainer ? 'container' : slotData.isWeapon ? 'weapon' : '');
+    }
+    // Derive from variables first (catches magical weapons/armor)
+    if (slotData.variables && slotData.variables.weapon) return 'weapon';
+    if (slotData.variables && slotData.variables.armor)  return 'armor';
+    // Check explicit category on the library item definition
+    const lib = getLibraryItem(slotData.name);
+    if (lib && lib.category) return lib.category;
+    // Fall back to section
+    const section = getLibraryItemSection(slotData.name);
+    if (section === 'Simple Weapons' || section === 'Martial Weapons' || section === 'Magical Weapons') return 'weapon';
+    if (section === 'Armor & Shields') return slotData.name === 'Shield' ? 'shield' : 'armor';
+    return null;
+  }
+
+  function computeDisplayName(slotData) {
+    let name = slotData.name || '';
+    const wv = slotData.variables && slotData.variables.weapon;
+    const av = slotData.variables && slotData.variables.armor;
+    const ev = slotData.variables && slotData.variables.element;
+    if (wv && wv.control === 'select' && wv.value) name = name.replace('Weapon', wv.value);
+    if (av && av.control === 'select' && av.value) name = name.replace('Armor', av.value);
+    if (ev && ev.control === 'select' && ev.value) name = name.replace('Elemental', ev.value);
+    return name;
   }
 
   function isNoCarry(slotData) {
@@ -79,6 +118,31 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     state.containers.push(linked);
   }
 
+  function updateCurrencyDisplay() {
+    const el = document.getElementById('coin-counter');
+    if (!el) return;
+    let pp = 0, gp = 0, sp = 0, cp = 0;
+    for (const container of state.containers) {
+      for (const row of container.slots) {
+        for (const slot of row) {
+          if (!slot || !slot.variables || !slot.variables.coins) continue;
+          const amt = slot.variables.coins.value || 0;
+          if      (slot.name === 'Platinum Pieces (PP)') pp += amt;
+          else if (slot.name === 'Gold Pieces (GP)')     gp += amt;
+          else if (slot.name === 'Silver Pieces (SP)')   sp += amt;
+          else if (slot.name === 'Copper Pieces (CP)')   cp += amt;
+        }
+      }
+    }
+    const parts = [];
+    if (pp > 0) parts.push(`<span class="coin-pp">${pp}pp</span>`);
+    if (gp > 0) parts.push(`<span class="coin-gp">${gp}gp</span>`);
+    if (sp > 0) parts.push(`<span class="coin-sp">${sp}sp</span>`);
+    if (cp > 0) parts.push(`<span class="coin-cp">${cp}cp</span>`);
+    el.innerHTML = parts.join('');
+    el.hidden = parts.length === 0;
+  }
+
   function updateCarryDisplay() {
     const used   = countCarry();
     const usedEl = document.getElementById('carry-used');
@@ -114,6 +178,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     return id === 'bulky' || id === 'verybulky';
   }
 
+  function isSlotPackable(slotData) {
+    if (!slotData) return false;
+    if (slotData._isPouch) return true;
+    const id = slotData.bulk ? slotData.bulk.id
+              : (getLibraryItem(slotData.name) || { bulk: Bulk.STOCK }).bulk.id;
+    return id === 'packable';
+  }
+
+  function packName(slotData) {
+    return (slotData && slotData.name) || '';
+  }
+
   // ── DOM REFS ────────────────────────────────────────────────────────────
   const containersEl = document.getElementById('containers');
   const dropdownEl   = document.getElementById('autocomplete-dropdown');
@@ -122,6 +198,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
   // Active autocomplete context
   let acContainer = null, acRow = -1, acCol = -1, acInput = null;
   let ignoreNextBlur = false;
+
+  // Tracks which item is currently shown in the inspector (key = containerId-r-c or shop-name)
+  let inspectorItemKey = null;
 
   // Drag state
   let dragState      = null;
@@ -163,12 +242,42 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     }
   }
 
+  function checkPouchDissolve() {
+    for (let i = state.containers.length - 1; i >= 0; i--) {
+      const c = state.containers[i];
+      if (c.name !== 'Pouch' || !c.linkedTo) continue;
+      const items = c.slots.flatMap(row => row).filter(Boolean);
+      if (items.length > 1) continue;
+      const { containerId, r } = c.linkedTo;
+      const parent = state.containers.find(p => p.id === containerId);
+      if (!parent) continue;
+      parent.slots[r][0] = items.length === 1 ? items[0] : null;
+      state.containers.splice(i, 1);
+    }
+  }
+
   function render() {
+    checkPouchDissolve();
     growEquipped();
     shrinkEquipped();
     containersEl.innerHTML = '';
     state.containers.forEach(c => containersEl.appendChild(buildCard(c)));
     updateCarryDisplay();
+    updateCurrencyDisplay();
+
+    // Refresh inspector name if panel is open for an inventory slot
+    if (inspectorItemKey && !inspectorItemKey.startsWith('shop-')
+        && !inspectorEl.classList.contains('inspector-collapsed')) {
+      const lastH = inspectorItemKey.lastIndexOf('-');
+      const prevH = inspectorItemKey.lastIndexOf('-', lastH - 1);
+      const cid = inspectorItemKey.substring(0, prevH);
+      const ir  = parseInt(inspectorItemKey.substring(prevH + 1, lastH));
+      const ic  = parseInt(inspectorItemKey.substring(lastH + 1));
+      const cnt = state.containers.find(c => c.id === cid);
+      const sd  = cnt && cnt.slots[ir] && cnt.slots[ir][ic];
+      if (sd) document.getElementById('insp-name').textContent = computeDisplayName(sd);
+    }
+
     if (onChange) onChange();
   }
 
@@ -177,7 +286,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     const specialClass = container.id === 'equipped' ? ' card-equipped'
                        : container.id === 'strapped'  ? ' card-strapped'
                        : !container.permanent         ? ' card-added' : '';
-    card.className = 'inv-card' + specialClass;
+    const isOpen = container.linkedTo && !container.collapsed;
+    card.className = 'inv-card' + specialClass + (isOpen ? ' card-open' : '');
 
     const hdr = document.createElement('div');
     hdr.className = 'inv-hdr';
@@ -188,27 +298,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     toggle.addEventListener('click', () => { container.collapsed = !container.collapsed; render(); });
 
     hdr.appendChild(toggle);
-
-    if (!container.permanent) {
-      const del = document.createElement('button');
-      del.className = 'inv-hdr-del';
-      del.textContent = '✕';
-      del.title = 'Remove container';
-      del.addEventListener('click', () => {
-        if (containerHasItems(container)) {
-          if (!confirm(`${container.name} has items inside. Remove it anyway?`)) return;
-        }
-        // Clear the linked slot item if any
-        if (container.linkedTo) {
-          const { containerId, r, c } = container.linkedTo;
-          const src = state.containers.find(cnt => cnt.id === containerId);
-          if (src) src.slots[r][c] = null;
-        }
-        state.containers = state.containers.filter(cnt => cnt !== container);
-        render();
-      });
-      hdr.appendChild(del);
-    }
     card.appendChild(hdr);
 
     if (!container.collapsed) {
@@ -231,11 +320,22 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     return card;
   }
 
+
   function buildSlot(container, r, c, slotData, full) {
     const conflict = slotData && slotData.conflict;
+    const linkedContainer = slotData && slotData.containerId
+      ? state.containers.find(cnt => cnt.id === slotData.containerId)
+      : null;
+    const containerIsOpen = !!(linkedContainer && !linkedContainer.collapsed);
+    const pouchWarning = !!(slotData && container.name === 'Pouch' && !isSlotPackable(slotData));
+
+    const isPackable = !!(slotData && !slotData._isPouch && isSlotPackable(slotData));
 
     const wrap = document.createElement('div');
-    wrap.className = 'slot' + (full ? ' slot-full' : '');
+    wrap.className = 'slot'
+      + (full            ? ' slot-full'          : '')
+      + (containerIsOpen ? ' slot-container-open': '')
+      + (isPackable      ? ' slot-packable'       : '');
     wrap.dataset.containerId = container.id;
     wrap.dataset.r = r;
     wrap.dataset.c = c;
@@ -252,9 +352,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
     input.addEventListener('focus', () => {
       acContainer = container; acRow = r; acCol = c; acInput = input;
-      // For filled slots in edit mode: show inspector + dropdown
-      // For empty slots: just show dropdown
-      if (slotData) showInspector(slotData, container, r, c);
       updateDropdown(input.value);
     });
 
@@ -284,39 +381,86 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     wrap.appendChild(input);
 
     if (slotData) {
-      // Edit button — tap to enter rename/edit mode (opens keyboard)
-      const editBtn = document.createElement('button');
-      editBtn.className = 'slot-edit';
-      editBtn.textContent = '✎';
-      editBtn.title = 'Rename';
-      editBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        input.classList.add('slot-editing');
-        input.focus();
-        input.select();
-      });
-      wrap.appendChild(editBtn);
+      const itemKey = `${container.id}-${r}-${c}`;
+      const isInspected = inspectorItemKey === itemKey && !inspectorEl.classList.contains('inspector-collapsed');
 
       const label = document.createElement('span');
-      const isContainer = isNoCarry(slotData);
+      const isContainerItem2 = isNoCarry(slotData) && !isSlotPackable(slotData);
+      const showWarning = conflict || pouchWarning;
       label.className = 'slot-label'
-        + (conflict     ? ' slot-label-conflict'   : '')
-        + (isContainer  ? ' slot-label-container'  : '');
+        + (showWarning      ? ' slot-label-conflict'  : '')
+        + (isContainerItem2 ? ' slot-label-container' : '');
+
       const vars = Object.values(slotData.variables || {});
       const numVar = vars.find(v => (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number') || null;
-      const selVar = vars.find(v => v.control === 'select' && v.value);
       const matPfx = slotData.material ? slotData.material.charAt(0).toUpperCase() + slotData.material.slice(1) + ' ' : '';
-      label.textContent = numVar  ? `${matPfx}${numVar.value} × ${slotData.name}`
-                        : selVar  ? `${matPfx}${slotData.name} — ${selVar.value}`
-                        : `${matPfx}${slotData.name}`;
+      const dispName = computeDisplayName(slotData);
+
+      if (slotData.name === 'Pouch' && linkedContainer) {
+        label.classList.add('slot-label-pouch');
+        linkedContainer.slots.forEach(row => {
+          row.forEach(item => {
+            const cell = document.createElement('span');
+            cell.className = 'pouch-cell' + (item ? '' : ' empty');
+            if (item) {
+              const iVars = Object.values(item.variables || {});
+              const iNumVar = iVars.find(v => (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number') || null;
+              const iMatPfx = item.material ? item.material.charAt(0).toUpperCase() + item.material.slice(1) + ' ' : '';
+              const iName = computeDisplayName(item);
+              cell.textContent = iNumVar ? `${iNumVar.value} × ${iMatPfx}${iName}` : `${iMatPfx}${iName}`;
+            } else {
+              cell.textContent = '—';
+            }
+            label.appendChild(cell);
+          });
+        });
+      } else {
+        label.textContent = numVar
+          ? `${numVar.value} × ${matPfx}${dispName}`
+          : `${matPfx}${dispName}`;
+      }
+
+      if (linkedContainer) {
+        // Eye icon — visual indicator of open/closed state
+        const eyeIcon = document.createElement('span');
+        eyeIcon.className = 'slot-eye-inline';
+        eyeIcon.innerHTML = containerIsOpen
+          ? '<i class="fas fa-eye"></i>'
+          : '<i class="fas fa-eye-slash"></i>';
+        label.appendChild(eyeIcon);
+
+        // Entire slot area toggles the container
+        wrap.style.cursor = 'pointer';
+        wrap.addEventListener('click', e => {
+          if (e.target.closest('.slot-remove')) return;
+          linkedContainer.collapsed = !linkedContainer.collapsed;
+          render();
+        });
+      } else {
+        // Info icon inline; clicking label (name + icon) opens inspector
+        const infoIcon = document.createElement('span');
+        infoIcon.className = 'slot-info-inline' + (isInspected ? ' active' : '');
+        infoIcon.innerHTML = '<i class="fas fa-circle-info"></i>';
+        label.appendChild(infoIcon);
+
+        label.style.cursor = 'pointer';
+        label.style.pointerEvents = 'auto';
+        label.addEventListener('click', e => {
+          e.stopPropagation();
+          toggleInspectorFor(itemKey, slotData, container, r, c);
+        });
+      }
+
       wrap.appendChild(label);
     }
 
-    if (conflict) {
+    if (conflict || pouchWarning) {
       const warn = document.createElement('span');
       warn.className = 'slot-warn';
       warn.textContent = '⚠';
-      warn.title = slotData.conflictMsg || 'Item is too bulky — clear an adjacent slot to resolve';
+      warn.title = pouchWarning
+        ? 'Not packable — only packable items belong in a Pouch'
+        : (slotData.conflictMsg || 'Item is too bulky — clear an adjacent slot to resolve');
       wrap.appendChild(warn);
     }
 
@@ -330,11 +474,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       });
       wrap.appendChild(removeBtn);
 
-      // Short tap → show inspector (long press → drag, handled below)
-      wrap.addEventListener('click', e => {
-        if (e.target.closest('.slot-remove') || e.target.closest('.slot-edit')) return;
-        showInspector(slotData, container, r, c);
-      });
 
       let downX, downY, downPointerId;
 
@@ -425,7 +564,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
     closeDropdown();
     render();
-    showInspector(slotData, container, r, c);
   }
 
   function findEmptySlot(container, excludeRow) {
@@ -467,6 +605,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
     let matches = ITEM_LIBRARY.filter(i => i.name && i.name.toLowerCase().includes(query));
     if (!window._isDM) matches = matches.filter(i => !i.dmOnly);
+    if (!window._isDM && isHiddenFromPlayer) matches = matches.filter(i => !isHiddenFromPlayer(i.name));
     matches = matches.slice(0, 10);
     if (!matches.length) { closeDropdown(); return; }
 
@@ -518,7 +657,27 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     const lib = getLibraryItem(slotData.name);
 
     // ── Name ──
-    document.getElementById('insp-name').textContent = slotData.name;
+    document.getElementById('insp-name').textContent = computeDisplayName(slotData);
+
+    // ── Rename button (custom items only, left of name) ──
+    const prevRenameBtn = document.getElementById('insp-rename-btn');
+    if (prevRenameBtn) prevRenameBtn.remove();
+    if (slotData.custom && container) {
+      const renameBtn = document.createElement('button');
+      renameBtn.id = 'insp-rename-btn';
+      renameBtn.className = 'insp-rename-btn';
+      renameBtn.innerHTML = '<i class="fas fa-pencil"></i>';
+      renameBtn.title = 'Rename';
+      renameBtn.addEventListener('click', () => {
+        const slotWrap = document.querySelector(
+          `[data-container-id="${container.id}"][data-r="${r}"][data-c="${c}"]`
+        );
+        const slotInput = slotWrap && slotWrap.querySelector('.slot-input');
+        if (slotInput) { slotInput.classList.add('slot-editing'); slotInput.focus(); slotInput.select(); }
+      });
+      const nameEl = document.getElementById('insp-name');
+      nameEl.parentNode.insertBefore(renameBtn, nameEl);
+    }
 
     // ── Inline numeric vars (count / charges) next to the name ──
     const inlineEl = document.getElementById('insp-inline-vars');
@@ -568,6 +727,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     if (slotData.conflict) warnEl.textContent = '⚠ ' + (slotData.conflictMsg || 'This item is in a conflicting slot.');
 
     // ── Description ──
+    const itemHidden = !window._isDM && !!isHiddenFromPlayer && isHiddenFromPlayer(slotData.name);
     const descP = document.getElementById('insp-desc');
     const descEdit = document.getElementById('insp-desc-edit');
     const notesEl = document.getElementById('insp-notes');
@@ -575,6 +735,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       descP.hidden = true; descEdit.hidden = false; notesEl.hidden = true;
       descEdit.value = slotData.description || '';
       descEdit.oninput = () => { slotData.description = descEdit.value; };
+    } else if (itemHidden) {
+      descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
+      descP.innerHTML = '<i>Details not available.</i>';
+      if (container) {
+        notesEl.value = slotData.notes || '';
+        notesEl.oninput = () => { slotData.notes = notesEl.value; };
+      }
     } else {
       descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
       descP.innerHTML = lib ? lib.description : '';
@@ -586,8 +753,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
     // ── Cost ──
     const costEl = document.getElementById('insp-cost');
-    costEl.hidden = !(lib && lib.cost);
-    if (lib && lib.cost) costEl.textContent = lib.cost;
+    costEl.hidden = !(lib && lib.cost) || itemHidden;
+    if (lib && lib.cost && !itemHidden) costEl.textContent = lib.cost;
 
     // ── Remove ──
     const removeBtnEl = document.getElementById('insp-remove');
@@ -597,6 +764,71 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     // ── Compact props row ──
     const propsEl = document.getElementById('insp-props');
     propsEl.innerHTML = '';
+
+    // Category dropdown — custom items only (first in row)
+    if (slotData.custom) {
+      const curCat = slotData.category
+        || (slotData.isContainer ? 'container' : slotData.isWeapon ? 'weapon' : '');
+      const catSel = document.createElement('select');
+      catSel.className = 'insp-select';
+      [
+        ['','None'], ['weapon','Weapon'], ['armor','Armor'], ['ammunition','Ammunition'],
+        ['shield','Shield'], ['wondrous','Wondrous Item'], ['container','Container'],
+      ].forEach(([val, label]) => {
+        const o = document.createElement('option');
+        o.value = val; o.textContent = label;
+        if (val === curCat) o.selected = true;
+        catSel.appendChild(o);
+      });
+      catSel.addEventListener('change', () => {
+        const prevCat = slotData.category || (slotData.isContainer ? 'container' : slotData.isWeapon ? 'weapon' : '');
+        const newCat  = catSel.value;
+
+        // Leaving container — remove linked container with confirmation
+        if (prevCat === 'container' && slotData.isContainer) {
+          if (slotData.containerId) {
+            const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+            if (linked && containerHasItems(linked)) {
+              if (!confirm(`This will remove the ${slotData.name} container and its contents. Continue?`)) {
+                catSel.value = 'container'; return;
+              }
+            }
+            if (linked) state.containers = state.containers.filter(cnt => cnt !== linked);
+            slotData.containerId = null;
+          }
+          slotData.isContainer = false;
+        }
+
+        slotData.category = newCat;
+        slotData.isWeapon  = (newCat === 'weapon');
+        slotData.variables = slotData.variables || {};
+
+        if (newCat === 'weapon') {
+          if (!slotData.variables.weapon) slotData.variables.weapon = { control: 'select', value: WEAPON_OPTIONS[0], options: WEAPON_OPTIONS };
+          delete slotData.variables.armor;
+        } else if (newCat === 'armor' || newCat === 'shield') {
+          if (!slotData.variables.armor) slotData.variables.armor = { control: 'select', value: ARMOR_OPTIONS[0], options: ARMOR_OPTIONS };
+          delete slotData.variables.weapon;
+        } else if (newCat === 'container') {
+          slotData.isContainer   = true;
+          slotData.containerRows = slotData.containerRows || 2;
+          if (!slotData.containerId) createLinkedContainer(slotData, container.id, r, c);
+          delete slotData.variables.weapon;
+          delete slotData.variables.armor;
+        } else {
+          delete slotData.variables.weapon;
+          delete slotData.variables.armor;
+        }
+
+        const silverOk = ['weapon','ammunition'].includes(newCat);
+        const metalOk  = ['weapon','armor','shield','ammunition'].includes(newCat);
+        if (!silverOk && slotData.material === 'silvered') slotData.material = null;
+        if (!metalOk  && (slotData.material === 'mithral' || slotData.material === 'adamantine')) slotData.material = null;
+
+        render(); showInspector(slotData, container, r, c);
+      });
+      propsEl.appendChild(catSel);
+    }
 
     // Bulk dropdown — custom items only
     if (slotData.custom) {
@@ -619,59 +851,75 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       propsEl.appendChild(bulkSel);
     }
 
-    // Container chip — custom items only
-    if (slotData.custom) {
-      const chip = document.createElement('button');
-      chip.className = 'prop-chip' + (slotData.isContainer ? ' active' : '');
-      chip.textContent = 'Container';
-      chip.onclick = () => {
-        if (slotData.isContainer) {
-          if (slotData.containerId) {
-            const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
-            if (linked && containerHasItems(linked)) {
-              if (!confirm(`This will remove the ${slotData.name} container and its contents. Continue?`)) return;
-            }
-            if (linked) state.containers = state.containers.filter(cnt => cnt !== linked);
-            slotData.containerId = null;
-          }
-          slotData.isContainer = false;
-        } else {
-          slotData.isContainer = true;
-          slotData.containerRows = slotData.containerRows || 2;
-          if (!slotData.containerId) createLinkedContainer(slotData, container.id, r, c);
-        }
-        render(); showInspector(slotData, container, r, c);
-      };
-      propsEl.appendChild(chip);
+    // Weapon / armor / element selects — before material chips
+    const weaponMeta = slotData.variables && slotData.variables.weapon;
+    if (weaponMeta && weaponMeta.control === 'select') {
+      const sel = document.createElement('select');
+      sel.className = 'insp-select';
+      (weaponMeta.options || []).forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt; o.textContent = opt;
+        if (opt === weaponMeta.value) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => {
+        slotData.variables.weapon.value = sel.value;
+        const libWeapon = getLibraryItem(sel.value);
+        if (libWeapon && libWeapon.bulk) slotData.bulk = libWeapon.bulk;
+        document.getElementById('insp-name').textContent = computeDisplayName(slotData);
+        render();
+      });
+      propsEl.appendChild(sel);
     }
 
-    // Weapon chip — custom items only
-    if (slotData.custom) {
-      const chip = document.createElement('button');
-      chip.className = 'prop-chip' + (slotData.isWeapon ? ' active' : '');
-      chip.textContent = 'Weapon';
-      chip.onclick = () => {
-        if (slotData.isWeapon) {
-          slotData.isWeapon = false;
-          delete slotData.variables.weapon;
-          slotData.material = null;
-        } else {
-          slotData.isWeapon = true;
-          slotData.variables = slotData.variables || {};
-          if (!slotData.variables.weapon) {
-            slotData.variables.weapon = { control: 'select', value: WEAPON_OPTIONS[0], options: WEAPON_OPTIONS };
-          }
-        }
-        render(); showInspector(slotData, container, r, c);
-      };
-      propsEl.appendChild(chip);
+    const armorMeta = slotData.variables && slotData.variables.armor;
+    if (armorMeta && armorMeta.control === 'select') {
+      const sel = document.createElement('select');
+      sel.className = 'insp-select';
+      (armorMeta.options || []).forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt; o.textContent = opt;
+        if (opt === armorMeta.value) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => {
+        slotData.variables.armor.value = sel.value;
+        const libArmor = getLibraryItem(sel.value);
+        if (libArmor && libArmor.bulk) slotData.bulk = libArmor.bulk;
+        document.getElementById('insp-name').textContent = computeDisplayName(slotData);
+        render();
+      });
+      propsEl.appendChild(sel);
     }
 
-    // Material chips — all items
-    [['silvered','Silvered'], ['mithral','Mithral'], ['adamantine','Adamantine']].forEach(([mat, label]) => {
+    const elementMeta = slotData.variables && slotData.variables.element;
+    if (elementMeta && elementMeta.control === 'select') {
+      const sel = document.createElement('select');
+      sel.className = 'insp-select';
+      (elementMeta.options || []).forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt; o.textContent = opt;
+        if (opt === elementMeta.value) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => {
+        slotData.variables.element.value = sel.value;
+        document.getElementById('insp-name').textContent = computeDisplayName(slotData);
+        render();
+      });
+      propsEl.appendChild(sel);
+    }
+
+    // Material chips — gated by effective category for all items
+    const effectiveCat = getEffectiveCategory(slotData);
+    [
+      ['silvered',   'Silvered',   ['weapon','ammunition'].includes(effectiveCat)],
+      ['mithral',    'Mithral',    ['weapon','armor','shield','ammunition'].includes(effectiveCat)],
+      ['adamantine', 'Adamantine', ['weapon','armor','shield','ammunition'].includes(effectiveCat)],
+    ].forEach(([mat, label, allowed]) => {
+      if (!allowed) return;
       const btn = document.createElement('button');
-      const isActive = slotData.material === mat;
-      btn.className = 'prop-chip' + (isActive ? ` active-${mat}` : '');
+      btn.className = 'prop-chip' + (slotData.material === mat ? ` active-${mat}` : '');
       btn.textContent = label;
       btn.onclick = () => {
         slotData.material = slotData.material === mat ? null : mat;
@@ -704,21 +952,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       propsEl.appendChild(chip);
     }
 
-    // Weapon select dropdown — items with a weapon variable
-    const weaponMeta = slotData.variables && slotData.variables.weapon;
-    if (weaponMeta && weaponMeta.control === 'select') {
-      const sel = document.createElement('select');
-      sel.className = 'insp-select';
-      (weaponMeta.options || []).forEach(opt => {
-        const o = document.createElement('option');
-        o.value = opt; o.textContent = opt;
-        if (opt === weaponMeta.value) o.selected = true;
-        sel.appendChild(o);
-      });
-      sel.addEventListener('change', () => { slotData.variables.weapon.value = sel.value; render(); });
-      propsEl.appendChild(sel);
-    }
-
     propsEl.hidden = !container || propsEl.children.length === 0;
 
     // Container rows input (only when container chip is active)
@@ -749,9 +982,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     const varsEl = document.getElementById('insp-vars');
     varsEl.innerHTML = '';
     for (const [key, meta] of Object.entries(slotData.variables || {})) {
-      // Numeric → shown inline; weapon select → shown in props row
+      // Numeric → shown inline; weapon/armor select → shown in props row
       if (meta.control === 'plusminus' || meta.control === 'both') continue;
-      if (key === 'weapon' && meta.control === 'select') continue;
+      if ((key === 'weapon' || key === 'armor' || key === 'element') && meta.control === 'select') continue;
 
       const div = document.createElement('div');
       div.className = 'insp-var';
@@ -772,18 +1005,27 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     }
 
     inspectorEl.classList.remove('inspector-collapsed');
-    document.getElementById('insp-toggle').textContent = '∧';
   }
 
   function hideInspector() {
     inspectorEl.classList.add('inspector-collapsed');
-    document.getElementById('insp-toggle').textContent = '∨';
     document.getElementById('insp-name').textContent = '';
+    inspectorItemKey = null;
+  }
+
+  function toggleInspectorFor(key, slotData, container, r, c) {
+    if (inspectorItemKey === key && !inspectorEl.classList.contains('inspector-collapsed')) {
+      hideInspector();
+    } else {
+      showInspector(slotData, container, r, c);
+      inspectorItemKey = key;
+    }
+    render();
   }
 
   document.getElementById('insp-toggle').addEventListener('click', () => {
-    const collapsed = inspectorEl.classList.toggle('inspector-collapsed');
-    document.getElementById('insp-toggle').textContent = collapsed ? '∨' : '∧';
+    hideInspector();
+    render();
   });
 
   document.addEventListener('pointerdown', e => {
@@ -792,6 +1034,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
         && !e.target.closest('.slot')
         && !e.target.closest('.shop-item-row')) {
       hideInspector();
+      render();
     }
   });
 
@@ -809,7 +1052,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
     ghostEl = document.createElement('div');
     ghostEl.className = 'drag-ghost';
-    ghostEl.textContent = slotData.name;
+    ghostEl.textContent = packName(slotData);
     document.body.appendChild(ghostEl);
     document.body.classList.add('is-dragging');
 
@@ -887,17 +1130,55 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
       const destRect = wrap.getBoundingClientRect();
       const destCenter = { x: destRect.left + destRect.width / 2, y: destRect.top + destRect.height / 2 };
 
+      // Pouch auto-creation: two plain packables meet — wrap them in a linked Pouch container
+      const isPlainPackable = sd => isSlotPackable(sd) && !sd.isContainer && !sd.containerId;
+      if (targetItem && isPlainPackable(slotData) && isPlainPackable(targetItem)) {
+        const pouchSlot = { name: 'Pouch', bulk: Bulk.PACKABLE, isContainer: true, containerRows: 2, variables: {} };
+        const otherC = 1 - tC;
+        const bystander = targetContainer.slots[tR][otherC];
+        const displace = bystander && bystander !== slotData;
+        removeFromSource();
+        targetContainer.slots[tR][0] = pouchSlot;
+        targetContainer.slots[tR][1] = null;
+        if (displace) {
+          const free = findEmptySlot(targetContainer, tR);
+          if (free) targetContainer.slots[free.r][free.c] = bystander;
+          else { targetContainer.slots.push([bystander, null]); targetContainer.rows++; }
+        }
+        createLinkedContainer(pouchSlot, targetContainer.id, tR, 0);
+        const linked = state.containers.find(c => c.id === pouchSlot.containerId);
+        if (linked) { linked.slots[0][0] = targetItem; linked.slots[0][1] = slotData; }
+        render();
+        return;
+      }
+
+      // Smart drop into container: if target slot holds a container item, try placing inside it
+      if (targetItem && targetItem.containerId && !isSlotBulky(slotData)) {
+        const linked = state.containers.find(c => c.id === targetItem.containerId);
+        if (linked) {
+          const wouldWarn = linked.name === 'Pouch' && !isSlotPackable(slotData);
+          if (!wouldWarn) {
+            const freeSlot = findEmptySlot(linked, -1);
+            if (freeSlot) {
+              removeFromSource();
+              placeSlotData(slotData, linked, freeSlot.r, freeSlot.c);
+              return;
+            }
+          }
+        }
+      }
+
       // Commit: remove item from source now that we know the drop is valid
       removeFromSource();
 
       if (targetItem) {
         // Swap — fly both items between their old and new slots
-        const swapName = targetItem.name;
+        const swapName = packName(targetItem);
         targetContainer.slots[tR][tC] = null;
         srcContainer.slots[srcR][srcC] = targetItem;
         placeSlotData(slotData, targetContainer, tR, tC);
         const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
-        if (srcCenter) spawnFlightClone(slotData.name, srcCenter, actualDest);
+        if (srcCenter) spawnFlightClone(packName(slotData), srcCenter, actualDest);
         const actualSwapDest = postRenderCenter(srcContainer.id, srcR, srcC, targetItem);
         if (actualSwapDest) spawnFlightClone(swapName, destCenter, actualSwapDest);
         return;
@@ -905,7 +1186,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
 
       placeSlotData(slotData, targetContainer, tR, tC);
       const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
-      if (srcCenter) spawnFlightClone(slotData.name, srcCenter, actualDest);
+      if (srcCenter) spawnFlightClone(packName(slotData), srcCenter, actualDest);
     } else {
       // Dropped outside any container — item stays in slot
       render();
@@ -1039,9 +1320,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop }) => {
     flattenGroups(containers) { flattenPackableGroups(containers); },
 
     // ── SHOP API ────────────────────────────────────────────────
-    showShopItem(slotData) {
-      // Show inspector in read-only mode (no container context)
-      showInspector(slotData, null, -1, -1);
+    toggleShopItem(slotData, key) {
+      toggleInspectorFor(key, slotData, null, -1, -1);
     },
     startShopDrag(slotData, x, y) {
       startDrag(slotData, null, -1, -1, x, y, null, () => {});
@@ -1115,8 +1395,9 @@ window.CharacterManager = ({ auth, database }) => {
   inv = window.InventorySystem({
     database: null,
     auth: { onAuthStateChanged: () => {} },
-    onChange:         handleInventoryChange,
-    onCrossCharDrop:  handleCrossCharDrop,
+    onChange:            handleInventoryChange,
+    onCrossCharDrop:     handleCrossCharDrop,
+    isHiddenFromPlayer:  (itemName) => !isItemVisible(itemName, getItemSection(itemName)),
   });
 
   // ── CLOSE / LOGOUT ──────────────────────────────────────────────────────
@@ -1139,17 +1420,106 @@ window.CharacterManager = ({ auth, database }) => {
   const invScrollEl = document.getElementById('inv-scroll');
   const charHeaderEl= document.getElementById('char-header');
 
+  let shopVisibility = {};
+  let shopVisRef = null;
+  const DEFAULT_HIDDEN_SECTIONS = new Set(['Magical Weapons', 'Magical Curios', 'Consumable Magical Curios']);
+
+  function encodeFirebaseKey(str) {
+    return str
+      .replace(/%/g,  '%25')
+      .replace(/\./g, '%2E')
+      .replace(/#/g,  '%23')
+      .replace(/\$/g, '%24')
+      .replace(/\//g, '%2F')
+      .replace(/\[/g, '%5B')
+      .replace(/\]/g, '%5D');
+  }
+
+  function decodeFirebaseKey(str) {
+    return str
+      .replace(/%2E/gi, '.')
+      .replace(/%23/gi, '#')
+      .replace(/%24/gi, '$')
+      .replace(/%2F/gi, '/')
+      .replace(/%5B/gi, '[')
+      .replace(/%5D/gi, ']')
+      .replace(/%25/gi, '%');
+  }
+
+  function encodeVisObj(obj) {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) out[encodeFirebaseKey(k)] = v;
+    return out;
+  }
+
+  function decodeVisObj(raw) {
+    const out = {};
+    for (const [k, v] of Object.entries(raw)) out[decodeFirebaseKey(k)] = v;
+    return out;
+  }
+
+  function getItemSection(itemName) {
+    let section = null;
+    for (const item of window.ITEM_LIBRARY) {
+      if (item._section) section = item._section;
+      if (item.name && item.name === itemName) return section;
+    }
+    return null;
+  }
+
+  function isItemVisible(itemName, section) {
+    return Object.prototype.hasOwnProperty.call(shopVisibility, itemName)
+      ? shopVisibility[itemName]
+      : !DEFAULT_HIDDEN_SECTIONS.has(section);
+  }
+
+  function saveShopVisibility() {
+    if (shopVisRef) shopVisRef.set(encodeVisObj(shopVisibility));
+  }
+
+  function subscribeToShopVisibility() {
+    shopVisRef = database.ref('/inventory_shop_visibility');
+    shopVisRef.on('value', snap => {
+      shopVisibility = decodeVisObj(snap.val() || {});
+      if (shopOpen) buildShop();
+    });
+  }
+
+  let shopAvailability = {};
+  let shopAvailRef = null;
+
+  function isItemAvailable(itemName) {
+    return Object.prototype.hasOwnProperty.call(shopAvailability, itemName)
+      ? shopAvailability[itemName]
+      : true;
+  }
+
+  function saveShopAvailability() {
+    if (shopAvailRef) shopAvailRef.set(encodeVisObj(shopAvailability));
+  }
+
+  function subscribeToShopAvailability() {
+    shopAvailRef = database.ref('/inventory_shop_availability');
+    shopAvailRef.on('value', snap => {
+      shopAvailability = decodeVisObj(snap.val() || {});
+      if (shopOpen) buildShop();
+    });
+  }
+
   function buildShop() {
     const scroll = document.getElementById('shop-scroll');
+    const savedScrollTop = scroll.scrollTop;
     scroll.innerHTML = '';
     let currentSection = null;
-    const HIDDEN_SECTIONS = new Set(['Valuables', 'Currency']);
+    let currentRarity  = null;
+    const SHOP_HIDDEN_SECTIONS = new Set(['Valuables', 'Currency']);
     const visibleSections = [];
 
     ITEM_LIBRARY.forEach(item => {
       if (item._section) {
         currentSection = item._section;
-        if (HIDDEN_SECTIONS.has(currentSection)) return;
+        currentRarity  = null;
+        if (SHOP_HIDDEN_SECTIONS.has(currentSection)) return;
         visibleSections.push(currentSection);
         const h = document.createElement('div');
         h.className = 'shop-section-heading';
@@ -1157,12 +1527,44 @@ window.CharacterManager = ({ auth, database }) => {
         scroll.appendChild(h);
         return;
       }
+
+      if (item._rarity) {
+        currentRarity = item._rarity;
+        if (SHOP_HIDDEN_SECTIONS.has(currentSection)) return;
+        const div = document.createElement('div');
+        div.className = 'shop-rarity-divider';
+        div.dataset.section = currentSection;
+        div.dataset.rarity  = currentRarity;
+        const label = document.createElement('span');
+        label.className = 'shop-rarity-label';
+        label.textContent = currentRarity;
+        div.appendChild(label);
+        if (window._isDM) {
+          const btn = document.createElement('button');
+          btn.className = 'shop-rarity-toggle';
+          btn.dataset.section = currentSection;
+          btn.dataset.rarity  = currentRarity;
+          div.appendChild(btn);
+        }
+        scroll.appendChild(div);
+        return;
+      }
+
       if (!item.name) return;
-      if (HIDDEN_SECTIONS.has(currentSection)) return;
+      if (item.shopHidden) return;
+      if (SHOP_HIDDEN_SECTIONS.has(currentSection)) return;
+
+      const visible = isItemVisible(item.name, currentSection);
+      const avail   = isItemAvailable(item.name);
 
       const row = document.createElement('div');
-      row.className = 'shop-item-row';
-      row.dataset.section = currentSection;
+      row.className = 'shop-item-row'
+        + (!visible && window._isDM ? ' shop-item-hidden' : '')
+        + (!avail ? ' shop-item-unavailable' : '');
+      row.dataset.section  = currentSection;
+      row.dataset.rarity   = currentRarity || '';
+      row.dataset.itemName = item.name;
+      if (!visible) row.dataset.playerHidden = 'true';
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 'shop-item-name';
@@ -1172,17 +1574,48 @@ window.CharacterManager = ({ auth, database }) => {
       costSpan.className = 'shop-item-cost';
       costSpan.textContent = item.cost || '';
 
+      const infoIcon = document.createElement('span');
+      infoIcon.className = 'shop-item-info-icon';
+      infoIcon.innerHTML = '<i class="fas fa-circle-info"></i>';
+      row.appendChild(infoIcon);
       row.appendChild(nameSpan);
       row.appendChild(costSpan);
 
-      // Tap → show in inspector (read-only)
+      if (window._isDM) {
+        const availBtn = document.createElement('button');
+        availBtn.className = 'shop-item-avail-btn' + (!avail ? ' unavailable' : '');
+        availBtn.innerHTML = avail ? '<i class="fas fa-check"></i>' : '<i class="fas fa-ban"></i>';
+        availBtn.title = avail ? 'Mark as unavailable' : 'Mark as available';
+        availBtn.addEventListener('pointerdown', e => e.stopPropagation());
+        availBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          shopAvailability[row.dataset.itemName] = !isItemAvailable(row.dataset.itemName);
+          saveShopAvailability();
+          buildShop();
+        });
+        row.appendChild(availBtn);
+
+        const visBtn = document.createElement('button');
+        visBtn.className = 'shop-item-vis-btn';
+        visBtn.innerHTML  = visible ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+        visBtn.title = visible ? 'Hide from players' : 'Show to players';
+        visBtn.addEventListener('pointerdown', e => e.stopPropagation());
+        visBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          shopVisibility[row.dataset.itemName] = !isItemVisible(row.dataset.itemName, row.dataset.section);
+          saveShopVisibility();
+          buildShop();
+        });
+        row.appendChild(visBtn);
+      }
+
       row.addEventListener('click', e => {
-        if (row._shopDragging) return;
-        const slotData = buildShopSlotData(item);
-        inv.showShopItem(slotData);
+        if (row._shopDragging
+          || e.target.closest('.shop-item-vis-btn')
+          || e.target.closest('.shop-item-avail-btn')) return;
+        inv.toggleShopItem(buildShopSlotData(item), `shop-${item.name}`);
       });
 
-      // Long-press → drag to character tab
       let lpTimer = null, lpX, lpY, lpPointerId;
       row.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;
@@ -1212,7 +1645,28 @@ window.CharacterManager = ({ auth, database }) => {
       scroll.appendChild(row);
     });
 
-    // Populate category dropdown
+    // Wire rarity toggle buttons after all rows exist
+    if (window._isDM) {
+      scroll.querySelectorAll('.shop-rarity-toggle').forEach(btn => {
+        const sec  = btn.dataset.section;
+        const rar  = btn.dataset.rarity;
+        const rows = [...scroll.querySelectorAll(`.shop-item-row[data-section="${sec}"][data-rarity="${rar}"]`)];
+        const allHidden = rows.length > 0 && rows.every(r => r.dataset.playerHidden === 'true');
+        btn.innerHTML = allHidden ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+        btn.title = allHidden ? 'Show all to players' : 'Hide all from players';
+        btn.addEventListener('click', () => {
+          const itemRows = [...scroll.querySelectorAll(
+            `.shop-item-row[data-section="${btn.dataset.section}"][data-rarity="${btn.dataset.rarity}"]`
+          )];
+          const nowAllHidden = itemRows.every(r => r.dataset.playerHidden === 'true');
+          itemRows.forEach(r => { shopVisibility[r.dataset.itemName] = nowAllHidden; });
+          saveShopVisibility();
+          buildShop();
+        });
+      });
+    }
+
+    // Populate category dropdown (preserve selection)
     const categorySelect = document.getElementById('shop-category');
     const prevVal = categorySelect.value;
     categorySelect.innerHTML = '<option value="">All categories</option>';
@@ -1220,9 +1674,14 @@ window.CharacterManager = ({ auth, database }) => {
       const opt = document.createElement('option');
       opt.value = section;
       opt.textContent = section;
-      if (section === prevVal) opt.selected = true;
       categorySelect.appendChild(opt);
     });
+    if (prevVal) categorySelect.value = prevVal;
+
+    filterShop();
+
+    // Restore scroll position after DOM rebuild
+    scroll.scrollTop = savedScrollTop;
   }
 
   function buildShopSlotData(libItem) {
@@ -1238,19 +1697,26 @@ window.CharacterManager = ({ auth, database }) => {
     const category = document.getElementById('shop-category').value;
     const scroll   = document.getElementById('shop-scroll');
     scroll.querySelectorAll('.shop-item-row').forEach(row => {
-      const nameMatch = !query || row.querySelector('.shop-item-name').textContent.toLowerCase().includes(query);
+      const nameMatch = !query    || row.querySelector('.shop-item-name').textContent.toLowerCase().includes(query);
       const catMatch  = !category || row.dataset.section === category;
-      row.hidden = !(nameMatch && catMatch);
+      const visMatch  = window._isDM || row.dataset.playerHidden !== 'true';
+      row.hidden = !(nameMatch && catMatch && visMatch);
     });
-    // Hide section headings whose items are all filtered out
-    scroll.querySelectorAll('.shop-section-heading').forEach(heading => {
-      let next = heading.nextElementSibling;
-      let hasVisible = false;
-      while (next && !next.classList.contains('shop-section-heading')) {
-        if (!next.hidden && next.classList.contains('shop-item-row')) { hasVisible = true; break; }
-        next = next.nextElementSibling;
+    scroll.querySelectorAll('.shop-rarity-divider').forEach(divider => {
+      let sib = divider.nextElementSibling, has = false;
+      while (sib && !sib.classList.contains('shop-rarity-divider') && !sib.classList.contains('shop-section-heading')) {
+        if (!sib.hidden && sib.classList.contains('shop-item-row')) { has = true; break; }
+        sib = sib.nextElementSibling;
       }
-      heading.hidden = !hasVisible;
+      divider.hidden = !has;
+    });
+    scroll.querySelectorAll('.shop-section-heading').forEach(heading => {
+      let sib = heading.nextElementSibling, has = false;
+      while (sib && !sib.classList.contains('shop-section-heading')) {
+        if (!sib.hidden && sib.classList.contains('shop-item-row')) { has = true; break; }
+        sib = sib.nextElementSibling;
+      }
+      heading.hidden = !has;
     });
   }
 
@@ -1288,6 +1754,7 @@ window.CharacterManager = ({ auth, database }) => {
     roleBtn.textContent  = window._isDM ? '⚔ DM' : '🛡 Player';
     roleBtn.title        = window._isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
     roleBtn.dataset.role = role;
+    if (shopOpen) buildShop();
   }
 
   roleBtn.addEventListener('click', () => {
@@ -1304,6 +1771,8 @@ window.CharacterManager = ({ auth, database }) => {
         applyRole(snap.val() || 'player');
       });
       subscribeToChars();
+      subscribeToShopVisibility();
+      subscribeToShopAvailability();
     } else {
       window._isDM  = false;
       currentCharId = null;
@@ -1465,10 +1934,10 @@ window.CharacterManager = ({ auth, database }) => {
     const cleanItem = Object.assign({}, item);
     delete cleanItem._shopItem;
 
-    // Shop drop onto the currently-open character
+    // Drop onto the currently-open character's own tab
     if (targetCharId === currentCharId) {
+      inv.addItem(cleanItem); // re-places item (shop: new; inventory: returned after source removal)
       if (item._shopItem) {
-        inv.addItem(cleanItem);
         const tabEl = document.querySelector(`[data-char-id="${currentCharId}"]`);
         if (tabEl) {
           tabEl.classList.add('tab-received');

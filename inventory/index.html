@@ -49,6 +49,7 @@
         <div class="char-field grow">
           <label>Name</label>
           <input type="text" id="char-name" placeholder="Character name" autocomplete="off" />
+          <div id="coin-counter" hidden></div>
         </div>
       </header>
 
@@ -67,7 +68,7 @@
           <span id="insp-cost" hidden></span>
           <div id="insp-inline-vars"></div>
         </div>
-        <button id="insp-toggle">∨</button>
+        <button id="insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
       </div>
       <p id="insp-warn" hidden></p>
       <!-- Compact props: bulk + container + materials + weapon select, built by JS -->

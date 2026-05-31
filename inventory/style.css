@@ -228,6 +228,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 #shop-category {
   flex-shrink: 0;
   width: 44%;
+  text-align: center;
   background: rgba(255,255,255,0.07);
   border: 1px solid var(--card-border);
   border-radius: 10px;
@@ -276,6 +277,97 @@ input, textarea, select { font-size: max(16px, 1em); }
   background: var(--bg);
   z-index: 2;
 }
+
+.shop-rarity-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 4px;
+  pointer-events: none;
+}
+.shop-rarity-divider::before,
+.shop-rarity-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.25;
+}
+.shop-rarity-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+.shop-rarity-divider[data-rarity="Common"]    { color: #888; }
+.shop-rarity-divider[data-rarity="Uncommon"]  { color: #4caf50; }
+.shop-rarity-divider[data-rarity="Rare"]      { color: #42a5f5; }
+.shop-rarity-divider[data-rarity="Very Rare"] { color: #ab47bc; }
+.shop-rarity-divider[data-rarity="Cantrip"]   { color: #9e9e9e; }
+.shop-rarity-divider[data-rarity="1st Level"] { color: #a5d6a7; }
+.shop-rarity-divider[data-rarity="2nd Level"] { color: #4fc3f7; }
+.shop-rarity-divider[data-rarity="3rd Level"] { color: #ffd54f; }
+
+.shop-rarity-toggle {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  padding: 2px 5px;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: all;
+  border-radius: 4px;
+}
+.shop-rarity-toggle:hover { opacity: 1; background: rgba(255,255,255,0.08); }
+
+.shop-item-vis-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  font-size: 12px;
+  opacity: 0.4;
+  border-radius: 4px;
+  line-height: 1;
+}
+.shop-item-vis-btn:hover { opacity: 1; background: rgba(255,255,255,0.08); }
+
+.shop-item-info-icon {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 13px;
+  opacity: 0.45;
+  margin-right: 6px;
+}
+
+.shop-item-hidden { opacity: 0.3; }
+.shop-item-hidden .shop-item-vis-btn { opacity: 0.9; color: var(--text); }
+
+.shop-item-unavailable { opacity: 0.45; }
+.shop-item-unavailable .shop-item-name { text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.3); }
+.shop-item-unavailable .shop-item-avail-btn { opacity: 1; }
+
+.shop-item-avail-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  font-size: 12px;
+  opacity: 0.2;
+  border-radius: 4px;
+  line-height: 1;
+}
+.shop-item-avail-btn:hover { opacity: 1; background: rgba(255,255,255,0.08); }
+.shop-item-avail-btn.unavailable { opacity: 0.85; color: #ff7043; }
+.shop-item-avail-btn.unavailable:hover { opacity: 1; }
 
 .shop-item-row {
   display: flex;
@@ -475,6 +567,17 @@ main {
 }
 .card-added .inv-hdr-toggle { color: rgba(190, 150, 255, 0.95); }
 
+/* Open linked-container highlight */
+.inv-card.card-open {
+  border-color: rgba(180, 120, 255, 0.55);
+}
+.inv-card.card-open .inv-hdr {
+  background: rgba(160, 100, 255, 0.18);
+  border-bottom-color: rgba(180, 120, 255, 0.35);
+}
+.inv-card.card-open .inv-hdr-toggle { color: rgba(205, 165, 255, 1); }
+.inv-card.card-open .slot { background: rgba(160, 100, 255, 0.06); }
+
 .inv-hdr {
   display: flex;
   align-items: stretch;
@@ -506,6 +609,51 @@ main {
   color: var(--muted);
   font-size: 14px;
 }
+
+/* ── POUCH SLOT GRID ──────────────────────────────────────────── */
+.slot-label-pouch {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  align-content: center;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.3;
+  width: 100%;
+}
+
+.pouch-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(80, 210, 130, 0.9);
+  padding: 2px 4px;
+  border: 1px solid rgba(80, 210, 130, 0.18);
+  border-radius: 3px;
+}
+
+.pouch-cell.empty {
+  color: rgba(80, 210, 130, 0.28);
+  border-color: rgba(80, 210, 130, 0.08);
+}
+
+#coin-counter {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 2px 2px 0;
+}
+
+.coin-pp { color: rgba(190, 145, 255, 0.85); }
+.coin-gp { color: rgba(255, 205, 60, 0.85); }
+.coin-sp { color: rgba(200, 200, 215, 0.8); }
+.coin-cp { color: rgba(205, 135, 65, 0.8); }
 
 .inv-hdr-del {
   background: none;
@@ -574,35 +722,38 @@ main {
 
 .slot-input:focus { background: rgba(255,255,255,0.05); }
 
-/* ── SLOT EDIT BUTTON ────────────────────────────────────────── */
-.slot-edit {
+/* Inline icon indicators inside the slot label */
+.slot-eye-inline,
+.slot-info-inline {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 34px;
-  height: 100%;
-  background: none;
-  border: none;
-  border-right: 1px solid rgba(255,255,255,0.07);
-  color: rgba(255,255,255,0.22);
-  font-size: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  -webkit-tap-highlight-color: transparent;
-  flex-shrink: 0;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  pointer-events: none;
+  line-height: 1;
+  transition: color 0.15s, opacity 0.15s;
 }
+/* Eye: dim when container is closed, bright when open */
+.slot-eye-inline                    { color: rgba(160, 100, 255, 0.35); }
+.slot-container-open .slot-eye-inline { color: rgba(190, 150, 255, 0.9); }
+/* Info: visible by default, highlighted when inspector is open for this item */
+.slot-info-inline        { color: rgba(255, 255, 255, 0.3); }
+.slot-info-inline.active { color: rgba(130, 190, 255, 0.95); }
 
-.slot-edit:active { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.06); }
+/* Slot highlight when linked container is open */
+.slot-container-open { background: rgba(160, 100, 255, 0.16); }
+.slot-container-open .slot-input.slot-filled { border-left-color: rgba(180, 120, 255, 0.85); }
 
-/* Hide edit button and label while editing, let the raw input show */
-.slot-input:focus ~ .slot-edit  { display: none; }
+/* Packable item green tint */
+.slot-packable { background: rgba(80, 210, 130, 0.07); }
+.slot-packable .slot-input.slot-filled { border-left-color: rgba(80, 210, 130, 0.5); }
+
 
 /* Label overlay — hidden when input is focused */
 .slot-label {
   position: absolute;
-  left: 36px;
+  left: 8px;
   right: 52px;
   top: 50%;
   transform: translateY(-50%);
@@ -613,10 +764,12 @@ main {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding-left: 20px;
 }
 
 .slot-label-conflict  { color: #ff6060; right: 72px; }
 .slot-label-container { color: rgba(180, 120, 255, 0.9); }
+.slot-packable .slot-label { color: rgba(80, 210, 130, 0.9); }
 
 .slot-input:focus ~ .slot-label { display: none; }
 
@@ -806,7 +959,7 @@ main {
 }
 
 #inspector.inspector-collapsed {
-  transform: translateY(calc(100% - 62px));
+  transform: translateY(100%);
   overflow: hidden;
 }
 
@@ -832,6 +985,20 @@ main {
   font-weight: 700;
   line-height: 1.2;
 }
+
+.insp-rename-btn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.35);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.insp-rename-btn:hover { color: rgba(255,255,255,0.8); background: rgba(255,255,255,0.08); }
+.insp-rename-btn:active { background: rgba(255,255,255,0.12); }
 
 /* Inline count/charges stepper next to item name */
 #insp-inline-vars {
@@ -890,20 +1057,21 @@ main {
 .insp-num-sm::-webkit-outer-spin-button { -webkit-appearance: none; }
 
 #insp-toggle {
-  background: rgba(255,255,255,0.1);
-  border: none;
-  color: var(--text);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--muted);
   width: 44px;
   height: 44px;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 15px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   -webkit-tap-highlight-color: transparent;
 }
+#insp-toggle:active { background: rgba(255,255,255,0.15); color: var(--text); }
 
 /* Compact props row: bulk chips + container + materials + weapon select */
 #insp-props {
