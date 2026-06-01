@@ -1204,7 +1204,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     const { slotData, srcContainer, srcR, srcC, srcCenter, removeFromSource } = dragState;
     dragState = null;
 
-    // Trash drop — delete the item
+    // Trash drop — run the same deletion path as the inspector "Remove item" button
     if (el && (el === _shopTabBtn || _shopTabBtn.contains(el)) && srcContainer) {
       const trashLib = getLibraryItem(slotData.name);
       if (trashLib && trashLib.warnOnRemove) {
@@ -1212,8 +1212,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
         const hasCoins = ['pp','gp','sp','cp'].some(k => v[k] && (v[k].value || 0) > 0);
         if (hasCoins && !confirm(trashLib.warnOnRemove)) { render(); return; }
       }
-      removeFromSource();
-      render();
+      clearSlot(srcContainer, srcR, srcC);
       return;
     }
 
