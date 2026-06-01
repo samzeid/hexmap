@@ -283,3 +283,61 @@ body {
 #controls.inv-open {
   display: none;
 }
+
+/* ── MOBILE ────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+
+  /* Controls bar — compact, scrollable tools section */
+  #controls {
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: 8px;
+    padding: 5px;
+    gap: 4px;
+    max-width: calc(100vw - 16px);
+  }
+
+  #controls button {
+    font-size: 1.3rem;
+    padding: 10px 11px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 10px;
+  }
+
+  #controls .symbol {
+    font-size: 2rem;
+    padding: 6px 2px;
+  }
+
+  /* Allow the tools group to scroll horizontally so the bar never overflows */
+  #controls-tools {
+    gap: 3px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    /* leave room for collapseBtn + invBtn + sign-out-btn + gaps */
+    max-width: calc(100vw - 160px);
+  }
+
+  #controls-tools::-webkit-scrollbar { display: none; }
+
+  /* Info panel — bigger and nudged up so it doesn't sit behind controls */
+  #info {
+    right: 8px;
+    bottom: max(70px, calc(env(safe-area-inset-bottom) + 70px));
+    width: min(42vw, 200px);
+    height: min(56vw, 260px);
+    min-width: unset;
+    min-height: unset;
+    font-size: 11px;
+  }
+
+  /* Login card — full-width-ish on narrow screens */
+  #login-card {
+    width: min(340px, calc(100vw - 40px));
+    padding: 32px 20px;
+    min-width: unset;
+    box-sizing: border-box;
+  }
+}
