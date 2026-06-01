@@ -1692,7 +1692,6 @@ window.CharacterManager = ({ auth, database }) => {
           lpTimer = null;
           row._shopDragging = true;
           row.classList.add('shop-item-dragging');
-          document.documentElement.setPointerCapture(lpPointerId);
           inv.startShopDrag(buildShopSlotData(item), e.clientX, e.clientY);
           // pointer is captured by documentElement so row's own pointerup never fires — clean up here
           const cleanup = () => {
