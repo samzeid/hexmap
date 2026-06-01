@@ -278,7 +278,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       const ic  = parseInt(inspectorItemKey.substring(lastH + 1));
       const cnt = state.containers.find(c => c.id === cid);
       const sd  = cnt && cnt.slots[ir] && cnt.slots[ir][ic];
-      if (sd) document.getElementById('insp-name').textContent = computeDisplayName(sd);
+      if (sd) document.getElementById('insp-name').textContent = sd.name || '';
     }
 
     if (onChange) onChange();
@@ -396,7 +396,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
 
       const vars = Object.values(slotData.variables || {});
       const numVar = vars.find(v => (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number') || null;
-      const matPfx = slotData.material ? slotData.material.charAt(0).toUpperCase() + slotData.material.slice(1) + ' ' : '';
+      const _silverPfx = (slotData.silvered || slotData.material === 'silvered') ? 'Silvered ' : '';
+      const _metalMat  = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
+      const matPfx = _silverPfx + (_metalMat ? _metalMat.charAt(0).toUpperCase() + _metalMat.slice(1) + ' ' : '');
       const dispName = computeDisplayName(slotData);
 
       if (slotData.name === 'Pouch' && linkedContainer) {
@@ -408,7 +410,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
             if (item) {
               const iVars = Object.values(item.variables || {});
               const iNumVar = iVars.find(v => (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number') || null;
-              const iMatPfx = item.material ? item.material.charAt(0).toUpperCase() + item.material.slice(1) + ' ' : '';
+              const _iSilverPfx = (item.silvered || item.material === 'silvered') ? 'Silvered ' : '';
+              const _iMetalMat  = (item.material === 'mithral' || item.material === 'adamantine') ? item.material : null;
+              const iMatPfx = _iSilverPfx + (_iMetalMat ? _iMetalMat.charAt(0).toUpperCase() + _iMetalMat.slice(1) + ' ' : '');
               const iName = computeDisplayName(item);
               cell.textContent = iNumVar ? `${iNumVar.value} × ${iMatPfx}${iName}` : `${iMatPfx}${iName}`;
             } else {
@@ -693,7 +697,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     const lib = getLibraryItem(slotData.name);
 
     // ── Name ──
-    document.getElementById('insp-name').textContent = computeDisplayName(slotData);
+    document.getElementById('insp-name').textContent = slotData.name || '';
 
     // ── Rename button (custom items only, left of name) ──
     const prevRenameBtn = document.getElementById('insp-rename-btn');
@@ -858,7 +862,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
 
         const silverOk = ['weapon','ammunition'].includes(newCat);
         const metalOk  = ['weapon','armor','shield','ammunition'].includes(newCat);
-        if (!silverOk && slotData.material === 'silvered') slotData.material = null;
+        if (!silverOk) { slotData.silvered = false; if (slotData.material === 'silvered') slotData.material = null; }
         if (!metalOk  && (slotData.material === 'mithral' || slotData.material === 'adamantine')) slotData.material = null;
 
         render(); showInspector(slotData, container, r, c);
@@ -894,10 +898,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
 
     if (canSilver) {
       const btn = document.createElement('button');
-      btn.className = 'prop-chip' + (slotData.material === 'silvered' ? ' active-silvered' : '');
+      const isSilvered = slotData.silvered || slotData.material === 'silvered';
+      btn.className = 'prop-chip' + (isSilvered ? ' active-silvered' : '');
       btn.textContent = 'Silvered';
       btn.onclick = () => {
-        slotData.material = slotData.material === 'silvered' ? null : 'silvered';
+        slotData.silvered = !(slotData.silvered || slotData.material === 'silvered');
+        if (slotData.material === 'silvered') slotData.material = null;
         render(); showInspector(slotData, container, r, c, packIdx);
       };
       propsEl.appendChild(btn);
@@ -905,13 +911,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
 
     if (canMetal) {
       const metals = [null, 'mithral', 'adamantine'];
-      const curMetal = metals.includes(slotData.material) ? slotData.material : null;
+      const curMetal = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
       const btn = document.createElement('button');
       btn.className = 'prop-chip' + (curMetal ? ` active-${curMetal}` : '');
       btn.textContent = curMetal ? curMetal.charAt(0).toUpperCase() + curMetal.slice(1) : 'Metal';
       btn.onclick = () => {
-        const idx = metals.indexOf(slotData.material);
-        slotData.material = metals[(Math.max(0, idx) + 1) % metals.length];
+        const idx = metals.indexOf(curMetal);
+        slotData.material = metals[(idx + 1) % metals.length];
         render(); showInspector(slotData, container, r, c, packIdx);
       };
       propsEl.appendChild(btn);
@@ -932,7 +938,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
         slotData.variables.weapon.value = sel.value;
         const libWeapon = getLibraryItem(sel.value);
         if (libWeapon && libWeapon.bulk) slotData.bulk = libWeapon.bulk;
-        document.getElementById('insp-name').textContent = computeDisplayName(slotData);
         render();
       });
       propsEl.appendChild(sel);
@@ -952,7 +957,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
         slotData.variables.armor.value = sel.value;
         const libArmor = getLibraryItem(sel.value);
         if (libArmor && libArmor.bulk) slotData.bulk = libArmor.bulk;
-        document.getElementById('insp-name').textContent = computeDisplayName(slotData);
         render();
       });
       propsEl.appendChild(sel);
@@ -970,7 +974,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       });
       sel.addEventListener('change', () => {
         slotData.variables.element.value = sel.value;
-        document.getElementById('insp-name').textContent = computeDisplayName(slotData);
         render();
       });
       propsEl.appendChild(sel);

@@ -70,7 +70,7 @@ input, textarea, select { font-size: max(16px, 1em); }
   border: none;
   color: var(--muted);
   font-size: 1.5rem;
-  padding: 12px 14px;
+  padding: 9px 10px;
   border-radius: 10px;
   cursor: pointer;
   display: flex;
@@ -420,8 +420,9 @@ input, textarea, select { font-size: max(16px, 1em); }
   flex-shrink: 0;
 }
 
-#role-btn { font-weight: 600; font-size: 1rem; white-space: nowrap; font-family: inherit; }
-#role-btn[data-role="dm"] { color: rgba(180,120,255,0.9); }
+#role-btn { font-weight: 600; font-size: 0.85rem; white-space: nowrap; font-family: inherit; padding: 0 10px; }
+#role-btn[data-role="dm"]     { color: rgba(180,120,255,0.9); }
+#role-btn[data-role="player"] { opacity: 0.4; }
 
 /* During inventory-item drag, show tabs as potential targets */
 .is-dragging .char-tab:not(.active) {
@@ -960,7 +961,7 @@ main {
   -webkit-backdrop-filter: blur(24px);
   border-top: 1px solid rgba(255,255,255,0.12);
   border-radius: 18px 18px 0 0;
-  padding: 8px 14px env(safe-area-inset-bottom, 12px);
+  padding: 14px 14px env(safe-area-inset-bottom, 12px);
   max-height: 55vh;
   overflow-y: auto;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -996,7 +997,7 @@ main {
 }
 
 #insp-name {
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -1091,10 +1092,14 @@ main {
 /* Compact props row: bulk chips + container + materials + weapon select */
 #insp-props {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 5px;
   align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+  width: 100%;
 }
+#insp-props::-webkit-scrollbar { display: none; }
 
 .prop-chip {
   padding: 4px 10px;
@@ -1105,6 +1110,7 @@ main {
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
   font-family: inherit;
 }
@@ -1341,4 +1347,7 @@ body.is-dragging #inv-scroll {
   padding: 4px 8px;
   outline: none;
   cursor: pointer;
+  flex-shrink: 1;
+  min-width: 60px;
+  max-width: 140px;
 }
