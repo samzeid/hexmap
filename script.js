@@ -25,19 +25,37 @@ const zoomCanvasContext = zoomCanvas.getContext("2d");
 
 const info = document.getElementById("info");
 const infoText = document.getElementById("infoText");
+const hexCoords = document.getElementById("hexCoords");
+const infoToggle = document.getElementById('info-toggle');
+const positionToggleBtn = document.getElementById('positionToggleBtn');
+const signOutBtn = document.getElementById("sign-out-btn");
+const invOverlay = document.getElementById("inv-overlay");
 
+new ResizeObserver(() => {
+    setPan(panX, panY);
+    updatePositionBtn();
+    drawGridLatestActive();
+}).observe(info);
 
-const scaleUpBtn = document.getElementById('scaleUpBtn');
-const scaleDownBtn = document.getElementById('scaleDownBtn');
-const resetPositionBtn = document.getElementById('resetPositionBtn');
+let detailCollapsed = false;
 
-const togglePanBtn = document.getElementById('togglePanBtn');
-const toggleSelectBtn = document.getElementById('toggleSelectBtn');
-const toggleEraseBtn = document.getElementById('toggleEraseBtn');
+function setDetailCollapsed(collapsed) {
+    detailCollapsed = collapsed;
+    const i = infoToggle.querySelector('i');
+    i.className = collapsed ? 'fa-solid fa-fw fa-chevron-up' : 'fa-solid fa-fw fa-chevron-down';
+}
+
+infoToggle.addEventListener('click', () => {
+    if (info.classList.contains('has-content')) {
+        info.classList.remove('has-content');
+        setDetailCollapsed(true);
+    } else {
+        setDetailCollapsed(false);
+        drawGridLatestActive();
+    }
+});
+
 const clearBtn = document.getElementById('clearBtn');
-
-const toggleFactionBtn = document.getElementById('toggleFactionBtn');
-const toggleEnvironmentBtn = document.getElementById('toggleEnvironmentBtn');
 
 const selectedHexes = new Set();
 
@@ -56,6 +74,7 @@ let lastHex = null;
 
 //let isShowRegionOn = false;
 let showRegion = null;
+let panelAtTop = false;
 
 let isDragging = false;
 let isPanning = false;
@@ -77,43 +96,7 @@ let zoom = 1;
 let panX = 0;
 let panY = 0;
 
-let currentInfoScale = 1;
-const minInfoScale = 0.5;
-const maxInfoScale = 2;
-
 const hexData = new Map();
-
-function resetInfoPanelSize() {
-    currentInfoScale = 1;
-    const screenW = window.innerWidth;
-    const screenH = window.innerHeight;
-
-    // Use a fraction of the smaller dimension to maintain consistent scale
-    const base = Math.min(screenW, screenH);
-
-    const width = base * 0.2;
-    const height = width * 2;
-
-    info.style.width = `${Math.round(width)}px`;
-    info.style.height = `${Math.round(height)}px`;
-
-    //info.style.left = "10px";
-    //info.style.top = "10px";
-    const rect = info.getBoundingClientRect();
-
-    const newLeft = window.innerWidth - width - 100;   // mimics right:10px
-    const newTop = window.innerHeight - height - 100;  // mimics bottom:10px
-
-    info.style.left = `${newLeft}px`;
-    info.style.top = `${newTop}px`;
-    
-    applyScale();
-}
-
-
-window.addEventListener("resize", resetInfoPanelSize);
-window.addEventListener("orientationchange", resetInfoPanelSize);
-window.addEventListener("load", resetInfoPanelSize);
 
 image.onload = () => {
     // Calculate minimum zoom to fit image to canvas
@@ -296,37 +279,45 @@ function drawGrid(hoveredHex = null) {
         }
     }
 
-    // Display the infoText preview panel details for the hovered text.
+    // Display the infoText preview panel details for the hovered hex.
     if (hoveredHex) {
         const key = `${hoveredHex.col},${hoveredHex.row}`;
         const hexInfo = hexData.get(key);
 
-        let text = `Hex: col=${hoveredHex.col}, row=${hoveredHex.row}`;
+        hexCoords.textContent = `${hoveredHex.col}, ${hoveredHex.row}`;
 
+        let text = '';
         if (hexInfo) {
             const { politicalRegion, environmentalRegion, location } = hexInfo;
-            let region = politicalRegion;
-
-            region = region == null ? environmentalRegion : region;
+            const region = politicalRegion ?? environmentalRegion;
 
             if (region && location) {
-                text = `${text}<br><br><i>Region: ${region.name}</i><br><b>${location.name}</b><br><i>${location.description}</i>`;
+                text = `<b>${location.name}</b> <span class="region-tag">· ${region.name}</span><br><i>${location.description}</i>`;
             } else if (location) {
-                text = `${text}<br><br><b>${location.name}</b><br><i>${location.description}</i>`;
+                text = `<b>${location.name}</b><br><i>${location.description}</i>`;
             } else if (region) {
-                text = `${text}<br><br><i>Region: ${region.name}</i><br><i>${region.description}</i>`;
+                text = `<b>${region.name}</b><br><i>${region.description}</i>`;
             }
         }
 
         infoText.innerHTML = text;
+
+        if (!detailCollapsed) {
+            info.classList.add('has-content');
+            setDetailCollapsed(false);
+        }
 
         const x = hoveredHex.col * hexHorizSpacing + hexSize + offsetX;
         const y = hoveredHex.row * hexVertSpacing + (hoveredHex.col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
         drawZoomedHex(x, y);
     } else {
         zoomCanvasContext.clearRect(0, 0, zoomCanvas.width, zoomCanvas.height);
-        infoText.textContent = "";
+        hexCoords.textContent = '';
+        infoText.textContent = '';
+        info.classList.remove('has-content');
+        if (!detailCollapsed) setDetailCollapsed(false);
     }
+    checkAutoSnap();
 }
 
 function drawZoomedHex(centerX, centerY) {
@@ -626,8 +617,6 @@ loginPassword.addEventListener("keydown", e => {
 });
 
 
-const signOutBtn = document.getElementById("sign-out-btn");
-
 signOutBtn.addEventListener("click", () => {
   auth.signOut();
   document.getElementById('inv-frame')?.contentWindow?.postMessage({ type: 'signOut' }, '*');
@@ -671,56 +660,6 @@ function setPan(x, y) {
     panY = clamp(y, minPanY, maxPanY);
 }
 
-// allow draging of info panel.
-
-function makeDraggable(element) {
-    let isDragging = false;
-    let offsetX = 0;
-    let offsetY = 0;
-
-    // Mouse Events
-    element.addEventListener("mousedown", (e) => {
-        if (e.button !== 0) return; // Only left click
-        isDragging = true;
-        offsetX = e.clientX - element.offsetLeft;
-        offsetY = e.clientY - element.offsetTop;
-        e.preventDefault();
-    });
-
-    document.addEventListener("mousemove", (e) => {
-        if (!isDragging) return;
-        element.style.left = `${e.clientX - offsetX}px`;
-        element.style.top = `${e.clientY - offsetY}px`;
-    });
-
-    document.addEventListener("mouseup", () => {
-        isDragging = false;
-    });
-
-    // Touch Events
-    element.addEventListener("touchstart", (e) => {
-        if (e.touches.length !== 1) return; // Only single-finger drag
-        const touch = e.touches[0];
-        isDragging = true;
-        offsetX = touch.clientX - element.offsetLeft;
-        offsetY = touch.clientY - element.offsetTop;
-        e.preventDefault();
-    }, { passive: false });
-
-    document.addEventListener("touchmove", (e) => {
-        if (!isDragging || e.touches.length !== 1) return;
-        const touch = e.touches[0];
-        element.style.left = `${touch.clientX - offsetX}px`;
-        element.style.top = `${touch.clientY - offsetY}px`;
-        e.preventDefault();
-    }, { passive: false });
-
-    document.addEventListener("touchend", () => {
-        isDragging = false;
-    });
-}
-  
-makeDraggable(document.getElementById("info"));
 
 // Touch support
 let touchStartX = 0;
@@ -834,95 +773,90 @@ canvas.addEventListener("touchend", (e) => {
     lastHex = null;
 });
 
-// Scale handling
-function applyScale() {
-    info.style.transform = `scale(${currentInfoScale})`;
-    info.style.transformOrigin = 'bottom right';
-}
-  
-scaleUpBtn.addEventListener('click', () => {
-    currentInfoScale = Math.min(currentInfoScale * 1.2, maxInfoScale);
-    applyScale();
-});
-  
-scaleDownBtn.addEventListener('click', () => {
-    currentInfoScale = Math.max(currentInfoScale / 1.2, minInfoScale);
-    applyScale();
-});
-  
-// Reset scale and position
-resetPositionBtn.addEventListener('click', () => {
-    resetInfoPanelSize();
-});
-
-// Tool toggles
-const toolButtons = {
-    select: document.getElementById('toggleSelectBtn'),
-    erase: document.getElementById('toggleEraseBtn'),
-    pan: document.getElementById('togglePanBtn'),
-  };
-  
-let activeTool = null; // Set a default active tool
-  
-function setActiveTool(toolName) {
-    if (activeTool === toolName) return; // Do nothing if it's already active
-  
-    // Deactivate all tools
-    for (const [name, btn] of Object.entries(toolButtons)) {
-      btn.classList.remove('active');
-    }
-  
-    // Activate the chosen one
-    toolButtons[toolName].classList.add('active');
-    activeTool = toolName;
-  
-    console.log("Active tool:", activeTool);
-}
-
-toggleSelectBtn.addEventListener('click', () => {
-    setActiveTool('select');
-});
-
-toggleEraseBtn.addEventListener('click', () => {
-    setActiveTool('erase');
-});
-
-togglePanBtn.addEventListener('click', () => {
-    setActiveTool('pan');
-});
-
-const overlayButtons = {
-    political : document.getElementById('toggleFactionBtn'),
-    environmental : document.getElementById('toggleEnvironmentBtn'),
+// Tool cycle: pan → select → erase → pan
+const toolStates = ['pan', 'select', 'erase'];
+const toolIcons = {
+    pan:    'fa-arrows-up-down-left-right',
+    select: 'fa-paintbrush',
+    erase:  'fa-eraser'
 };
 
-toggleFactionBtn.addEventListener('click', () => {
-    setOverlay('political');
-});
+let activeTool = 'pan';
+const toolToggleBtn = document.getElementById('toolToggleBtn');
 
-toggleEnvironmentBtn.addEventListener('click', () => {
-    setOverlay('environmental');
-});
-
-function setOverlay(overlay) {
-    for (const [name, btn] of Object.entries(overlayButtons)) {
-        btn.classList.remove('active');
-    }
-
-    showRegion = showRegion == overlay ? null : overlay;
-
-    if(showRegion != null) {
-        overlayButtons[overlay].classList.add('active');
-    }
-
-    drawGridLatestActive();
+function setActiveTool(toolName) {
+    activeTool = toolName;
+    toolToggleBtn.querySelector('i').className = `fa-solid fa-fw ${toolIcons[toolName]}`;
 }
 
-clearBtn.addEventListener('click', ()=> {
+toolToggleBtn.addEventListener('click', () => {
+    const next = (toolStates.indexOf(activeTool) + 1) % toolStates.length;
+    setActiveTool(toolStates[next]);
+});
+
+// Overlay cycle: none → territory → environment → none
+const overlayStates = [null, 'political', 'environmental'];
+const overlayIcons  = ['fa-layer-group', 'fa-circle-user', 'fa-tree'];
+let overlayIndex = 0;
+const overlayToggleBtn = document.getElementById('overlayToggleBtn');
+
+overlayToggleBtn.addEventListener('click', () => {
+    overlayIndex = (overlayIndex + 1) % overlayStates.length;
+    showRegion = overlayStates[overlayIndex];
+    overlayToggleBtn.querySelector('i').className = `fa-solid fa-fw ${overlayIcons[overlayIndex]}`;
+    drawGridLatestActive();
+});
+
+clearBtn.addEventListener('click', () => {
     clearHexSelected();
 });
 
-setActiveTool('pan');
+function updatePositionBtn() {
+    const gap = 10;
+    const panelH = info.offsetHeight;
+    if (panelAtTop) {
+        positionToggleBtn.style.top    = `${panelH + gap}px`;
+        positionToggleBtn.style.bottom = '';
+    } else {
+        positionToggleBtn.style.bottom = `${panelH + gap}px`;
+        positionToggleBtn.style.top    = '';
+    }
+}
+
+function applyPanelSnap() {
+    info.classList.toggle('panel-top', panelAtTop);
+    updatePositionBtn();
+}
+
+function checkAutoSnap() {
+    if (!image.naturalWidth || invOverlay.classList.contains('open')) {
+        positionToggleBtn.classList.remove('visible');
+        return;
+    }
+    const imageHeight = image.naturalHeight * zoom;
+
+    // Condition 1: too zoomed out — would constantly flip
+    if (imageHeight - canvas.height < 80) {
+        positionToggleBtn.classList.add('visible');
+        return;
+    }
+
+    // Condition 2: at a boundary where a snap would have fired
+    const atBottom = !panelAtTop && panY <= canvas.height - imageHeight + 4;
+    const atTop    =  panelAtTop && panY >= -4;
+    positionToggleBtn.classList.toggle('visible', atBottom || atTop);
+}
+
+positionToggleBtn.addEventListener('click', () => {
+    panelAtTop = !panelAtTop;
+    info.classList.toggle('panel-top', panelAtTop);
+    updatePositionBtn();
+    positionToggleBtn.querySelector('i').className =
+        panelAtTop ? 'fa-solid fa-fw fa-arrow-down' : 'fa-solid fa-fw fa-arrow-up';
+    positionToggleBtn.title = panelAtTop ? 'Move panel to bottom' : 'Move panel to top';
+    setPan(panX, panY);
+    drawGridLatestActive();
+});
 
 function drawGridLatestActive(){
     if(latestActiveHexCol != null && latestActiveHexRow != null)
@@ -931,29 +865,13 @@ function drawGridLatestActive(){
         drawGrid();
 }
 
-const controls = document.getElementById("controls");
-const collapseBtn = document.getElementById("collapseBtn");
-
-collapseBtn.addEventListener("click", () => {
-    controls.classList.toggle("collapsed");
-
-    const icon = collapseBtn.querySelector("i");
-    if (controls.classList.contains("collapsed")) {
-        icon.classList.remove("collapsed");
-        // set toggle to pan mode.
-        setActiveTool('pan')
-    } else {
-        icon.classList.add("collapsed");
-    }
-});
 
 const invBtn     = document.getElementById("invBtn");
-const invOverlay = document.getElementById("inv-overlay");
 
 invBtn.addEventListener("click", () => {
     const open = invOverlay.classList.toggle("open");
     invBtn.classList.toggle("active", open);
-    controls.classList.toggle("inv-open", open);
+    info.classList.toggle("inv-open", open);
     if (open) {
         const email    = loginEmail.value.trim();
         const password = loginPassword.value;
@@ -968,7 +886,7 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && invOverlay.classList.contains("open")) {
         invOverlay.classList.remove("open");
         invBtn.classList.remove("active");
-        controls.classList.remove("inv-open");
+        info.classList.remove("inv-open");
     }
 });
 
@@ -976,7 +894,7 @@ window.addEventListener("message", (e) => {
     if (e.data && e.data.type === "closeInventory") {
         invOverlay.classList.remove("open");
         invBtn.classList.remove("active");
-        controls.classList.remove("inv-open");
+        info.classList.remove("inv-open");
     }
 });
 

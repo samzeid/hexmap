@@ -19,27 +19,6 @@
     </div>
   </div>
 
-  <div id="controls">
-    <!--<i class="symbol fa-brands fa-d-and-d"></i>-->
-    <button id="collapseBtn"><i class="fa-solid fa-angle-right"></i></button>
-    <div id="controls-tools">
-      <button id="scaleUpBtn"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
-      <button id="scaleDownBtn"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
-      <button id="resetPositionBtn"><i class="fa-solid fa-magnifying-glass"></i></button>
-      <i class="symbol fa-solid fa-ellipsis-vertical"></i>
-      <button id="toggleFactionBtn"><i class="fa-solid fa-circle-user"></i></button>
-      <button id="toggleEnvironmentBtn"><i class="fa-solid fa-tree"></i></button>
-      <i class="symbol fa-solid fa-ellipsis-vertical"></i>
-      <button id="togglePanBtn"><i class="fa-solid fa-arrows-up-down-left-right"></i></button>
-      <button id="toggleSelectBtn"><i class="fa-solid fa-paintbrush"></i></button>
-      <button id="toggleEraseBtn"><i class="fa-solid fa-eraser"></i></button>
-      <button id="clearBtn"><i class="fa-solid fa-spray-can-sparkles"></i></button>
-      <i class="symbol fa-solid fa-ellipsis-vertical"></i>
-    </div>
-    <button id="invBtn" title="Inventory"><i class="fa-solid fa-scroll"></i></button>
-    <button id="sign-out-btn" hidden><i class="fa-solid fa-right-from-bracket"></i></button>
-  </div>
-
   <!-- Inventory overlay -->
   <div id="inv-overlay">
     <iframe id="inv-frame" src="inventory/index.html" frameborder="0"></iframe>
@@ -47,9 +26,27 @@
   <div id="container">
     <canvas id="canvas"></canvas>
   </div>
+  <button id="positionToggleBtn" title="Move panel to top"><i class="fa-solid fa-fw fa-arrow-up"></i></button>
   <div id="info">
-    <canvas id="zoomPreview" width="200" height="200"></canvas>
-    <div id="infoText"></div>
+    <div id="info-header">
+      <button id="invBtn" title="Inventory"><i class="fa-solid fa-scroll"></i></button>
+      <div class="vdivider"></div>
+      <div id="controls-tools">
+        <button id="toolToggleBtn"><i class="fa-solid fa-fw fa-arrows-up-down-left-right"></i></button>
+        <button id="overlayToggleBtn"><i class="fa-solid fa-fw fa-layer-group"></i></button>
+        <button id="clearBtn"><i class="fa-solid fa-spray-can-sparkles"></i></button>
+      </div>
+      <div class="vdivider"></div>
+      <button id="sign-out-btn" hidden><i class="fa-solid fa-right-from-bracket"></i></button>
+      <button id="info-toggle" title="Toggle detail"><i class="fa-solid fa-fw fa-chevron-up"></i></button>
+    </div>
+    <div id="info-body">
+      <div id="info-preview">
+        <canvas id="zoomPreview" width="200" height="200"></canvas>
+        <div id="hexCoords"></div>
+      </div>
+      <div id="infoText"></div>
+    </div>
   </div>
 
   <!-- Firebase SDKs -->

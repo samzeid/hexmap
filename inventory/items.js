@@ -264,7 +264,7 @@ window.ITEM_LIBRARY = [
   { name: "Ring of Magic Sensitivity", bulk: Bulk.PACKABLE, cost: "240 gp", description: `This ring glows faintly when held to a magic item or object.` },
   { name: "Boots of False Tracks",     bulk: Bulk.PACKABLE,    cost: "240 gp", description: `While wearing these boots, you can choose to have them leave tracks like those of a different kind of humanoid of the same size.` },
   { name: "Ruby of the War Mage",      bulk: Bulk.PACKABLE, cost: "240 gp", description: `Pressing this 1-inch ruby against a weapon for 10 minutes attaches it, allowing you to use that weapon as a spellcasting focus. You can detach it as an action, or it is lost if the weapon is destroyed.` },
-  { name: "Veteran's Cane",            bulk: Bulk.STOCK,    cost: "240 gp", description: `While holding this cane, you can use a bonus action to speak its command word, transforming it into a shortsword (losing its magic), or speak the command word again to return it to a cane.` },
+  { name: "Veteran's Cane",            bulk: Bulk.STOCK,    cost: "240 gp", category: 'weapon', description: `While holding this cane, you can use a bonus action to speak its command word, transforming it into a shortsword (losing its magic), or speak the command word again to return it to a cane.` },
   { name: "Moontouched Weapon",        bulk: Bulk.STOCK,    cost: "240 gp", description: `In darkness, this weapon sheds moonlight, creating bright light in a 10-foot radius and dim light for an additional 10 feet. It counts as a magical weapon for the purpose of overcoming resistances and immunities.`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
 
   { _rarity: "Uncommon" },

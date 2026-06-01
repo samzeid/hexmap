@@ -203,11 +203,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
   let inspectorItemKey = null;
 
   // Drag state
-  let dragState      = null;
-  let ghostEl        = null;
-  let longPressTimer = null;
-  let dragScrollVel  = 0;
-  let dragScrollRaf  = null;
+  let dragState        = null;
+  let ghostEl          = null;
+  let longPressTimer   = null;
+  let dragScrollVel    = 0;
+  let dragScrollRaf    = null;
+  // Manual scroll state — used while disambiguating drag vs. scroll on touch
+  let manualScrolling  = false;
+  let manualScrollLastY = 0;
 
   function dragScrollStep() {
     if (!dragState || dragScrollVel === 0) { dragScrollRaf = null; return; }
@@ -491,13 +494,20 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       wrap.appendChild(removeBtn);
 
 
+      // Prevent iOS from treating a touch on a filled slot as a scroll gesture —
+      // this stops the browser firing pointercancel during the long-press window.
+      // Scrolling is handled manually below whenever the user swipes instead of holds.
+      wrap.style.touchAction = 'none';
+
       let downX, downY, downPointerId;
 
       wrap.addEventListener('pointerdown', e => {
         if (dragState || e.target.tagName === 'BUTTON') return;
         downX = e.clientX; downY = e.clientY; downPointerId = e.pointerId;
+        manualScrolling = false;
         longPressTimer = setTimeout(() => {
           longPressTimer = null;
+          manualScrolling = false;
           document.documentElement.setPointerCapture(downPointerId);
           const sr = wrap.getBoundingClientRect();
           startDrag(slotData, container, r, c, downX, downY,
@@ -507,15 +517,25 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       });
 
       wrap.addEventListener('pointermove', e => {
+        if (manualScrolling) {
+          // Scroll the list manually since touch-action:none suppresses browser scroll
+          document.getElementById('inv-scroll').scrollTop += manualScrollLastY - e.clientY;
+          manualScrollLastY = e.clientY;
+          return;
+        }
         if (!longPressTimer) return;
         if ((e.clientX - downX) ** 2 + (e.clientY - downY) ** 2 > 64) {
           clearTimeout(longPressTimer);
           longPressTimer = null;
+          // Switch to manual scroll mode
+          manualScrolling  = true;
+          manualScrollLastY = e.clientY;
         }
       });
 
       const cancelLong = () => {
         if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        manualScrolling = false;
       };
       wrap.addEventListener('pointerup',     cancelLong);
       wrap.addEventListener('pointercancel', cancelLong);
@@ -867,7 +887,37 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       propsEl.appendChild(bulkSel);
     }
 
-    // Weapon / armor / element selects — before material chips
+    // Material chips — before selects
+    const effectiveCat = getEffectiveCategory(slotData);
+    const canSilver = ['weapon','ammunition'].includes(effectiveCat);
+    const canMetal  = ['weapon','armor','shield','ammunition'].includes(effectiveCat);
+
+    if (canSilver) {
+      const btn = document.createElement('button');
+      btn.className = 'prop-chip' + (slotData.material === 'silvered' ? ' active-silvered' : '');
+      btn.textContent = 'Silvered';
+      btn.onclick = () => {
+        slotData.material = slotData.material === 'silvered' ? null : 'silvered';
+        render(); showInspector(slotData, container, r, c, packIdx);
+      };
+      propsEl.appendChild(btn);
+    }
+
+    if (canMetal) {
+      const metals = [null, 'mithral', 'adamantine'];
+      const curMetal = metals.includes(slotData.material) ? slotData.material : null;
+      const btn = document.createElement('button');
+      btn.className = 'prop-chip' + (curMetal ? ` active-${curMetal}` : '');
+      btn.textContent = curMetal ? curMetal.charAt(0).toUpperCase() + curMetal.slice(1) : 'Metal';
+      btn.onclick = () => {
+        const idx = metals.indexOf(slotData.material);
+        slotData.material = metals[(Math.max(0, idx) + 1) % metals.length];
+        render(); showInspector(slotData, container, r, c, packIdx);
+      };
+      propsEl.appendChild(btn);
+    }
+
+    // Weapon / armor / element selects
     const weaponMeta = slotData.variables && slotData.variables.weapon;
     if (weaponMeta && weaponMeta.control === 'select') {
       const sel = document.createElement('select');
@@ -925,24 +975,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       });
       propsEl.appendChild(sel);
     }
-
-    // Material chips — gated by effective category for all items
-    const effectiveCat = getEffectiveCategory(slotData);
-    [
-      ['silvered',   'Silvered',   ['weapon','ammunition'].includes(effectiveCat)],
-      ['mithral',    'Mithral',    ['weapon','armor','shield','ammunition'].includes(effectiveCat)],
-      ['adamantine', 'Adamantine', ['weapon','armor','shield','ammunition'].includes(effectiveCat)],
-    ].forEach(([mat, label, allowed]) => {
-      if (!allowed) return;
-      const btn = document.createElement('button');
-      btn.className = 'prop-chip' + (slotData.material === mat ? ` active-${mat}` : '');
-      btn.textContent = label;
-      btn.onclick = () => {
-        slotData.material = slotData.material === mat ? null : mat;
-        render(); showInspector(slotData, container, r, c, packIdx);
-      };
-      propsEl.appendChild(btn);
-    });
 
     // Has Uses toggle — custom items only
     if (slotData.custom) {
@@ -1796,7 +1828,7 @@ window.CharacterManager = ({ auth, database }) => {
     const isDM = (role === 'dm') && userCanBeDM;
     window._isDM         = isDM;
     roleBtn.hidden       = !userCanBeDM;
-    roleBtn.textContent  = isDM ? '⚔ DM' : '🛡 Player';
+    roleBtn.textContent  = 'DM';
     roleBtn.title        = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
     roleBtn.dataset.role = isDM ? 'dm' : 'player';
     if (shopOpen) buildShop();

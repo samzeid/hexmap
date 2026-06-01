@@ -11,7 +11,7 @@
   --text:         #e8e8f0;
   --muted:        rgba(255,255,255,0.4);
   --radius:       14px;
-  --slot-h:       80px;
+  --slot-h:       60px;
 }
 
 body {
@@ -61,19 +61,44 @@ input, textarea, select { font-size: max(16px, 1em); }
   border-right: 1px solid var(--card-border);
 }
 
-#inv-close-btn {
+/* ── TAB BAR ACTION BUTTONS ──────────────────────────────────── */
+#inv-close-btn,
+#add-char-btn,
+#shop-tab-btn,
+#role-btn {
   background: none;
   border: none;
   color: var(--muted);
-  font-size: 18px;
-  min-height: 44px;
-  padding: 0 16px;
+  font-size: 1.5rem;
+  padding: 12px 14px;
+  border-radius: 10px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
 }
 
-#inv-close-btn:active { background: rgba(255,255,255,0.06); }
+#add-char-btn,
+#shop-tab-btn,
+#role-btn {
+  box-shadow: -1px 0 0 var(--card-border);
+  margin-left: 2px;
+}
+
+#inv-close-btn:hover, #add-char-btn:hover,
+#shop-tab-btn:hover,  #role-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+
+#inv-close-btn:active, #add-char-btn:active,
+#shop-tab-btn:active,  #role-btn:active {
+  transform: scale(0.92);
+  background: rgba(255,255,255,0.08);
+}
 
 #char-tabs-scroll {
   flex: 1;
@@ -136,7 +161,7 @@ input, textarea, select { font-size: max(16px, 1em); }
   pointer-events: none;
 }
 
-.char-tab-name { pointer-events: none; }
+.char-tab-name { pointer-events: none; font-size: 16px; font-weight: 600; }
 
 .char-tab-coins {
   display: flex;
@@ -178,34 +203,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 
 .char-tab-del:hover { color: #ff6060; }
 
-#add-char-btn {
-  background: none;
-  border: none;
-  border-left: 1px solid var(--card-border);
-  color: var(--muted);
-  font-size: 24px;
-  min-height: 44px;
-  padding: 0 18px;
-  cursor: pointer;
-  flex-shrink: 0;
-  -webkit-tap-highlight-color: transparent;
-}
-
-#shop-tab-btn {
-  background: none;
-  border: none;
-  border-left: 1px solid var(--card-border);
-  color: var(--muted);
-  font-size: 18px;
-  min-height: 44px;
-  padding: 0 14px;
-  cursor: pointer;
-  flex-shrink: 0;
-  -webkit-tap-highlight-color: transparent;
-  transition: color 0.12s;
-}
 #shop-tab-btn.active { color: var(--text); background: rgba(255,255,255,0.08); }
-#shop-tab-btn:active  { background: rgba(255,255,255,0.06); }
 
 /* ── SHOP PANEL ──────────────────────────────────────────────── */
 #shop-panel {
@@ -422,25 +420,7 @@ input, textarea, select { font-size: max(16px, 1em); }
   flex-shrink: 0;
 }
 
-#add-char-btn:active { background: rgba(255,255,255,0.06); }
-
-#role-btn {
-  background: none;
-  border: none;
-  border-left: 1px solid var(--card-border);
-  color: var(--muted);
-  font-size: 16px;
-  font-weight: 600;
-  min-height: 44px;
-  padding: 0 16px;
-  cursor: pointer;
-  flex-shrink: 0;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-  font-family: inherit;
-}
-
-#role-btn:active { background: rgba(255,255,255,0.06); }
+#role-btn { font-weight: 600; font-size: 1rem; white-space: nowrap; font-family: inherit; }
 #role-btn[data-role="dm"] { color: rgba(180,120,255,0.9); }
 
 /* During inventory-item drag, show tabs as potential targets */
@@ -468,7 +448,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 #char-header {
   display: flex;
   gap: 10px;
-  padding: 14px 16px;
+  padding: 8px 16px;
   background: rgba(255,255,255,0.03);
   border-bottom: 1px solid var(--card-border);
   position: sticky;
@@ -481,7 +461,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 .char-field {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  justify-content: center;
 }
 
 .char-field.grow { flex: 1; }
@@ -498,9 +478,9 @@ input, textarea, select { font-size: max(16px, 1em); }
   border: 1px solid var(--card-border);
   border-radius: 8px;
   color: var(--text);
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
-  padding: 8px 10px;
+  padding: 6px 8px;
   outline: none;
   width: 100%;
 }
@@ -516,10 +496,10 @@ input, textarea, select { font-size: max(16px, 1em); }
   gap: 4px;
 }
 
-.carry-slash { color: var(--muted); font-size: 20px; }
+.carry-slash { color: var(--muted); font-size: 16px; }
 
 #carry-used {
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text);
   min-width: 24px;
@@ -610,11 +590,11 @@ main {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
+  padding: 12px 16px;
   background: none;
   border: none;
   color: var(--text);
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -705,6 +685,12 @@ main {
 .slot:nth-child(even) { border-right: none; }
 .slot:nth-last-child(-n+2) { border-bottom: none; }
 
+/* Alternating row tint — every other pair of slots (one grid row) */
+.inv-grid .slot:nth-child(4n+3),
+.inv-grid .slot:nth-child(4n+4) {
+  background: rgba(255,255,255,0.055);
+}
+
 /* Full-width bulky slot */
 .slot-full {
   grid-column: 1 / -1;
@@ -779,7 +765,7 @@ main {
   top: 50%;
   transform: translateY(-50%);
   max-width: calc(100% - 60px);
-  font-size: 19px;
+  font-size: 13px;
   color: var(--text);
   pointer-events: none;
   user-select: none;
@@ -974,8 +960,8 @@ main {
   -webkit-backdrop-filter: blur(24px);
   border-top: 1px solid rgba(255,255,255,0.12);
   border-radius: 18px 18px 0 0;
-  padding: 20px 18px env(safe-area-inset-bottom, 24px);
-  max-height: 60vh;
+  padding: 8px 14px env(safe-area-inset-bottom, 12px);
+  max-height: 55vh;
   overflow-y: auto;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -988,22 +974,29 @@ main {
 #insp-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 6px;
 }
 
 #insp-name-row {
   flex: 1;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 5px;
   min-width: 0;
+  align-items: flex-start;
+}
+
+#insp-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 #insp-name {
-  font-size: 20px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -1081,12 +1074,12 @@ main {
 #insp-toggle {
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.12);
-  color: var(--muted);
+  color: rgba(255,255,255,0.4);
   width: 44px;
   height: 44px;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 15px;
+  font-size: 14px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1099,18 +1092,17 @@ main {
 #insp-props {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
+  gap: 5px;
   align-items: center;
 }
 
 .prop-chip {
-  padding: 7px 13px;
+  padding: 4px 10px;
   border-radius: 20px;
   border: 1px solid var(--card-border);
   background: transparent;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
@@ -1152,8 +1144,8 @@ main {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 0;
-  margin-bottom: 8px;
+  padding: 3px 0;
+  margin-bottom: 4px;
 }
 
 .insp-toggle-label {
@@ -1203,34 +1195,34 @@ main {
 
 #insp-remove {
   width: 100%;
-  margin-top: 14px;
-  padding: 16px;
+  margin-top: 8px;
+  padding: 10px 14px;
   border-radius: 8px;
   border: 1px solid rgba(255,80,80,0.3);
   background: transparent;
   color: rgba(255,100,100,0.8);
-  font-size: 16px;
+  font-size: 13px;
   cursor: pointer;
 }
 
 #insp-remove:active { background: rgba(255,60,60,0.12); }
 
 #insp-warn {
-  font-size: 15px;
+  font-size: 13px;
   line-height: 1.45;
   color: #ffaa66;
   background: rgba(255,120,50,0.1);
   border: 1px solid rgba(255,120,50,0.25);
   border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
+  padding: 7px 10px;
+  margin-bottom: 6px;
 }
 
 #insp-desc {
-  font-size: 16px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.5;
   color: rgba(255,255,255,0.65);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 #insp-cost {
@@ -1317,6 +1309,11 @@ main {
   pointer-events: none;
 }
 
+/* Lock the scroll container while dragging so slots don't drift under the ghost */
+body.is-dragging #inv-scroll {
+  overflow-y: hidden;
+}
+
 .insp-num {
   width: 72px;
   background: rgba(255,255,255,0.1);
@@ -1337,11 +1334,11 @@ main {
 .insp-select {
   background: rgba(255,255,255,0.1);
   border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--text);
-  font-size: 16px;
+  font-size: 13px;
   font-family: inherit;
-  padding: 10px 12px;
+  padding: 4px 8px;
   outline: none;
   cursor: pointer;
 }
