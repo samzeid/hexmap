@@ -424,6 +424,9 @@ input, textarea, select { font-size: max(16px, 1em); }
 #role-btn[data-role="dm"]     { color: rgba(180,120,255,0.9); }
 #role-btn[data-role="player"] { opacity: 0.4; }
 
+#shop-tab-btn.drag-trash       { color: rgba(255, 80, 80, 0.85); }
+#shop-tab-btn.drag-trash-hover { color: #fff; background: rgba(220, 50, 50, 0.35); transform: scale(1.1); }
+
 /* During inventory-item drag, show tabs as potential targets */
 .is-dragging .char-tab:not(.active) {
   border-color: rgba(255,255,255,0.08);

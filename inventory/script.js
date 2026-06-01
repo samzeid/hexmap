@@ -511,20 +511,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     }
 
     if (slotData) {
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'slot-remove';
-      removeBtn.textContent = '−';
-      removeBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        const removeLib = getLibraryItem(slotData.name);
-        if (removeLib && removeLib.warnOnRemove) {
-          const v = slotData.variables || {};
-          const hasCoins = ['pp','gp','sp','cp'].some(k => v[k] && (v[k].value || 0) > 0);
-          if (hasCoins && !confirm(removeLib.warnOnRemove)) return;
-        }
-        clearSlot(container, r, c);
-      });
-      wrap.appendChild(removeBtn);
 
 
       // Prevent iOS from treating a touch on a filled slot as a scroll gesture —
@@ -1159,6 +1145,17 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
   });
 
   // ── DRAG & DROP ───────────────────────────────────────────────────────────
+  const _shopTabBtn = document.getElementById('shop-tab-btn');
+
+  function activateTrash() {
+    _shopTabBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+    _shopTabBtn.classList.add('drag-trash');
+  }
+  function deactivateTrash() {
+    _shopTabBtn.innerHTML = '🛒';
+    _shopTabBtn.classList.remove('drag-trash', 'drag-trash-hover');
+  }
+
   // removeFromSource: called only when a drop is committed, to extract the item from its origin.
   function startDrag(slotData, container, r, c, x, y, srcCenter, removeFromSource) {
     dragState = { slotData, srcContainer: container, srcR: r, srcC: c, srcCenter: srcCenter || null, removeFromSource };
@@ -1169,10 +1166,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     document.body.appendChild(ghostEl);
     document.body.classList.add('is-dragging');
 
+    if (container !== null) activateTrash();
+
     moveGhost(x, y);
     closeDropdown();
     if (document.activeElement) document.activeElement.blur();
-    // Item stays in slot — no render needed; ghost is the only new visual.
   }
 
   function moveGhost(x, y) {
@@ -1185,6 +1183,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     if (!dragState) return;
     dragScrollVel = 0;
     dragScrollRaf = null;
+    deactivateTrash();
 
     ghostEl.style.visibility = 'hidden';
     const el = document.elementFromPoint(x, y);
@@ -1204,6 +1203,19 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     const targetContainer = wrap && state.containers.find(c => c.id === wrap.dataset.containerId);
     const { slotData, srcContainer, srcR, srcC, srcCenter, removeFromSource } = dragState;
     dragState = null;
+
+    // Trash drop — delete the item
+    if (el && (el === _shopTabBtn || _shopTabBtn.contains(el)) && srcContainer) {
+      const trashLib = getLibraryItem(slotData.name);
+      if (trashLib && trashLib.warnOnRemove) {
+        const v = slotData.variables || {};
+        const hasCoins = ['pp','gp','sp','cp'].some(k => v[k] && (v[k].value || 0) > 0);
+        if (hasCoins && !confirm(trashLib.warnOnRemove)) { render(); return; }
+      }
+      removeFromSource();
+      render();
+      return;
+    }
 
     // Cross-character tab drop
     const charTab = el && el.closest('[data-char-id]');
@@ -1387,6 +1399,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     if (!dragState) return;
     moveGhost(e.clientX, e.clientY);
 
+    // Highlight trash when hovering over it
+    if (_shopTabBtn.classList.contains('drag-trash')) {
+      const tr = _shopTabBtn.getBoundingClientRect();
+      const over = e.clientX >= tr.left && e.clientX <= tr.right && e.clientY >= tr.top && e.clientY <= tr.bottom;
+      _shopTabBtn.classList.toggle('drag-trash-hover', over);
+    }
+
     // Auto-scroll #inv-scroll when dragging near top/bottom edges
     const scrollEl = document.getElementById('inv-scroll');
     if (scrollEl.hidden) { dragScrollVel = 0; return; }
@@ -1413,6 +1432,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     if (!dragState) return;
     dragScrollVel = 0;
     dragScrollRaf = null;
+    deactivateTrash();
     if (ghostEl) { ghostEl.remove(); ghostEl = null; }
     document.body.classList.remove('is-dragging');
     dragState = null;
@@ -1468,6 +1488,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       if (!dragState) return;
       dragScrollVel = 0;
       dragScrollRaf = null;
+      deactivateTrash();
       if (ghostEl) { ghostEl.remove(); ghostEl = null; }
       document.body.classList.remove('is-dragging');
       dragState = null;
