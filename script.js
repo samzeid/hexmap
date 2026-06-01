@@ -15,8 +15,6 @@ const database = app.database();
 // Firebase reference for updating "selectedHexes" set.
 const selectedHexesRef = database.ref("selectedHexes");
 
-authenticateFromUrl();
-
 // Get elements
 const image = new Image();
 image.src = "https://lh3.googleusercontent.com/d/1fySy_aXhOZHiJGMw6B2xon_8nMiVeyK6?authuser=0";

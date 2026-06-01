@@ -1405,6 +1405,8 @@ window.CharacterManager = ({ auth, database }) => {
   let suppressSave       = false;
   let dirty              = false;   // true while local edits haven't been flushed to Firebase yet
   let localWriteInFlight = false;   // true briefly after a save to suppress our own Firebase echo
+  let pendingNewChar     = null;    // char created locally but not yet confirmed by Firebase
+  const pendingDeletes   = new Set(); // char IDs removed locally but not yet confirmed by Firebase
   let inv                = null;
 
   // ── INVENTORY SYSTEM ────────────────────────────────────────────────────
@@ -1429,11 +1431,16 @@ window.CharacterManager = ({ auth, database }) => {
     if (e.data && e.data.type === 'signIn') {
       const current   = (auth.currentUser?.email || '').toLowerCase();
       const requested = (e.data.email || '').toLowerCase();
-      if (!auth.currentUser || current !== requested) {
+      if (!auth.currentUser) {
+        // Not signed in — sign in directly without a signOut first
+        auth.signInWithEmailAndPassword(e.data.email, e.data.password).catch(() => {});
+      } else if (current !== requested) {
+        // Signed in as a different user — switch accounts
         auth.signOut().then(() =>
           auth.signInWithEmailAndPassword(e.data.email, e.data.password).catch(() => {})
         );
       }
+      // Same user already signed in — do nothing
     }
   });
 
@@ -1502,6 +1509,7 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   function subscribeToShopVisibility() {
+    if (shopVisRef) shopVisRef.off('value');
     shopVisRef = database.ref('/inventory_shop_visibility');
     shopVisRef.on('value', snap => {
       shopVisibility = decodeVisObj(snap.val() || {});
@@ -1523,6 +1531,7 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   function subscribeToShopAvailability() {
+    if (shopAvailRef) shopAvailRef.off('value');
     shopAvailRef = database.ref('/inventory_shop_availability');
     shopAvailRef.on('value', snap => {
       shopAvailability = decodeVisObj(snap.val() || {});
@@ -1791,6 +1800,8 @@ window.CharacterManager = ({ auth, database }) => {
     roleBtn.title        = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
     roleBtn.dataset.role = isDM ? 'dm' : 'player';
     if (shopOpen) buildShop();
+    // Re-render tabs now that DM status is known (subscribeToChars fires before this resolves)
+    if (Object.keys(allChars).length) renderTabs();
   }
 
   roleBtn.addEventListener('click', () => {
@@ -1813,16 +1824,25 @@ window.CharacterManager = ({ auth, database }) => {
       subscribeToShopVisibility();
       subscribeToShopAvailability();
     } else {
-      userCanBeDM   = false;
-      window._isDM  = false;
-      currentCharId = null;
-      allChars      = {};
+      if (charsRef)    { charsRef.off('value');    charsRef    = null; }
+      if (shopVisRef)  { shopVisRef.off('value');  shopVisRef  = null; }
+      if (shopAvailRef){ shopAvailRef.off('value'); shopAvailRef = null; }
+      userCanBeDM    = false;
+      window._isDM   = false;
+      currentCharId  = null;
+      pendingNewChar = null;
+      pendingDeletes.clear();
+      allChars       = {};
     }
   });
 
   // ── FIREBASE ────────────────────────────────────────────────────────────
+  let charsRef = null;
+
   function subscribeToChars() {
-    database.ref('/inventory_characters').on('value', snap => {
+    if (charsRef) charsRef.off('value');
+    charsRef = database.ref('/inventory_characters');
+    charsRef.on('value', snap => {
       const raw = snap.val() || {};
 
       // Rebuild allChars, preserving the current char's live state so
@@ -1831,6 +1851,7 @@ window.CharacterManager = ({ auth, database }) => {
 
       allChars = {};
       Object.entries(raw).forEach(([id, data]) => {
+        if (pendingDeletes.has(id)) return; // skip until server confirms removal
         allChars[id] = {
           id,
           ownerUid:  data.ownerUid  || '',
@@ -1840,6 +1861,11 @@ window.CharacterManager = ({ auth, database }) => {
           sortOrder: data.sortOrder ?? data.createdAt ?? 0,
         };
       });
+
+      // Re-inject any locally-created char still awaiting Firebase confirmation
+      if (pendingNewChar && !allChars[pendingNewChar.id]) {
+        allChars[pendingNewChar.id] = pendingNewChar;
+      }
 
       if (currentCharId && allChars[currentCharId]) {
         if (dirty || localWriteInFlight) {
@@ -1855,13 +1881,34 @@ window.CharacterManager = ({ auth, database }) => {
 
       renderTabs();
 
+      // Clean up surplus unnamed characters for this user (keep the most recent)
+      if (currentUser) {
+        const mine = Object.values(allChars).filter(c => c.ownerUid === currentUser.uid);
+        const unnamed = mine.filter(c => !c.state.charName)
+                            .sort((a, b) => b.createdAt - a.createdAt);
+        if (unnamed.length > 1) {
+          unnamed.slice(1).forEach(c => {
+            if (!pendingDeletes.has(c.id)) {
+              pendingDeletes.add(c.id);
+              database.ref(`/inventory_characters/${c.id}`).remove()
+                .then(() => pendingDeletes.delete(c.id));
+            }
+          });
+        }
+      }
+
       if (!currentCharId || !allChars[currentCharId]) {
-        // Pick this user's most recent char, or the first overall, or create one
+        // Pick this user's most recent char; fall back to any char (DM viewing); else create
         const mine = Object.values(allChars)
           .filter(c => c.ownerUid === currentUser.uid)
           .sort((a, b) => b.createdAt - a.createdAt);
-        if (mine.length) switchToChar(mine[0].id, true);
-        else createChar();
+        if (mine.length) {
+          switchToChar(mine[0].id, true);
+        } else {
+          const any = Object.values(allChars).sort((a, b) => b.createdAt - a.createdAt);
+          if (any.length) switchToChar(any[0].id, true);
+          else            createChar();
+        }
       }
     });
   }
@@ -1910,16 +1957,8 @@ window.CharacterManager = ({ auth, database }) => {
     const newId     = ref.key;
     const createdAt = Date.now();
 
-    ref.set({
-      ownerUid:  currentUser.uid,
-      ownerName: currentUser.displayName || currentUser.email || 'Player',
-      state:     JSON.stringify(blank),
-      createdAt,
-      sortOrder: createdAt,
-    });
-
     // Add immediately to local state so tabs and inventory update without waiting for Firebase
-    allChars[newId] = {
+    const charData = {
       id: newId,
       ownerUid:  currentUser.uid,
       ownerName: currentUser.displayName || currentUser.email || 'Player',
@@ -1927,7 +1966,20 @@ window.CharacterManager = ({ auth, database }) => {
       createdAt,
       sortOrder: createdAt,
     };
-    currentCharId = newId;
+    allChars[newId]  = charData;
+    pendingNewChar   = charData;
+    currentCharId    = newId;
+
+    ref.set({
+      ownerUid:  currentUser.uid,
+      ownerName: currentUser.displayName || currentUser.email || 'Player',
+      state:     JSON.stringify(blank),
+      createdAt,
+      sortOrder: createdAt,
+    }).then(() => {
+      // Only clear if this specific creation is still the pending one
+      if (pendingNewChar === charData) pendingNewChar = null;
+    });
     suppressSave = true;
     try { inv.loadState(blank); } catch (e) { console.warn('loadState error:', e); }
     suppressSave = false;
@@ -1935,10 +1987,26 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   function deleteChar(charId) {
-    if (allChars[charId]?.ownerUid !== currentUser?.uid) return;
-    database.ref(`/inventory_characters/${charId}`).remove();
-    if (currentCharId === charId) currentCharId = null;
-    // Firebase listener handles picking/creating the next char
+    if (!window._isDM && allChars[charId]?.ownerUid !== currentUser?.uid) return;
+
+    // Remove locally immediately so Firebase echoes don't re-select this char
+    delete allChars[charId];
+    pendingDeletes.add(charId);
+    database.ref(`/inventory_characters/${charId}`).remove()
+      .then(() => pendingDeletes.delete(charId));
+
+    if (currentCharId === charId) {
+      currentCharId = null;
+      const mine = Object.values(allChars)
+        .filter(c => c.ownerUid === currentUser.uid)
+        .sort((a, b) => b.createdAt - a.createdAt);
+      const any  = Object.values(allChars).sort((a, b) => b.createdAt - a.createdAt);
+      if (mine.length) switchToChar(mine[0].id, true);
+      else if (any.length) switchToChar(any[0].id, true);
+      else createChar();
+    } else {
+      renderTabs();
+    }
   }
 
   function saveChar(charId, immediate) {
@@ -2098,8 +2166,8 @@ window.CharacterManager = ({ auth, database }) => {
           tab.appendChild(dot);
         }
 
-        // Delete button (own chars only)
-        if (char.ownerUid === currentUser?.uid) {
+        // Delete button — DM only
+        if (window._isDM) {
           const del = document.createElement('button');
           del.className   = 'char-tab-del';
           del.textContent = '×';
@@ -2120,7 +2188,9 @@ window.CharacterManager = ({ auth, database }) => {
         tabsEl.appendChild(tab);
       });
 
-    document.getElementById('add-char-btn').onclick = createChar;
+    const addBtn = document.getElementById('add-char-btn');
+    addBtn.hidden  = !window._isDM;
+    addBtn.onclick = createChar;
   }
 
   // Highlight tab on hover during inventory-item drag
