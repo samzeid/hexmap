@@ -735,11 +735,13 @@ main {
   transition: color 0.15s, opacity 0.15s;
 }
 /* Eye: dim when container is closed, bright when open */
-.slot-eye-inline                    { color: rgba(160, 100, 255, 0.35); }
+.slot-eye-inline                      { color: rgba(160, 100, 255, 0.35); }
 .slot-container-open .slot-eye-inline { color: rgba(190, 150, 255, 0.9); }
-/* Info: visible by default, highlighted when inspector is open for this item */
+/* Info: highlighted when inspector is open */
 .slot-info-inline        { color: rgba(255, 255, 255, 0.3); }
 .slot-info-inline.active { color: rgba(130, 190, 255, 0.95); }
+.slot-label:hover .slot-info-inline { color: rgba(255, 255, 255, 0.55); }
+.slot-label:hover .slot-info-inline.active { color: rgba(130, 190, 255, 0.95); }
 
 /* Slot highlight when linked container is open */
 .slot-container-open { background: rgba(160, 100, 255, 0.16); }
@@ -754,9 +756,9 @@ main {
 .slot-label {
   position: absolute;
   left: 8px;
-  right: 52px;
   top: 50%;
   transform: translateY(-50%);
+  max-width: calc(100% - 60px);
   font-size: 19px;
   color: var(--text);
   pointer-events: none;

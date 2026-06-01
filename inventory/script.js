@@ -421,15 +421,31 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       }
 
       if (linkedContainer) {
-        // Eye icon — visual indicator of open/closed state
+        // Info icon (left:4px) — clicking the label opens the inspector
+        const infoIcon = document.createElement('span');
+        infoIcon.className = 'slot-info-inline' + (isInspected ? ' active' : '');
+        infoIcon.innerHTML = '<i class="fas fa-circle-info"></i>';
+        label.appendChild(infoIcon);
+
+        // Eye icon (left:18px, right of info) — visual open/closed indicator only
         const eyeIcon = document.createElement('span');
         eyeIcon.className = 'slot-eye-inline';
+        eyeIcon.style.left = '18px';
         eyeIcon.innerHTML = containerIsOpen
           ? '<i class="fas fa-eye"></i>'
           : '<i class="fas fa-eye-slash"></i>';
         label.appendChild(eyeIcon);
 
-        // Entire slot area toggles the container
+        // Label (name + icons) opens inspector; stop propagation so wrap toggle doesn't fire
+        label.style.paddingLeft = '34px';
+        label.style.cursor = 'pointer';
+        label.style.pointerEvents = 'auto';
+        label.addEventListener('click', e => {
+          e.stopPropagation();
+          toggleInspectorFor(itemKey, slotData, container, r, c);
+        });
+
+        // Clicking the slot area outside the label still toggles the container
         wrap.style.cursor = 'pointer';
         wrap.addEventListener('click', e => {
           if (e.target.closest('.slot-remove')) return;
