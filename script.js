@@ -596,29 +596,6 @@ selectedHexesRef.on("value", (snapshot) => {
     console.error("Error fetching selected hexes:", error);
 });
 
-// Use the url to pass in an email and password for authentication.
-function authenticateFromUrl() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const email = urlParams.get("email");
-    const password = urlParams.get("password");
-
-    if (email && password) {
-        console.log("Found email and password in URL. Attempting sign in...");
-
-        auth.signInWithEmailAndPassword(email, password)
-        .then((userCredential) => {
-            console.log("Sign in successful with shared credentials.");
-        })
-        .catch((error) => {
-            const errorCode = error.code;
-            const errorMessage = error.message;
-            console.error("Authentication Error:", errorCode, errorMessage);
-        });
-    } else {
-        console.log("No email or password found in URL.");
-    }
-}
-
 // ── LOGIN ──────────────────────────────────────────────────────────────────
 const loginScreen   = document.getElementById("login-screen");
 const loginError    = document.getElementById("login-error");
@@ -980,9 +957,8 @@ invBtn.addEventListener("click", () => {
     invBtn.classList.toggle("active", open);
     controls.classList.toggle("inv-open", open);
     if (open) {
-        const urlParams = new URLSearchParams(window.location.search);
-        const email    = urlParams.get('email')    || loginEmail.value.trim();
-        const password = urlParams.get('password') || loginPassword.value;
+        const email    = loginEmail.value.trim();
+        const password = loginPassword.value;
         if (email && password) {
             document.getElementById('inv-frame')
                 ?.contentWindow?.postMessage({ type: 'signIn', email, password }, '*');
