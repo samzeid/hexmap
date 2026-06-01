@@ -1642,6 +1642,15 @@ window.CharacterManager = ({ auth, database }) => {
           row.classList.add('shop-item-dragging');
           document.documentElement.setPointerCapture(lpPointerId);
           inv.startShopDrag(buildShopSlotData(item), e.clientX, e.clientY);
+          // pointer is captured by documentElement so row's own pointerup never fires — clean up here
+          const cleanup = () => {
+            row._shopDragging = false;
+            row.classList.remove('shop-item-dragging');
+            document.removeEventListener('pointerup',     cleanup);
+            document.removeEventListener('pointercancel', cleanup);
+          };
+          document.addEventListener('pointerup',     cleanup);
+          document.addEventListener('pointercancel', cleanup);
         }, 380);
       });
       row.addEventListener('pointermove', e => {
@@ -1932,14 +1941,44 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   // ── INVENTORY CALLBACKS ──────────────────────────────────────────────────
+  function getCharCoins(charState) {
+    let pp = 0, gp = 0, sp = 0, cp = 0;
+    if (!charState || !charState.containers) return { pp, gp, sp, cp };
+    for (const container of charState.containers) {
+      if (!container.slots) continue;
+      for (const row of container.slots) {
+        for (const slot of row) {
+          if (!slot || !slot.variables || !slot.variables.coins) continue;
+          const amt = slot.variables.coins.value || 0;
+          if      (slot.name === 'Platinum Pieces (PP)') pp += amt;
+          else if (slot.name === 'Gold Pieces (GP)')     gp += amt;
+          else if (slot.name === 'Silver Pieces (SP)')   sp += amt;
+          else if (slot.name === 'Copper Pieces (CP)')   cp += amt;
+        }
+      }
+    }
+    return { pp, gp, sp, cp };
+  }
+
+  function setTabCoins(coinsEl, charState) {
+    const { pp, gp, sp, cp } = getCharCoins(charState);
+    coinsEl.innerHTML = '';
+    if (pp > 0) coinsEl.innerHTML += `<span class="coin-pp">${pp}pp</span>`;
+    if (gp > 0) coinsEl.innerHTML += `<span class="coin-gp">${gp}gp</span>`;
+    if (sp > 0) coinsEl.innerHTML += `<span class="coin-sp">${sp}sp</span>`;
+    if (cp > 0) coinsEl.innerHTML += `<span class="coin-cp">${cp}cp</span>`;
+  }
+
   function handleInventoryChange() {
     if (suppressSave || !currentCharId) return;
     dirty = true;
-    // Keep tab name in sync immediately
-    const curTabName = document.querySelector(
-      `[data-char-id="${currentCharId}"] .char-tab-name`
-    );
-    if (curTabName) curTabName.textContent = inv.getState().charName || 'Unnamed';
+    const tab = document.querySelector(`[data-char-id="${currentCharId}"]`);
+    if (tab) {
+      const nameEl   = tab.querySelector('.char-tab-name');
+      const coinsEl  = tab.querySelector('.char-tab-coins');
+      if (nameEl)  nameEl.textContent = inv.getState().charName || 'Unnamed';
+      if (coinsEl) setTabCoins(coinsEl, inv.getState());
+    }
     saveChar(currentCharId);
   }
 
@@ -2022,10 +2061,20 @@ window.CharacterManager = ({ auth, database }) => {
         tab.className  = 'char-tab' + (char.id === currentCharId ? ' active' : '');
         tab.dataset.charId = char.id;
 
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'char-tab-info';
+
         const nameSpan = document.createElement('span');
         nameSpan.className   = 'char-tab-name';
         nameSpan.textContent = char.state.charName || 'Unnamed';
-        tab.appendChild(nameSpan);
+        infoDiv.appendChild(nameSpan);
+
+        const coinsSpan = document.createElement('span');
+        coinsSpan.className = 'char-tab-coins';
+        setTabCoins(coinsSpan, char.state);
+        infoDiv.appendChild(coinsSpan);
+
+        tab.appendChild(infoDiv);
 
         // Ownership dot
         if (char.ownerUid === currentUser?.uid) {

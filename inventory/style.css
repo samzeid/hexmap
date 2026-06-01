@@ -129,7 +129,27 @@ input, textarea, select { font-size: max(16px, 1em); }
   transition: background 0.35s, border-color 0.35s, color 0.35s;
 }
 
+.char-tab-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+}
+
 .char-tab-name { pointer-events: none; }
+
+.char-tab-coins {
+  display: flex;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+}
+.char-tab-coins .coin-pp { color: rgba(190, 145, 255, 0.7); }
+.char-tab-coins .coin-gp { color: rgba(255, 205, 60,  0.7); }
+.char-tab-coins .coin-sp { color: rgba(200, 200, 215, 0.6); }
+.char-tab-coins .coin-cp { color: rgba(205, 135, 65,  0.65); }
 
 .char-tab-dot {
   width: 5px;
