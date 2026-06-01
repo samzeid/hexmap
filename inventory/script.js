@@ -1421,11 +1421,19 @@ window.CharacterManager = ({ auth, database }) => {
     window.parent.postMessage({ type: 'closeInventory' }, '*');
   });
 
-  // Receive sign-in credentials forwarded from the parent page
+  // Receive sign-in/out messages from the parent page
   window.addEventListener('message', e => {
-    if (e.data && e.data.type === 'signIn' && !auth.currentUser) {
-      auth.signInWithEmailAndPassword(e.data.email, e.data.password)
-        .catch(() => {});
+    if (e.data && e.data.type === 'signOut') {
+      auth.signOut().catch(() => {});
+    }
+    if (e.data && e.data.type === 'signIn') {
+      const current   = (auth.currentUser?.email || '').toLowerCase();
+      const requested = (e.data.email || '').toLowerCase();
+      if (!auth.currentUser || current !== requested) {
+        auth.signOut().then(() =>
+          auth.signInWithEmailAndPassword(e.data.email, e.data.password).catch(() => {})
+        );
+      }
     }
   });
 
@@ -1773,17 +1781,20 @@ window.CharacterManager = ({ auth, database }) => {
 
   // ── ROLE (DM / PLAYER) ──────────────────────────────────────────────────
   const roleBtn = document.getElementById('role-btn');
+  let userCanBeDM = false;
 
   function applyRole(role) {
-    window._isDM = (role === 'dm');
-    roleBtn.textContent  = window._isDM ? '⚔ DM' : '🛡 Player';
-    roleBtn.title        = window._isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
-    roleBtn.dataset.role = role;
+    const isDM = (role === 'dm') && userCanBeDM;
+    window._isDM         = isDM;
+    roleBtn.hidden       = !userCanBeDM;
+    roleBtn.textContent  = isDM ? '⚔ DM' : '🛡 Player';
+    roleBtn.title        = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
+    roleBtn.dataset.role = isDM ? 'dm' : 'player';
     if (shopOpen) buildShop();
   }
 
   roleBtn.addEventListener('click', () => {
-    if (!currentUser) return;
+    if (!currentUser || !userCanBeDM) return;
     const next = window._isDM ? 'player' : 'dm';
     database.ref(`/inventory_roles/${currentUser.uid}`).set(next);
     applyRole(next);
@@ -1792,13 +1803,17 @@ window.CharacterManager = ({ auth, database }) => {
   auth.onAuthStateChanged(user => {
     currentUser = user;
     if (user) {
-      database.ref(`/inventory_roles/${user.uid}`).once('value', snap => {
-        applyRole(snap.val() || 'player');
+      database.ref(`/inventory_dm_users/${user.uid}`).once('value', snap => {
+        userCanBeDM = snap.val() === true;
+        database.ref(`/inventory_roles/${user.uid}`).once('value', snap2 => {
+          applyRole(userCanBeDM ? (snap2.val() || 'player') : 'player');
+        });
       });
       subscribeToChars();
       subscribeToShopVisibility();
       subscribeToShopAvailability();
     } else {
+      userCanBeDM   = false;
       window._isDM  = false;
       currentCharId = null;
       allChars      = {};

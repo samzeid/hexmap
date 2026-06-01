@@ -653,7 +653,10 @@ loginPassword.addEventListener("keydown", e => {
 
 const signOutBtn = document.getElementById("sign-out-btn");
 
-signOutBtn.addEventListener("click", () => auth.signOut());
+signOutBtn.addEventListener("click", () => {
+  auth.signOut();
+  document.getElementById('inv-frame')?.contentWindow?.postMessage({ type: 'signOut' }, '*');
+});
 
 auth.onAuthStateChanged((user) => {
     if (user) {
@@ -663,6 +666,9 @@ auth.onAuthStateChanged((user) => {
     } else {
         loginScreen.classList.remove("hidden");
         signOutBtn.hidden = true;
+        const btn = document.getElementById("email-sign-in-btn");
+        btn.textContent = "Sign in";
+        btn.disabled    = false;
     }
 
     drawGridLatestActive();
