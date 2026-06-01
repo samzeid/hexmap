@@ -1684,16 +1684,25 @@ window.CharacterManager = ({ auth, database }) => {
         inv.toggleShopItem(buildShopSlotData(item), `shop-${item.name}`);
       });
 
-      let lpTimer = null, lpX, lpY, lpPointerId;
+      // Mirror the inventory-slot approach: touch-action:none prevents iOS from
+      // stealing the gesture; we manually scroll #shop-scroll during swipes so
+      // the list still scrolls, and use setPointerCapture once drag is confirmed.
+      row.style.touchAction = 'none';
+
+      let lpTimer = null, lpX, lpY, lpPointerId, lpScrolling = false, lpLastY = 0;
+      const shopScrollEl = document.getElementById('shop-scroll');
+
       row.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;
         lpX = e.clientX; lpY = e.clientY; lpPointerId = e.pointerId;
+        lpScrolling = false;
         lpTimer = setTimeout(() => {
           lpTimer = null;
+          lpScrolling = false;
           row._shopDragging = true;
           row.classList.add('shop-item-dragging');
+          document.documentElement.setPointerCapture(lpPointerId);
           inv.startShopDrag(buildShopSlotData(item), e.clientX, e.clientY);
-          // pointer is captured by documentElement so row's own pointerup never fires — clean up here
           const cleanup = () => {
             row._shopDragging = false;
             row.classList.remove('shop-item-dragging');
@@ -1705,13 +1714,21 @@ window.CharacterManager = ({ auth, database }) => {
         }, 380);
       });
       row.addEventListener('pointermove', e => {
+        if (lpScrolling) {
+          shopScrollEl.scrollTop += lpLastY - e.clientY;
+          lpLastY = e.clientY;
+          return;
+        }
         if (!lpTimer) return;
         if ((e.clientX - lpX) ** 2 + (e.clientY - lpY) ** 2 > 64) {
           clearTimeout(lpTimer); lpTimer = null;
+          lpScrolling = true;
+          lpLastY = e.clientY;
         }
       });
       const cancelLP = () => {
         if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+        lpScrolling = false;
         row._shopDragging = false;
         row.classList.remove('shop-item-dragging');
       };
