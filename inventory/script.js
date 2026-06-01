@@ -21,7 +21,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
   // ── HELPERS ─────────────────────────────────────────────────────────────
   function getLibraryItem(name) {
     if (!name || typeof name !== 'string') return null;
-    return ITEM_LIBRARY.find(i => i.name && i.name.toLowerCase() === name.trim().toLowerCase()) || null;
+    const key = name.trim().toLowerCase();
+    return ITEM_LIBRARY.find(i => i.name && (
+      i.name.toLowerCase() === key ||
+      (i.aliases && i.aliases.some(a => a.toLowerCase() === key))
+    )) || null;
   }
 
   function getLibraryItemSection(name) {
@@ -125,12 +129,19 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     for (const container of state.containers) {
       for (const row of container.slots) {
         for (const slot of row) {
-          if (!slot || !slot.variables || !slot.variables.coins) continue;
-          const amt = slot.variables.coins.value || 0;
-          if      (slot.name === 'Platinum Pieces (PP)') pp += amt;
-          else if (slot.name === 'Gold Pieces (GP)')     gp += amt;
-          else if (slot.name === 'Silver Pieces (SP)')   sp += amt;
-          else if (slot.name === 'Copper Pieces (CP)')   cp += amt;
+          if (!slot || !slot.variables) continue;
+          const v = slot.variables;
+          if (v.coins) {
+            const amt = v.coins.value || 0;
+            if      (slot.name === 'Platinum Pieces (PP)') pp += amt;
+            else if (slot.name === 'Gold Pieces (GP)')     gp += amt;
+            else if (slot.name === 'Silver Pieces (SP)')   sp += amt;
+            else if (slot.name === 'Copper Pieces (CP)')   cp += amt;
+          }
+          if (v.pp) pp += v.pp.value || 0;
+          if (v.gp) gp += v.gp.value || 0;
+          if (v.sp) sp += v.sp.value || 0;
+          if (v.cp) cp += v.cp.value || 0;
         }
       }
     }
@@ -278,7 +289,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       const ic  = parseInt(inspectorItemKey.substring(lastH + 1));
       const cnt = state.containers.find(c => c.id === cid);
       const sd  = cnt && cnt.slots[ir] && cnt.slots[ir][ic];
-      if (sd) document.getElementById('insp-name').textContent = sd.name || '';
+      if (sd) {
+        const _sdLib = getLibraryItem(sd.name);
+        const _sdEl  = document.getElementById('insp-name');
+        if (_sdLib && _sdLib.gridSymbol) _sdEl.innerHTML = `${_sdLib.gridSymbol}&nbsp;${_sdLib.name}`;
+        else _sdEl.textContent = sd.name || '';
+      }
     }
 
     if (onChange) onChange();
@@ -422,9 +438,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
           });
         });
       } else {
-        label.textContent = numVar
-          ? `${numVar.value} × ${matPfx}${dispName}`
-          : `${matPfx}${dispName}`;
+        const libForLabel = getLibraryItem(slotData.name);
+        const gridSymbol  = libForLabel && libForLabel.gridSymbol;
+        if (gridSymbol) {
+          label.innerHTML = `${gridSymbol}&nbsp;${libForLabel.name}`;
+          label.classList.add('slot-label-symbol');
+        } else {
+          label.textContent = numVar
+            ? `${numVar.value} × ${matPfx}${dispName}`
+            : `${matPfx}${dispName}`;
+        }
       }
 
       if (linkedContainer) {
@@ -493,6 +516,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       removeBtn.textContent = '−';
       removeBtn.addEventListener('click', e => {
         e.stopPropagation();
+        const removeLib = getLibraryItem(slotData.name);
+        if (removeLib && removeLib.warnOnRemove) {
+          const v = slotData.variables || {};
+          const hasCoins = ['pp','gp','sp','cp'].some(k => v[k] && (v[k].value || 0) > 0);
+          if (hasCoins && !confirm(removeLib.warnOnRemove)) return;
+        }
         clearSlot(container, r, c);
       });
       wrap.appendChild(removeBtn);
@@ -553,6 +582,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
   function commitSlot(name, container, r, c) {
     ignoreNextBlur = true;
     const libItem = getLibraryItem(name);
+    if (libItem && libItem.shopHidden) return;
     const canonName = libItem ? libItem.name : name;
     const row = container.slots[r];
     const existing = row[c];
@@ -643,7 +673,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     query = (query || '').trim().toLowerCase();
     if (!query) { closeDropdown(); return; }
 
-    let matches = ITEM_LIBRARY.filter(i => i.name && i.name.toLowerCase().includes(query));
+    let matches = ITEM_LIBRARY.filter(i => i.name && i.name.toLowerCase().includes(query) && !i.shopHidden);
     if (!window._isDM) matches = matches.filter(i => !i.dmOnly);
     if (!window._isDM && isHiddenFromPlayer) matches = matches.filter(i => !isHiddenFromPlayer(i.name));
     matches = matches.slice(0, 10);
@@ -697,7 +727,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     const lib = getLibraryItem(slotData.name);
 
     // ── Name ──
-    document.getElementById('insp-name').textContent = slotData.name || '';
+    const _nameEl = document.getElementById('insp-name');
+    if (lib && lib.gridSymbol) {
+      _nameEl.innerHTML = `${lib.gridSymbol}&nbsp;${lib.name}`;
+      _nameEl.classList.add('insp-name-symbol');
+    } else {
+      _nameEl.textContent = slotData.name || '';
+      _nameEl.classList.remove('insp-name-symbol');
+    }
 
     // ── Rename button (custom items only, left of name) ──
     const prevRenameBtn = document.getElementById('insp-rename-btn');
@@ -722,19 +759,35 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     // ── Inline numeric vars (count / charges) next to the name ──
     const inlineEl = document.getElementById('insp-inline-vars');
     inlineEl.innerHTML = '';
+    const COIN_KEYS = new Set(['pp', 'gp', 'sp', 'cp']);
+    const isCoinItem = Object.keys(slotData.variables || {}).every(k => COIN_KEYS.has(k));
+    if (isCoinItem) inlineEl.classList.add('coin-vars-layout');
+    else            inlineEl.classList.remove('coin-vars-layout');
     for (const [key, meta] of Object.entries(slotData.variables || {})) {
       if (meta.control !== 'plusminus' && meta.control !== 'both') continue;
-      const canStep = true;
       const wrap = document.createElement('div');
-      wrap.className = 'insp-inline-var';
-      wrap.innerHTML = `
-        <span class="insp-inline-label">${key}</span>
-        <button class="insp-btn-sm" data-k="${key}" data-d="-1">−</button>
-        <input class="insp-num-sm" type="number" value="${meta.value}" data-k="${key}"
-          ${typeof meta.min === 'number' ? `min="${meta.min}"` : ''}
-          ${typeof meta.max === 'number' ? `max="${meta.max}"` : ''} />
-        <button class="insp-btn-sm" data-k="${key}" data-d="1">+</button>
-      `;
+      wrap.className = 'insp-inline-var' + (isCoinItem ? ' coin-inline-var' : '');
+      if (isCoinItem) {
+        wrap.innerHTML = `
+          <span class="insp-inline-label coin-label-${key}">${key.toUpperCase()}</span>
+          <div class="coin-controls">
+            <button class="insp-btn-sm" data-k="${key}" data-d="-1">−</button>
+            <input class="insp-num-sm insp-num-coin" type="number" value="${meta.value}" data-k="${key}"
+              ${typeof meta.min === 'number' ? `min="${meta.min}"` : ''}
+              ${typeof meta.max === 'number' ? `max="${meta.max}"` : ''} />
+            <button class="insp-btn-sm" data-k="${key}" data-d="1">+</button>
+          </div>
+        `;
+      } else {
+        wrap.innerHTML = `
+          <span class="insp-inline-label">${key}</span>
+          <button class="insp-btn-sm" data-k="${key}" data-d="-1">−</button>
+          <input class="insp-num-sm" type="number" value="${meta.value}" data-k="${key}"
+            ${typeof meta.min === 'number' ? `min="${meta.min}"` : ''}
+            ${typeof meta.max === 'number' ? `max="${meta.max}"` : ''} />
+          <button class="insp-btn-sm" data-k="${key}" data-d="1">+</button>
+        `;
+      }
       inlineEl.appendChild(wrap);
     }
     inlineEl.querySelectorAll('.insp-btn-sm').forEach(btn => {
@@ -799,7 +852,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     // ── Remove ──
     const removeBtnEl = document.getElementById('insp-remove');
     removeBtnEl.hidden = !container;
-    if (container) removeBtnEl.onclick = () => { clearSlot(container, r, c); };
+    if (container) removeBtnEl.onclick = () => {
+      const lib = getLibraryItem(slotData.name);
+      if (lib && lib.warnOnRemove) {
+        const v = slotData.variables || {};
+        const coinKeys = ['pp','gp','sp','cp'];
+        const hasCoins = coinKeys.some(k => v[k] && (v[k].value || 0) > 0);
+        if (hasCoins && !confirm(lib.warnOnRemove)) return;
+      }
+      clearSlot(container, r, c);
+    };
 
     // ── Compact props row ──
     const propsEl = document.getElementById('insp-props');
@@ -1694,6 +1756,7 @@ window.CharacterManager = ({ auth, database }) => {
 
       row.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;
+        if (!window._isDM && !isItemAvailable(item.name)) return;
         lpX = e.clientX; lpY = e.clientY; lpPointerId = e.pointerId;
         lpScrolling = false;
         lpTimer = setTimeout(() => {
@@ -2082,12 +2145,19 @@ window.CharacterManager = ({ auth, database }) => {
       if (!container.slots) continue;
       for (const row of container.slots) {
         for (const slot of row) {
-          if (!slot || !slot.variables || !slot.variables.coins) continue;
-          const amt = slot.variables.coins.value || 0;
-          if      (slot.name === 'Platinum Pieces (PP)') pp += amt;
-          else if (slot.name === 'Gold Pieces (GP)')     gp += amt;
-          else if (slot.name === 'Silver Pieces (SP)')   sp += amt;
-          else if (slot.name === 'Copper Pieces (CP)')   cp += amt;
+          if (!slot || !slot.variables) continue;
+          const v = slot.variables;
+          if (v.coins) {
+            const amt = v.coins.value || 0;
+            if      (slot.name === 'Platinum Pieces (PP)') pp += amt;
+            else if (slot.name === 'Gold Pieces (GP)')     gp += amt;
+            else if (slot.name === 'Silver Pieces (SP)')   sp += amt;
+            else if (slot.name === 'Copper Pieces (CP)')   cp += amt;
+          }
+          if (v.pp) pp += v.pp.value || 0;
+          if (v.gp) gp += v.gp.value || 0;
+          if (v.sp) sp += v.sp.value || 0;
+          if (v.cp) cp += v.cp.value || 0;
         }
       }
     }
@@ -2108,10 +2178,8 @@ window.CharacterManager = ({ auth, database }) => {
     dirty = true;
     const tab = document.querySelector(`[data-char-id="${currentCharId}"]`);
     if (tab) {
-      const nameEl   = tab.querySelector('.char-tab-name');
-      const coinsEl  = tab.querySelector('.char-tab-coins');
-      if (nameEl)  nameEl.textContent = inv.getState().charName || 'Unnamed';
-      if (coinsEl) setTabCoins(coinsEl, inv.getState());
+      const nameEl = tab.querySelector('.char-tab-name');
+      if (nameEl) nameEl.textContent = inv.getState().charName || 'Unnamed';
     }
     saveChar(currentCharId);
   }
@@ -2203,10 +2271,6 @@ window.CharacterManager = ({ auth, database }) => {
         nameSpan.textContent = char.state.charName || 'Unnamed';
         infoDiv.appendChild(nameSpan);
 
-        const coinsSpan = document.createElement('span');
-        coinsSpan.className = 'char-tab-coins';
-        setTabCoins(coinsSpan, char.state);
-        infoDiv.appendChild(coinsSpan);
 
         tab.appendChild(infoDiv);
 

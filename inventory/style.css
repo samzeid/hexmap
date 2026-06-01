@@ -778,6 +778,7 @@ main {
 
 .slot-label-conflict  { color: #ff6060; right: 72px; }
 .slot-label-container { color: rgba(180, 120, 255, 0.9); }
+.slot-label-symbol    { color: rgba(255, 205, 60, 0.9); }
 .slot-packable .slot-label { color: rgba(80, 210, 130, 0.9); }
 
 .slot-input:focus ~ .slot-label { display: none; }
@@ -1002,6 +1003,8 @@ main {
   line-height: 1.2;
 }
 
+#insp-name.insp-name-symbol { color: rgba(255, 205, 60, 0.9); }
+
 .insp-rename-btn {
   background: none;
   border: none;
@@ -1024,10 +1027,32 @@ main {
   flex-wrap: wrap;
 }
 
+#insp-inline-vars.coin-vars-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+
 .insp-inline-var {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.coin-inline-var {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.coin-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  justify-content: center;
 }
 
 .insp-inline-label {
@@ -1035,6 +1060,17 @@ main {
   color: var(--muted);
   text-transform: capitalize;
   margin-right: 2px;
+}
+
+.coin-inline-var .insp-inline-label { margin-right: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
+.coin-label-pp { color: rgba(190, 145, 255, 0.9); }
+.coin-label-gp { color: rgba(255, 205,  60, 0.9); }
+.coin-label-sp { color: rgba(200, 200, 215, 0.85); }
+.coin-label-cp { color: rgba(205, 135,  65, 0.9); }
+
+.insp-num-coin {
+  width: 110px;
+  font-size: 12px;
 }
 
 .insp-btn-sm {
