@@ -1979,15 +1979,19 @@ window.CharacterManager = ({ auth, database }) => {
       // the list still scrolls, and use setPointerCapture once drag is confirmed.
       row.style.touchAction = 'none';
 
-      let lpTimer = null, lpX, lpY, lpPointerId, lpScrolling = false, lpLastY = 0;
+      let lpTimer = null, lpX, lpY, lpPointerId, lpScrolling = false, lpLastY = 0, lpTracking = false;
       const shopScrollEl = document.getElementById('shop-scroll');
 
       row.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;
-        if (!window._isDM && !isItemAvailable(item.name)) return;
-        if (!window._isDM && row.classList.contains('shop-item-unaffordable')) return;
+        // Always track position so scroll works even when purchase is blocked
         lpX = e.clientX; lpY = e.clientY; lpPointerId = e.pointerId;
-        lpScrolling = false;
+        lpScrolling = false; lpTracking = true;
+        const blocked = !window._isDM && (
+          !isItemAvailable(item.name) ||
+          row.classList.contains('shop-item-unaffordable')
+        );
+        if (blocked) return; // scroll still works via pointermove; just no drag
         lpTimer = setTimeout(() => {
           lpTimer = null;
           lpScrolling = false;
@@ -2011,16 +2015,16 @@ window.CharacterManager = ({ auth, database }) => {
           lpLastY = e.clientY;
           return;
         }
-        if (!lpTimer) return;
+        if (!lpTracking) return;
         if ((e.clientX - lpX) ** 2 + (e.clientY - lpY) ** 2 > 64) {
-          clearTimeout(lpTimer); lpTimer = null;
+          if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
           lpScrolling = true;
           lpLastY = e.clientY;
         }
       });
       const cancelLP = () => {
         if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
-        lpScrolling = false;
+        lpScrolling = false; lpTracking = false;
         row._shopDragging = false;
         row.classList.remove('shop-item-dragging');
       };
