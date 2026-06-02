@@ -1218,11 +1218,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     return { pp: 0, gp, sp, cp: totalCp };
   }
 
-  function deductCost(costStr) {
-    const costCp = parseCostCp(costStr);
+  function deductCostCp(costCp) {
     if (costCp <= 0) return;
 
-    // Collect all coin purse variable objects
     const purses = [];
     for (const container of state.containers) {
       for (const row of container.slots) {
@@ -1235,7 +1233,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
     if (!purses.length) return;
 
-    // Pool all coins into cp, subtract cost, redistribute into first purse
     let totalCp = 0;
     for (const v of purses)
       totalCp += (v.pp?.value || 0) * 1000 + (v.gp?.value || 0) * 100
@@ -1250,7 +1247,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
     let rem = totalCp - costCp;
     const f  = purses[0];
-    // PP is consumed to pay but change is never converted back to PP
     if (f.pp) f.pp.value = 0;
     if (f.gp) { f.gp.value = Math.floor(rem / 100);  rem %= 100; }
     if (f.sp) { f.sp.value = Math.floor(rem / 10);   rem %= 10; }
@@ -1258,6 +1254,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     render();
   }
+
+  function deductCost(costStr) { deductCostCp(parseCostCp(costStr)); }
 
   function addItemLocal(slotData) {
     const targets = state.containers.filter(c => c.id === 'equipped' || c.id === 'strapped');
@@ -1655,9 +1653,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     addItem(slotData) {
       addItemLocal(slotData);
     },
-    deductCost(costStr) {
-      deductCost(costStr);
-    },
+    deductCost(costStr)   { deductCost(costStr); },
+    deductCostCp(costCp) { deductCostCp(costCp); },
 
     cancelDrag() {
       if (!dragState) return;
@@ -1842,6 +1839,19 @@ window.CharacterManager = ({ auth, database }) => {
     });
   }
 
+  function renderCostHtml(totalCp, suffix) {
+    const parts = [];
+    let r = totalCp;
+    // Cap at GP — never show PP in cost display
+    const gp = Math.floor(r / 100); r %= 100;
+    const sp = Math.floor(r / 10);  r %= 10;
+    if (gp) parts.push(`<span class="cost-gp">${gp}gp</span>`);
+    if (sp) parts.push(`<span class="cost-sp">${sp}sp</span>`);
+    if (r)  parts.push(`<span class="cost-cp">${r}cp</span>`);
+    const base = parts.join(' ') || (totalCp === 0 ? '' : '');
+    return base + (suffix ? `<span class="cost-suffix">${suffix}</span>` : '');
+  }
+
   function shopCostToCp(costStr) {
     if (!costStr || /^free$/i.test(costStr.trim())) return 0;
     let total = 0;
@@ -1910,33 +1920,143 @@ window.CharacterManager = ({ auth, database }) => {
 
       const visible    = isItemVisible(item.name, currentSection);
       const avail      = isItemAvailable(item.name);
-      const costCp     = shopCostToCp(item.cost);
-      const cantAfford = !window._isDM && item.cost && costCp > walletCp;
+      const baseCostCp = shopCostToCp(item.cost);
+      const costSuffix = (item.cost || '').match(/\/\S+/)?.[0] || '';
+
+      // Effective category for material toggle eligibility
+      const shopCat = item.category
+        || (item.variables?.weapon?.control === 'select' ? 'weapon'
+          : item.variables?.armor?.control  === 'select' ? 'armor'
+          : ['Simple Weapons','Martial Weapons','Magical Weapons'].includes(currentSection) ? 'weapon'
+          : currentSection === 'Armor & Shields' ? (item.name === 'Shield' ? 'shield' : 'armor')
+          : null);
+      const canSilver = ['weapon','ammunition'].includes(shopCat);
+      const canMetal  = ['weapon','armor','shield','ammunition'].includes(shopCat);
+
+      // Weapon/armor type select variable
+      const typeVar    = item.variables?.weapon?.control  === 'select' ? item.variables.weapon
+                       : item.variables?.armor?.control   === 'select' ? item.variables.armor
+                       : null;
+      const elementVar = item.variables?.element?.control === 'select' ? item.variables.element : null;
+
+      // Mutable state tracked in closure
+      let silvered   = false;
+      let metalMat   = null; // null | 'mithral' | 'adamantine'
+      let typeSel    = null;
+      let elementSel = null;
+
+      const getTypeCostCp = () => {
+        const name = typeSel ? typeSel.value : typeVar?.value;
+        if (!name) return 0;
+        const lib = ITEM_LIBRARY.find(i => i.name === name);
+        return lib?.cost ? shopCostToCp(lib.cost) : 0;
+      };
+
+      const getTotalCostCp = () =>
+        baseCostCp + getTypeCostCp()
+        + (silvered ? 10000 : 0)
+        + (metalMat ? 50000  : 0);
 
       const row = document.createElement('div');
-      row.className = 'shop-item-row'
-        + (!visible && window._isDM ? ' shop-item-hidden' : '')
-        + (!avail ? ' shop-item-unavailable' : '')
-        + (cantAfford ? ' shop-item-unaffordable' : '');
       row.dataset.section  = currentSection;
       row.dataset.rarity   = currentRarity || '';
       row.dataset.itemName = item.name;
-      row.dataset.costCp   = costCp;
       if (!visible) row.dataset.playerHidden = 'true';
+
+      const applyRowState = () => {
+        const totalCp = getTotalCostCp();
+        row.dataset.costCp = totalCp;
+        const coins  = getCharCoins(inv.getState());
+        const wallet = coins.pp * 1000 + coins.gp * 100 + coins.sp * 10 + coins.cp;
+        const cantAfford = !window._isDM && totalCp > 0 && totalCp > wallet;
+        row.className = 'shop-item-row'
+          + (!visible && window._isDM ? ' shop-item-hidden' : '')
+          + (!avail ? ' shop-item-unavailable' : '')
+          + (cantAfford ? ' shop-item-unaffordable' : '');
+        costSpan.innerHTML = item.cost ? renderCostHtml(totalCp, costSuffix) : '';
+      };
+
+      const costSpan = document.createElement('span');
+      costSpan.className = 'shop-item-cost';
+
+      const infoIcon = document.createElement('span');
+      infoIcon.className = 'shop-item-info-icon';
+      infoIcon.innerHTML = '<i class="fas fa-circle-info"></i>';
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 'shop-item-name';
       nameSpan.textContent = item.name;
 
-      const costSpan = document.createElement('span');
-      costSpan.className = 'shop-item-cost';
-      costSpan.textContent = item.cost || '';
-
-      const infoIcon = document.createElement('span');
-      infoIcon.className = 'shop-item-info-icon';
-      infoIcon.innerHTML = '<i class="fas fa-circle-info"></i>';
       row.appendChild(infoIcon);
       row.appendChild(nameSpan);
+
+      // Type select (weapon/armor variants — adds base type cost)
+      if (typeVar) {
+        typeSel = document.createElement('select');
+        typeSel.className = 'shop-type-select';
+        (typeVar.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === typeVar.value) o.selected = true;
+          typeSel.appendChild(o);
+        });
+        typeSel.addEventListener('pointerdown', e => e.stopPropagation());
+        typeSel.addEventListener('click',       e => e.stopPropagation());
+        typeSel.addEventListener('change', applyRowState);
+        row.appendChild(typeSel);
+      }
+
+      // Element select (no cost change — just sets the element choice)
+      if (elementVar) {
+        elementSel = document.createElement('select');
+        elementSel.className = 'shop-type-select';
+        (elementVar.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === elementVar.value) o.selected = true;
+          elementSel.appendChild(o);
+        });
+        elementSel.addEventListener('pointerdown', e => e.stopPropagation());
+        elementSel.addEventListener('click',       e => e.stopPropagation());
+        row.appendChild(elementSel);
+      }
+
+      // Silver toggle (+100gp)
+      if (canSilver) {
+        const silverBtn = document.createElement('button');
+        silverBtn.className = 'shop-mat-btn';
+        silverBtn.textContent = 'Silver';
+        silverBtn.title = '+100gp';
+        silverBtn.addEventListener('pointerdown', e => e.stopPropagation());
+        silverBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          silvered = !silvered;
+          silverBtn.className = 'shop-mat-btn' + (silvered ? ' active-silvered' : '');
+          applyRowState();
+        });
+        row.appendChild(silverBtn);
+      }
+
+      // Mithral / Adamantine toggle (+500gp)
+      if (canMetal) {
+        const metals = [null, 'mithral', 'adamantine'];
+        const metalBtn = document.createElement('button');
+        metalBtn.className = 'shop-mat-btn';
+        metalBtn.textContent = 'Metal';
+        metalBtn.title = '+500gp';
+        metalBtn.addEventListener('pointerdown', e => e.stopPropagation());
+        metalBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          metalMat = metals[(metals.indexOf(metalMat) + 1) % metals.length];
+          metalBtn.textContent = metalMat
+            ? metalMat.charAt(0).toUpperCase() + metalMat.slice(1)
+            : 'Metal';
+          metalBtn.className = 'shop-mat-btn' + (metalMat ? ` active-${metalMat}` : '');
+          applyRowState();
+        });
+        row.appendChild(metalBtn);
+      }
+
       row.appendChild(costSpan);
 
       if (window._isDM) {
@@ -1967,38 +2087,48 @@ window.CharacterManager = ({ auth, database }) => {
         row.appendChild(visBtn);
       }
 
+      // Initial state
+      applyRowState();
+
+      const getSlotData = () => buildShopSlotData(
+        item,
+        typeSel?.value,
+        silvered,
+        metalMat,
+        elementSel?.value,
+        getTotalCostCp()
+      );
+
       row.addEventListener('click', e => {
         if (row._shopDragging
           || e.target.closest('.shop-item-vis-btn')
-          || e.target.closest('.shop-item-avail-btn')) return;
-        inv.toggleShopItem(buildShopSlotData(item), `shop-${item.name}`);
+          || e.target.closest('.shop-item-avail-btn')
+          || e.target.closest('.shop-type-select')
+          || e.target.closest('.shop-mat-btn')
+          || e.target.tagName === 'SELECT') return;
+        inv.toggleShopItem(getSlotData(), `shop-${item.name}`);
       });
 
-      // Mirror the inventory-slot approach: touch-action:none prevents iOS from
-      // stealing the gesture; we manually scroll #shop-scroll during swipes so
-      // the list still scrolls, and use setPointerCapture once drag is confirmed.
       row.style.touchAction = 'none';
-
       let lpTimer = null, lpX, lpY, lpPointerId, lpScrolling = false, lpLastY = 0, lpTracking = false;
       const shopScrollEl = document.getElementById('shop-scroll');
 
       row.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;
-        // Always track position so scroll works even when purchase is blocked
         lpX = e.clientX; lpY = e.clientY; lpPointerId = e.pointerId;
         lpScrolling = false; lpTracking = true;
         const blocked = !window._isDM && (
           !isItemAvailable(item.name) ||
           row.classList.contains('shop-item-unaffordable')
         );
-        if (blocked) return; // scroll still works via pointermove; just no drag
+        if (blocked) return;
         lpTimer = setTimeout(() => {
           lpTimer = null;
           lpScrolling = false;
           row._shopDragging = true;
           row.classList.add('shop-item-dragging');
           document.documentElement.setPointerCapture(lpPointerId);
-          inv.startShopDrag(buildShopSlotData(item), e.clientX, e.clientY);
+          inv.startShopDrag(getSlotData(), e.clientX, e.clientY);
           const cleanup = () => {
             row._shopDragging = false;
             row.classList.remove('shop-item-dragging');
@@ -2073,12 +2203,18 @@ window.CharacterManager = ({ auth, database }) => {
     scroll.scrollTop = savedScrollTop;
   }
 
-  function buildShopSlotData(libItem) {
-    return {
-      name:      libItem.name,
-      variables: JSON.parse(JSON.stringify(libItem.variables || {})),
-      _shopItem: true,
-    };
+  function buildShopSlotData(libItem, selectedType, silvered, material, selectedElement, totalCostCp) {
+    const vars = JSON.parse(JSON.stringify(libItem.variables || {}));
+    if (selectedType) {
+      if (vars.weapon?.control  === 'select') vars.weapon.value  = selectedType;
+      if (vars.armor?.control   === 'select') vars.armor.value   = selectedType;
+    }
+    if (selectedElement && vars.element?.control === 'select') vars.element.value = selectedElement;
+    const slotData = { name: libItem.name, variables: vars, _shopItem: true };
+    if (silvered)     slotData.silvered    = true;
+    if (material)     slotData.material    = material;
+    if (totalCostCp != null) slotData._shopCostCp = totalCostCp;
+    return slotData;
   }
 
   function filterShop() {
@@ -2473,8 +2609,12 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   function handleShopPurchase(slotData) {
-    const lib = window.ITEM_LIBRARY.find(i => i.name === slotData.name);
-    if (lib && lib.cost) inv.deductCost(lib.cost);
+    if (slotData._shopCostCp != null) {
+      inv.deductCostCp(slotData._shopCostCp);
+    } else {
+      const lib = window.ITEM_LIBRARY.find(i => i.name === slotData.name);
+      if (lib && lib.cost) inv.deductCost(lib.cost);
+    }
     if (shopOpen) updateShopWallet();
   }
 

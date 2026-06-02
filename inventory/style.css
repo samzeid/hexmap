@@ -468,6 +468,7 @@ input, textarea, select { font-size: max(16px, 1em); }
   -webkit-user-select: none;
 }
 
+.shop-item-row:nth-child(even) { background: rgba(255,255,255,0.025); }
 .shop-item-row:active  { background: rgba(255,255,255,0.06); }
 .shop-item-row.shop-item-dragging { opacity: 0.4; }
 
@@ -481,15 +482,69 @@ input, textarea, select { font-size: max(16px, 1em); }
   text-overflow: ellipsis;
 }
 
-.shop-item-cost {
-  font-size: 13px;
-  color: rgba(180,210,120,0.8);
-  white-space: nowrap;
+.shop-type-select {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 2px 4px;
   flex-shrink: 0;
+  max-width: 130px;
+  cursor: pointer;
 }
 
-.shop-item-unaffordable .shop-item-name { color: rgba(255, 90, 90, 0.85); }
-.shop-item-unaffordable .shop-item-cost { color: rgba(255, 90, 90, 0.7); }
+.shop-item-cost {
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+.cost-gp     { color: rgba(255, 205, 60,  0.9); }
+.cost-sp     { color: rgba(200, 200, 215, 0.85); }
+.cost-cp     { color: rgba(205, 135, 65,  0.85); }
+.cost-suffix { color: rgba(255,255,255,0.35); font-size: 11px; }
+
+/* Unaffordable: red border + subtle red background */
+.shop-item-unaffordable {
+  border-left: 2px solid rgba(255, 80, 80, 0.6) !important;
+  background: rgba(255, 60, 60, 0.06) !important;
+}
+
+.shop-mat-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  color: rgba(255,255,255,0.4);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+/* Match inspector prop-chip active states */
+.shop-mat-btn.active-silvered {
+  background: rgba(210,210,230,0.15);
+  border-color: rgba(210,210,230,0.4);
+  color: #c8c8e0;
+  font-weight: 600;
+}
+.shop-mat-btn.active-mithral {
+  background: rgba(100,180,255,0.15);
+  border-color: rgba(100,180,255,0.4);
+  color: #80c8ff;
+  font-weight: 600;
+}
+.shop-mat-btn.active-adamantine {
+  background: rgba(80,220,160,0.15);
+  border-color: rgba(80,220,160,0.4);
+  color: #60dba0;
+  font-weight: 600;
+}
 
 #role-btn { font-weight: 600; font-size: 0.85rem; white-space: nowrap; font-family: inherit; padding: 0 10px; }
 #role-btn[data-role="dm"]     { color: rgba(180,120,255,0.9); }
@@ -913,11 +968,6 @@ main {
 .slot:nth-child(even) { border-right: none; }
 .slot:nth-last-child(-n+2) { border-bottom: none; }
 
-/* Alternating row tint — every other pair of slots (one grid row) */
-.inv-grid .slot:nth-child(4n+3),
-.inv-grid .slot:nth-child(4n+4) {
-  background: rgba(255,255,255,0.055);
-}
 
 /* Full-width bulky slot */
 .slot-full {
