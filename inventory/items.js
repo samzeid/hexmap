@@ -129,10 +129,10 @@ window.ITEM_LIBRARY = [
   { _section: "Currency" },
   // ── CURRENCY ─────────────────────────────────────────────────────────────
   // Stacks up to 50 per packable slot. Use the counter to track quantity.
-  { name: "Copper Pieces (CP)",   bulk: Bulk.PACKABLE, description: `1 cp = 1/10 sp = 1/100 gp`, variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
-  { name: "Silver Pieces (SP)",   bulk: Bulk.PACKABLE, description: `1 sp = 10 cp = 1/10 gp`,    variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
-  { name: "Gold Pieces (GP)",     bulk: Bulk.PACKABLE, description: `1 gp = 10 sp = 100 cp`,     variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
-  { name: "Platinum Pieces (PP)", bulk: Bulk.PACKABLE, description: `1 pp = 10 gp = 100 sp`,     variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
+  { name: "Copper Pieces (CP)",   shopHidden: true, bulk: Bulk.PACKABLE, description: `1 cp = 1/10 sp = 1/100 gp`, variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
+  { name: "Silver Pieces (SP)",   shopHidden: true, bulk: Bulk.PACKABLE, description: `1 sp = 10 cp = 1/10 gp`,    variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
+  { name: "Gold Pieces (GP)",     shopHidden: true, bulk: Bulk.PACKABLE, description: `1 gp = 10 sp = 100 cp`,     variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
+  { name: "Platinum Pieces (PP)", shopHidden: true, bulk: Bulk.PACKABLE, description: `1 pp = 10 gp = 100 sp`,     variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
   { name: "Coin Purse", aliases: ["🪙"], gridSymbol: `<i class="fas fa-coins"></i>`, bulk: Bulk.STOCK, noCarry: true, warnOnRemove: "Remove Coin Purse? Any tracked coin counts will be lost.", description: `Tracks all coin types freely with no slot limit. Each denomination is counted in the coin total.`, variables: { pp: { value: 0, control: "both", min: 0, max: 999999 }, gp: { value: 0, control: "both", min: 0, max: 999999 }, sp: { value: 0, control: "both", min: 0, max: 999999 }, cp: { value: 0, control: "both", min: 0, max: 999999 } } },
 
   { _section: "Adventuring Gear" },

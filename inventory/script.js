@@ -1,4 +1,4 @@
-window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenFromPlayer }) => {
+window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, isHiddenFromPlayer }) => {
 
   // ── STATE ──────────────────────────────────────────────────────────────
   function createDefaultContainers() {
@@ -368,31 +368,53 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     input.spellcheck = false;
 
     const prev = slotData ? slotData.name : '';
+    // typedValue tracks the user's live input independently of input.value, which
+    // some Android browsers reset via blur before keydown/keyup fires.
+    let typedValue = '';
 
     input.addEventListener('focus', () => {
+      typedValue = input.value;
       acContainer = container; acRow = r; acCol = c; acInput = input;
       updateDropdown(input.value);
     });
 
-    input.addEventListener('input', () => updateDropdown(input.value));
+    input.addEventListener('input', () => {
+      typedValue = input.value;
+      updateDropdown(input.value);
+    });
+
+    const commitFromTyped = () => {
+      if (!document.contains(input)) return; // element removed by a prior render()
+      const val = typedValue.trim();
+      typedValue = '';
+      if (val) commitSlot(val, container, r, c);
+      else if (slotData) clearSlot(container, r, c);
+      else closeDropdown();
+    };
 
     input.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        const val = input.value.trim();
-        if (val) commitSlot(val, container, r, c);
-        else if (slotData) clearSlot(container, r, c);
-        else closeDropdown();
+        commitFromTyped();
       } else if (e.key === 'Escape') {
+        typedValue = '';
         input.value = prev;
         closeDropdown();
         input.blur();
       }
     });
 
+    // Fallback for Samsung / Android keyboards that report Enter on keyup
+    // after IME composition (keydown fires with key='Unidentified' instead).
+    input.addEventListener('keyup', e => {
+      if (e.key === 'Enter') commitFromTyped();
+    });
+
     input.addEventListener('blur', () => {
       input.classList.remove('slot-editing');
       if (ignoreNextBlur) { ignoreNextBlur = false; return; }
+      // Do NOT reset typedValue here — on Android, blur fires before keyup,
+      // so typedValue must survive until the key event handler runs.
       input.value = prev;
       closeDropdown();
     });
@@ -441,7 +463,15 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
         const libForLabel = getLibraryItem(slotData.name);
         const gridSymbol  = libForLabel && libForLabel.gridSymbol;
         if (gridSymbol) {
-          label.innerHTML = `${gridSymbol}&nbsp;${libForLabel.name}`;
+          const cv = slotData.variables || {};
+          const activeCoins = [['pp',cv.pp],['gp',cv.gp],['sp',cv.sp],['cp',cv.cp]]
+            .filter(([,v]) => v && (v.value || 0) > 0);
+          const coinParts = activeCoins.map(([k,v]) => `<span class="coin-label-${k}">${v.value}${k}</span>`);
+          const iconClass = activeCoins.length === 1 ? `coin-label-${activeCoins[0][0]}` : 'coin-label-white';
+          const iconHtml = `<span class="${iconClass}">${gridSymbol}</span>`;
+          label.innerHTML = coinParts.length
+            ? `${iconHtml}&nbsp;${coinParts.join(' ')}`
+            : `${gridSymbol}&nbsp;${libForLabel.name}`;
           label.classList.add('slot-label-symbol');
         } else {
           label.textContent = numVar
@@ -597,16 +627,19 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
         row[0] = slotData;
         row[1] = null;
       } else {
-        const target = findEmptySlot(container, r);
-        if (target) {
-          container.slots[target.r][target.c] = displaced;
-          row[0] = slotData;
-          row[1] = null;
-        } else {
-          slotData.conflict = true;
-          slotData.conflictMsg = 'This item is too bulky — clear an adjacent slot to resolve.';
-          row[c] = slotData;
+        let targetRow = container.slots.findIndex(
+          (sr, ri) => ri !== r && !sr[0] && !sr[1]
+        );
+        if (targetRow === -1) {
+          container.slots.push([null, null]);
+          container.rows++;
+          targetRow = container.slots.length - 1;
         }
+        container.slots[targetRow][0] = slotData;
+        container.slots[targetRow][1] = null;
+        closeDropdown();
+        render();
+        return;
       }
     } else {
       row[c] = slotData;
@@ -1151,15 +1184,101 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
   });
 
   // ── DRAG & DROP ───────────────────────────────────────────────────────────
-  const _shopTabBtn = document.getElementById('shop-tab-btn');
+  const _shopTabBtn  = document.getElementById('shop-tab-btn');
+  const _trashBtn    = document.getElementById('drag-trash-btn');
 
   function activateTrash() {
-    _shopTabBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
-    _shopTabBtn.classList.add('drag-trash');
+    _trashBtn.hidden = false;
+    _shopTabBtn.classList.add('shop-tab-sell-zone');
   }
   function deactivateTrash() {
-    _shopTabBtn.innerHTML = '🛒';
-    _shopTabBtn.classList.remove('drag-trash', 'drag-trash-hover');
+    _trashBtn.hidden = true;
+    _trashBtn.classList.remove('drag-trash-hover');
+    _shopTabBtn.classList.remove('shop-tab-sell-zone', 'shop-tab-sell-hover');
+  }
+
+  function parseCostCp(costStr) {
+    if (!costStr || /^free$/i.test(costStr.trim())) return 0;
+    let total = 0;
+    const pp = costStr.match(/(\d+(?:\.\d+)?)\s*pp/i);
+    const gp = costStr.match(/(\d+(?:\.\d+)?)\s*gp/i);
+    const sp = costStr.match(/(\d+(?:\.\d+)?)\s*sp/i);
+    const cp = costStr.match(/(\d+(?:\.\d+)?)\s*cp/i);
+    if (pp) total += Math.round(parseFloat(pp[1]) * 1000);
+    if (gp) total += Math.round(parseFloat(gp[1]) * 100);
+    if (sp) total += Math.round(parseFloat(sp[1]) * 10);
+    if (cp) total += Math.round(parseFloat(cp[1]));
+    return total;
+  }
+
+  function cpToCoins(totalCp) {
+    // Never produce PP — cap at GP denomination
+    const gp = Math.floor(totalCp / 100); totalCp %= 100;
+    const sp = Math.floor(totalCp / 10);  totalCp %= 10;
+    return { pp: 0, gp, sp, cp: totalCp };
+  }
+
+  function deductCost(costStr) {
+    const costCp = parseCostCp(costStr);
+    if (costCp <= 0) return;
+
+    // Collect all coin purse variable objects
+    const purses = [];
+    for (const container of state.containers) {
+      for (const row of container.slots) {
+        for (const slot of row) {
+          if (!slot?.variables) continue;
+          const v = slot.variables;
+          if ('gp' in v && 'sp' in v && 'cp' in v) purses.push(v);
+        }
+      }
+    }
+    if (!purses.length) return;
+
+    // Pool all coins into cp, subtract cost, redistribute into first purse
+    let totalCp = 0;
+    for (const v of purses)
+      totalCp += (v.pp?.value || 0) * 1000 + (v.gp?.value || 0) * 100
+               + (v.sp?.value || 0) * 10   + (v.cp?.value  || 0);
+    if (totalCp < costCp) return;
+
+    for (const v of purses) {
+      if (v.pp) v.pp.value = 0;
+      if (v.gp) v.gp.value = 0;
+      if (v.sp) v.sp.value = 0;
+      if (v.cp) v.cp.value = 0;
+    }
+    let rem = totalCp - costCp;
+    const f  = purses[0];
+    // PP is consumed to pay but change is never converted back to PP
+    if (f.pp) f.pp.value = 0;
+    if (f.gp) { f.gp.value = Math.floor(rem / 100);  rem %= 100; }
+    if (f.sp) { f.sp.value = Math.floor(rem / 10);   rem %= 10; }
+    if (f.cp) { f.cp.value = rem; }
+
+    render();
+  }
+
+  function addItemLocal(slotData) {
+    const targets = state.containers.filter(c => c.id === 'equipped' || c.id === 'strapped');
+    for (const container of targets) {
+      let placed = false;
+      for (let r = 0; r < container.slots.length; r++) {
+        if (!container.slots[r][0]) {
+          placeSlotData(slotData, container, r, 0); placed = true; break;
+        }
+        if (!container.slots[r][1] && !isSlotBulky(slotData)) {
+          placeSlotData(slotData, container, r, 1); placed = true; break;
+        }
+      }
+      if (placed) return;
+    }
+    const strapped = state.containers.find(c => c.id === 'strapped');
+    if (strapped) {
+      strapped.slots.push([null, null]);
+      strapped.rows++;
+      placeSlotData(slotData, strapped, strapped.slots.length - 1, 0);
+    }
   }
 
   // removeFromSource: called only when a drop is committed, to extract the item from its origin.
@@ -1189,6 +1308,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     if (!dragState) return;
     dragScrollVel = 0;
     dragScrollRaf = null;
+
+    // Capture trash position BEFORE deactivateTrash() hides the button (display:none
+    // makes getBoundingClientRect return zeros and elementFromPoint skip it).
+    const _trashRect = _trashBtn.getBoundingClientRect();
+    const _overTrash = !_trashBtn.hidden
+      && x >= _trashRect.left && x <= _trashRect.right
+      && y >= _trashRect.top  && y <= _trashRect.bottom;
+
     deactivateTrash();
 
     ghostEl.style.visibility = 'hidden';
@@ -1207,11 +1334,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
 
     const wrap = el && el.closest('[data-container-id]');
     const targetContainer = wrap && state.containers.find(c => c.id === wrap.dataset.containerId);
+    const isShopDrag = !!dragState._shopDrag;
     const { slotData, srcContainer, srcR, srcC, srcCenter, removeFromSource } = dragState;
     dragState = null;
-
-    // Trash drop — run the same deletion path as the inspector "Remove item" button
-    if (el && (el === _shopTabBtn || _shopTabBtn.contains(el)) && srcContainer) {
+    if (_overTrash && srcContainer) {
       const trashLib = getLibraryItem(slotData.name);
       if (trashLib && trashLib.warnOnRemove) {
         const v = slotData.variables || {};
@@ -1219,6 +1345,32 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
         if (hasCoins && !confirm(trashLib.warnOnRemove)) { render(); return; }
       }
       clearSlot(srcContainer, srcR, srcC);
+      return;
+    }
+
+    // Sell: dropped on shop tab button
+    if (el && (el === _shopTabBtn || _shopTabBtn.contains(el)) && srcContainer) {
+      const lib = getLibraryItem(slotData.name);
+      const halfCp = lib && lib.cost ? Math.floor(parseCostCp(lib.cost) / 2) : 0;
+      if (halfCp > 0) {
+        removeFromSource();
+        const coins = cpToCoins(halfCp);
+        const purseLib = getLibraryItem('Coin Purse');
+        const purseVars = JSON.parse(JSON.stringify(
+          purseLib ? purseLib.variables
+                   : { pp: { value: 0, control: 'both', min: 0, max: 999999 },
+                       gp: { value: 0, control: 'both', min: 0, max: 999999 },
+                       sp: { value: 0, control: 'both', min: 0, max: 999999 },
+                       cp: { value: 0, control: 'both', min: 0, max: 999999 } }
+        ));
+        purseVars.pp.value = coins.pp;
+        purseVars.gp.value = coins.gp;
+        purseVars.sp.value = coins.sp;
+        purseVars.cp.value = coins.cp;
+        addItemLocal({ name: 'Coin Purse', variables: purseVars });
+      } else {
+        render();
+      }
       return;
     }
 
@@ -1282,6 +1434,21 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
         return;
       }
 
+      // Coin Purse merge: drop one onto another of the same name that has coin variables
+      if (targetItem && targetItem.name === slotData.name) {
+        const COIN_KEYS = ['pp', 'gp', 'sp', 'cp'];
+        const sv = slotData.variables || {};
+        const tv = targetItem.variables || {};
+        if (COIN_KEYS.some(k => k in sv && k in tv)) {
+          COIN_KEYS.forEach(k => {
+            if (sv[k] && tv[k]) tv[k].value = (tv[k].value || 0) + (sv[k].value || 0);
+          });
+          removeFromSource();
+          render();
+          return;
+        }
+      }
+
       // Smart drop into container: if target slot holds a container item, try placing inside it
       if (targetItem && targetItem.containerId && !isSlotBulky(slotData)) {
         const linked = state.containers.find(c => c.id === targetItem.containerId);
@@ -1292,6 +1459,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
             if (freeSlot) {
               removeFromSource();
               placeSlotData(slotData, linked, freeSlot.r, freeSlot.c);
+              if (isShopDrag && onShopPurchase) onShopPurchase(slotData);
               return;
             }
           }
@@ -1301,8 +1469,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       // Commit: remove item from source now that we know the drop is valid
       removeFromSource();
 
-      if (targetItem) {
-        // Swap — fly both items between their old and new slots
+      if (targetItem && srcContainer) {
+        // Swap — fly both items between their old and new slots (only for inventory→inventory)
         const swapName = packName(targetItem);
         targetContainer.slots[tR][tC] = null;
         srcContainer.slots[srcR][srcC] = targetItem;
@@ -1315,6 +1483,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       }
 
       placeSlotData(slotData, targetContainer, tR, tC);
+      if (isShopDrag && onShopPurchase) onShopPurchase(slotData);
       const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
       if (srcCenter) spawnFlightClone(packName(slotData), srcCenter, actualDest);
     } else {
@@ -1375,15 +1544,25 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       if (!displaced) {
         row[0] = slotData; row[1] = null; finalC = 0;
       } else {
-        const target = findEmptySlot(container, r);
-        if (target) {
-          container.slots[target.r][target.c] = displaced;
-          row[0] = slotData; row[1] = null; finalC = 0;
-        } else {
-          slotData.conflict = true;
-          slotData.conflictMsg = 'This item is too bulky — clear an adjacent slot to resolve.';
-          row[c] = slotData;
+        // Target row isn't fully free — find or create a fully free row
+        let targetRow = container.slots.findIndex(
+          (sr, ri) => ri !== r && !sr[0] && !sr[1]
+        );
+        if (targetRow === -1) {
+          container.slots.push([null, null]);
+          container.rows++;
+          targetRow = container.slots.length - 1;
         }
+        container.slots[targetRow][0] = slotData;
+        container.slots[targetRow][1] = null;
+        if (slotData.containerId) {
+          const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+          if (linked) linked.linkedTo = { containerId: container.id, r: targetRow, c: 0 };
+        } else if (isContainerItem(slotData)) {
+          createLinkedContainer(slotData, container.id, targetRow, 0);
+        }
+        render();
+        return;
       }
     } else {
       row[c] = slotData;
@@ -1405,10 +1584,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
     moveGhost(e.clientX, e.clientY);
 
     // Highlight trash when hovering over it
-    if (_shopTabBtn.classList.contains('drag-trash')) {
-      const tr = _shopTabBtn.getBoundingClientRect();
+    if (!_trashBtn.hidden) {
+      const tr = _trashBtn.getBoundingClientRect();
       const over = e.clientX >= tr.left && e.clientX <= tr.right && e.clientY >= tr.top && e.clientY <= tr.bottom;
-      _shopTabBtn.classList.toggle('drag-trash-hover', over);
+      _trashBtn.classList.toggle('drag-trash-hover', over);
+    }
+
+    // Highlight shop tab as sell zone when hovering
+    if (_shopTabBtn.classList.contains('shop-tab-sell-zone')) {
+      const str = _shopTabBtn.getBoundingClientRect();
+      const overShop = e.clientX >= str.left && e.clientX <= str.right
+                    && e.clientY >= str.top  && e.clientY <= str.bottom;
+      _shopTabBtn.classList.toggle('shop-tab-sell-hover', overShop);
     }
 
     // Auto-scroll #inv-scroll when dragging near top/bottom edges
@@ -1466,27 +1653,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
       dragState._shopDrag = true;
     },
     addItem(slotData) {
-      // Place item into the first available slot in equipped, then strapped
-      const targets = state.containers.filter(c => c.id === 'equipped' || c.id === 'strapped');
-      for (const container of targets) {
-        let placed = false;
-        for (let r = 0; r < container.slots.length; r++) {
-          if (!container.slots[r][0]) {
-            placeSlotData(slotData, container, r, 0); placed = true; break;
-          }
-          if (!container.slots[r][1] && !isSlotBulky(slotData)) {
-            placeSlotData(slotData, container, r, 1); placed = true; break;
-          }
-        }
-        if (placed) return;
-      }
-      // All slots full — append a row to strapped
-      const strapped = state.containers.find(c => c.id === 'strapped');
-      if (strapped) {
-        strapped.slots.push([null, null]);
-        strapped.rows++;
-        placeSlotData(slotData, strapped, strapped.slots.length - 1, 0);
-      }
+      addItemLocal(slotData);
+    },
+    deductCost(costStr) {
+      deductCost(costStr);
     },
 
     cancelDrag() {
@@ -1539,6 +1709,7 @@ window.CharacterManager = ({ auth, database }) => {
     auth: { onAuthStateChanged: () => {} },
     onChange:            handleInventoryChange,
     onCrossCharDrop:     handleCrossCharDrop,
+    onShopPurchase:      handleShopPurchase,
     isHiddenFromPlayer:  (itemName) => !isItemVisible(itemName, getItemSection(itemName)),
   });
 
@@ -1547,21 +1718,29 @@ window.CharacterManager = ({ auth, database }) => {
     window.parent.postMessage({ type: 'closeInventory' }, '*');
   });
 
+  // Converts a plain username to a Firebase-compatible email by appending a
+  // fixed domain. If the value already contains '@' it is returned unchanged.
+  function toFirebaseEmail(username) {
+    const s = (username || '').trim();
+    return s.includes('@') ? s : `${s}@bytespritegames.com`;
+  }
+
   // Receive sign-in/out messages from the parent page
   window.addEventListener('message', e => {
     if (e.data && e.data.type === 'signOut') {
       auth.signOut().catch(() => {});
     }
     if (e.data && e.data.type === 'signIn') {
+      const firebaseEmail = toFirebaseEmail(e.data.email);
       const current   = (auth.currentUser?.email || '').toLowerCase();
-      const requested = (e.data.email || '').toLowerCase();
+      const requested = firebaseEmail.toLowerCase();
       if (!auth.currentUser) {
         // Not signed in — sign in directly without a signOut first
-        auth.signInWithEmailAndPassword(e.data.email, e.data.password).catch(() => {});
+        auth.signInWithEmailAndPassword(firebaseEmail, e.data.password).catch(() => {});
       } else if (current !== requested) {
         // Signed in as a different user — switch accounts
         auth.signOut().then(() =>
-          auth.signInWithEmailAndPassword(e.data.email, e.data.password).catch(() => {})
+          auth.signInWithEmailAndPassword(firebaseEmail, e.data.password).catch(() => {})
         );
       }
       // Same user already signed in — do nothing
@@ -1663,6 +1842,20 @@ window.CharacterManager = ({ auth, database }) => {
     });
   }
 
+  function shopCostToCp(costStr) {
+    if (!costStr || /^free$/i.test(costStr.trim())) return 0;
+    let total = 0;
+    const pp = costStr.match(/(\d+(?:\.\d+)?)\s*pp/i);
+    const gp = costStr.match(/(\d+(?:\.\d+)?)\s*gp/i);
+    const sp = costStr.match(/(\d+(?:\.\d+)?)\s*sp/i);
+    const cp = costStr.match(/(\d+(?:\.\d+)?)\s*cp/i);
+    if (pp) total += Math.round(parseFloat(pp[1]) * 1000);
+    if (gp) total += Math.round(parseFloat(gp[1]) * 100);
+    if (sp) total += Math.round(parseFloat(sp[1]) * 10);
+    if (cp) total += Math.round(parseFloat(cp[1]));
+    return total;
+  }
+
   function buildShop() {
     const scroll = document.getElementById('shop-scroll');
     const savedScrollTop = scroll.scrollTop;
@@ -1671,6 +1864,10 @@ window.CharacterManager = ({ auth, database }) => {
     let currentRarity  = null;
     const SHOP_HIDDEN_SECTIONS = new Set(['Valuables', 'Currency']);
     const visibleSections = [];
+
+    // Calculate current character's total wealth in cp for affordability display
+    const charCoins = getCharCoins(currentCharId ? allChars[currentCharId]?.state : null);
+    const walletCp  = charCoins.pp * 1000 + charCoins.gp * 100 + charCoins.sp * 10 + charCoins.cp;
 
     ITEM_LIBRARY.forEach(item => {
       if (item._section) {
@@ -1711,16 +1908,20 @@ window.CharacterManager = ({ auth, database }) => {
       if (item.shopHidden) return;
       if (SHOP_HIDDEN_SECTIONS.has(currentSection)) return;
 
-      const visible = isItemVisible(item.name, currentSection);
-      const avail   = isItemAvailable(item.name);
+      const visible    = isItemVisible(item.name, currentSection);
+      const avail      = isItemAvailable(item.name);
+      const costCp     = shopCostToCp(item.cost);
+      const cantAfford = !window._isDM && item.cost && costCp > walletCp;
 
       const row = document.createElement('div');
       row.className = 'shop-item-row'
         + (!visible && window._isDM ? ' shop-item-hidden' : '')
-        + (!avail ? ' shop-item-unavailable' : '');
+        + (!avail ? ' shop-item-unavailable' : '')
+        + (cantAfford ? ' shop-item-unaffordable' : '');
       row.dataset.section  = currentSection;
       row.dataset.rarity   = currentRarity || '';
       row.dataset.itemName = item.name;
+      row.dataset.costCp   = costCp;
       if (!visible) row.dataset.playerHidden = 'true';
 
       const nameSpan = document.createElement('span');
@@ -1784,6 +1985,7 @@ window.CharacterManager = ({ auth, database }) => {
       row.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;
         if (!window._isDM && !isItemAvailable(item.name)) return;
+        if (!window._isDM && row.classList.contains('shop-item-unaffordable')) return;
         lpX = e.clientX; lpY = e.clientY; lpPointerId = e.pointerId;
         lpScrolling = false;
         lpTimer = setTimeout(() => {
@@ -1906,6 +2108,32 @@ window.CharacterManager = ({ auth, database }) => {
   document.getElementById('shop-search').addEventListener('input', filterShop);
   document.getElementById('shop-category').addEventListener('change', filterShop);
 
+  function updateShopWallet() {
+    const bar = document.getElementById('shop-wallet-bar');
+    if (!bar) return;
+    // Use live inventory state — allChars may be stale during handleInventoryChange
+    const coins = getCharCoins(inv.getState());
+    const parts = [];
+    if (coins.pp > 0) parts.push(`<span class="coin-pp">${coins.pp}pp</span>`);
+    if (coins.gp > 0) parts.push(`<span class="coin-gp">${coins.gp}gp</span>`);
+    if (coins.sp > 0) parts.push(`<span class="coin-sp">${coins.sp}sp</span>`);
+    if (coins.cp > 0) parts.push(`<span class="coin-cp">${coins.cp}cp</span>`);
+    bar.innerHTML = parts.length
+      ? `<i class="fas fa-coins"></i>${parts.join('')}`
+      : `<span class="shop-wallet-empty">No coins</span>`;
+    updateShopAffordability();
+  }
+
+  function updateShopAffordability() {
+    if (!shopOpen || window._isDM) return;
+    const coins   = getCharCoins(inv.getState());
+    const walletCp = coins.pp * 1000 + coins.gp * 100 + coins.sp * 10 + coins.cp;
+    document.querySelectorAll('.shop-item-row').forEach(row => {
+      const costCp = parseInt(row.dataset.costCp || '0');
+      row.classList.toggle('shop-item-unaffordable', costCp > 0 && costCp > walletCp);
+    });
+  }
+
   function openShop() {
     shopOpen = true;
     shopTabBtn.classList.add('active');
@@ -1914,6 +2142,7 @@ window.CharacterManager = ({ auth, database }) => {
     shopPanel.hidden    = false;
     document.getElementById('shop-search').value = '';
     document.getElementById('shop-category').value = '';
+    updateShopWallet();
     buildShop();
   }
 
@@ -1933,10 +2162,46 @@ window.CharacterManager = ({ auth, database }) => {
   const roleBtn = document.getElementById('role-btn');
   let userCanBeDM = false;
 
+  // ── ASSIGN CHARACTER TO PLAYER ───────────────────────────────────────────
+  const charAssignBtn = document.getElementById('char-assign-btn');
+
+  charAssignBtn.addEventListener('click', () => {
+    if (!currentCharId || !allChars[currentCharId]) return;
+    const char = allChars[currentCharId];
+
+    const raw = prompt(
+      `Assign "${char.state.charName || 'this character'}" to player (@bytespritegames.com):\nLeave blank to unassign.`,
+      char.ownerName || ''
+    );
+    if (raw === null) return; // cancelled
+
+    // Strip domain if the user typed the full email
+    const username = raw.trim().toLowerCase().replace(/@bytespritegames\.com$/i, '');
+
+    if (!username) {
+      // Unassign
+      allChars[currentCharId].ownerUid  = '';
+      allChars[currentCharId].ownerName = '';
+      database.ref(`/inventory_characters/${currentCharId}`).update({ ownerUid: '', ownerName: '' });
+      renderTabs();
+      return;
+    }
+
+    database.ref(`/inventory_user_lookup/${username}`).once('value', snap => {
+      const uid = snap.val();
+      if (!uid) { alert(`No player found with username "${username}@bytespritegames.com".`); return; }
+      allChars[currentCharId].ownerUid  = uid;
+      allChars[currentCharId].ownerName = username;
+      database.ref(`/inventory_characters/${currentCharId}`).update({ ownerUid: uid, ownerName: username });
+      renderTabs();
+    });
+  });
+
   function applyRole(role) {
     const isDM = (role === 'dm') && userCanBeDM;
     window._isDM         = isDM;
     roleBtn.hidden       = !userCanBeDM;
+    charAssignBtn.hidden = !isDM;
     roleBtn.textContent  = 'DM';
     roleBtn.title        = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
     roleBtn.dataset.role = isDM ? 'dm' : 'player';
@@ -1961,6 +2226,9 @@ window.CharacterManager = ({ auth, database }) => {
           applyRole(userCanBeDM ? (snap2.val() || 'player') : 'player');
         });
       });
+      // Register username → uid so DMs can assign characters by username
+      const username = (user.displayName || user.email || '').split('@')[0];
+      if (username) database.ref(`/inventory_user_lookup/${username}`).set(user.uid);
       subscribeToChars();
       subscribeToShopVisibility();
       subscribeToShopAvailability();
@@ -1996,7 +2264,7 @@ window.CharacterManager = ({ auth, database }) => {
         allChars[id] = {
           id,
           ownerUid:  data.ownerUid  || '',
-          ownerName: data.ownerName || 'Unknown',
+          ownerName: data.ownerName || '',
           state:     parseState(data.state),
           createdAt: data.createdAt || 0,
           sortOrder: data.sortOrder ?? data.createdAt ?? 0,
@@ -2039,17 +2307,18 @@ window.CharacterManager = ({ auth, database }) => {
       }
 
       if (!currentCharId || !allChars[currentCharId]) {
-        // Pick this user's most recent char; fall back to any char (DM viewing); else create
+        // Pick this user's most recent char; DMs fall back to any char; else create
         const mine = Object.values(allChars)
           .filter(c => c.ownerUid === currentUser.uid)
           .sort((a, b) => b.createdAt - a.createdAt);
         if (mine.length) {
           switchToChar(mine[0].id, true);
-        } else {
+        } else if (window._isDM) {
           const any = Object.values(allChars).sort((a, b) => b.createdAt - a.createdAt);
           if (any.length) switchToChar(any[0].id, true);
           else            createChar();
         }
+        // Players with no assigned character wait — DM assigns one
       }
     });
   }
@@ -2101,8 +2370,8 @@ window.CharacterManager = ({ auth, database }) => {
     // Add immediately to local state so tabs and inventory update without waiting for Firebase
     const charData = {
       id: newId,
-      ownerUid:  currentUser.uid,
-      ownerName: currentUser.displayName || currentUser.email || 'Player',
+      ownerUid:  '',
+      ownerName: '',
       state:     blank,
       createdAt,
       sortOrder: createdAt,
@@ -2112,8 +2381,8 @@ window.CharacterManager = ({ auth, database }) => {
     currentCharId    = newId;
 
     ref.set({
-      ownerUid:  currentUser.uid,
-      ownerName: currentUser.displayName || currentUser.email || 'Player',
+      ownerUid:  '',
+      ownerName: '',
       state:     JSON.stringify(blank),
       createdAt,
       sortOrder: createdAt,
@@ -2157,8 +2426,7 @@ window.CharacterManager = ({ auth, database }) => {
     const state = inv.getState();
     if (allChars[charId]) allChars[charId].state = state;
     database.ref(`/inventory_characters/${charId}`).update({
-      state:     JSON.stringify(state),
-      ownerName: currentUser.displayName || currentUser.email || 'Player',
+      state: JSON.stringify(state),
     }).then(() => {
       setTimeout(() => { localWriteInFlight = false; }, 200);
     });
@@ -2200,6 +2468,12 @@ window.CharacterManager = ({ auth, database }) => {
     if (cp > 0) coinsEl.innerHTML += `<span class="coin-cp">${cp}cp</span>`;
   }
 
+  function handleShopPurchase(slotData) {
+    const lib = window.ITEM_LIBRARY.find(i => i.name === slotData.name);
+    if (lib && lib.cost) inv.deductCost(lib.cost);
+    if (shopOpen) updateShopWallet();
+  }
+
   function handleInventoryChange() {
     if (suppressSave || !currentCharId) return;
     dirty = true;
@@ -2208,6 +2482,7 @@ window.CharacterManager = ({ auth, database }) => {
       const nameEl = tab.querySelector('.char-tab-name');
       if (nameEl) nameEl.textContent = inv.getState().charName || 'Unnamed';
     }
+    if (shopOpen) updateShopWallet();
     saveChar(currentCharId);
   }
 
@@ -2220,8 +2495,9 @@ window.CharacterManager = ({ auth, database }) => {
 
     // Drop onto the currently-open character's own tab
     if (targetCharId === currentCharId) {
-      inv.addItem(cleanItem); // re-places item (shop: new; inventory: returned after source removal)
+      inv.addItem(cleanItem);
       if (item._shopItem) {
+        handleShopPurchase(cleanItem);
         const tabEl = document.querySelector(`[data-char-id="${currentCharId}"]`);
         if (tabEl) {
           tabEl.classList.add('tab-received');
@@ -2286,9 +2562,13 @@ window.CharacterManager = ({ auth, database }) => {
     Object.values(allChars)
       .sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt))
       .forEach(char => {
+        const isOwn = char.ownerUid === currentUser?.uid;
         const tab = document.createElement('button');
-        tab.className  = 'char-tab' + (char.id === currentCharId ? ' active' : '');
+        tab.className  = 'char-tab'
+          + (char.id === currentCharId ? ' active' : '')
+          + (isOwn ? ' tab-mine' : ' tab-other');
         tab.dataset.charId = char.id;
+        tab.title = char.ownerName || '';
 
         const infoDiv = document.createElement('div');
         infoDiv.className = 'char-tab-info';
@@ -2298,22 +2578,24 @@ window.CharacterManager = ({ auth, database }) => {
         nameSpan.textContent = char.state.charName || 'Unnamed';
         infoDiv.appendChild(nameSpan);
 
+        // Owner label — shown when assigned to someone else
+        if (!isOwn && char.ownerName) {
+          const ownerSpan = document.createElement('span');
+          ownerSpan.className   = 'char-tab-owner';
+          ownerSpan.textContent = char.ownerName;
+          infoDiv.appendChild(ownerSpan);
+        }
 
         tab.appendChild(infoDiv);
 
-        // Ownership dot
-        if (char.ownerUid === currentUser?.uid) {
-          const dot = document.createElement('span');
-          dot.className = 'char-tab-dot';
-          tab.appendChild(dot);
-        }
-
-        // Delete button — DM only
+        // DM-only controls
         if (window._isDM) {
+          // Delete button
           const del = document.createElement('button');
           del.className   = 'char-tab-del';
           del.textContent = '×';
           del.title       = 'Delete character';
+          del.addEventListener('pointerdown', e => e.stopPropagation());
           del.addEventListener('click', e => {
             e.stopPropagation();
             if (confirm(`Delete "${char.state.charName || 'this character'}"?`)) {
@@ -2353,6 +2635,7 @@ window.CharacterManager = ({ auth, database }) => {
     let drag = null; // { el, charId, startX, insertBefore }
 
     tabsEl.addEventListener('pointerdown', e => {
+      if (!window._isDM) return;
       const tab = e.target.closest('.char-tab');
       if (!tab || e.target.closest('.char-tab-del')) return;
       if (e.button !== 0) return;

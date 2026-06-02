@@ -176,14 +176,64 @@ input, textarea, select { font-size: max(16px, 1em); }
 .char-tab-coins .coin-sp { color: rgba(200, 200, 215, 0.6); }
 .char-tab-coins .coin-cp { color: rgba(205, 135, 65,  0.65); }
 
+/* Own character tab — subtle teal accent */
+.char-tab.tab-mine {
+  border-color: rgba(80, 200, 180, 0.25);
+}
+.char-tab.tab-mine.active {
+  background: rgba(80, 200, 180, 0.1);
+  border-color: rgba(80, 200, 180, 0.5);
+  color: rgba(140, 230, 215, 1);
+}
+.char-tab.tab-mine:not(.active):hover {
+  background: rgba(80, 200, 180, 0.07);
+}
+
+/* Other players' tabs — muted purple accent */
+.char-tab.tab-other {
+  border-color: rgba(160, 120, 220, 0.18);
+}
+.char-tab.tab-other.active {
+  background: rgba(160, 120, 220, 0.1);
+  border-color: rgba(160, 120, 220, 0.45);
+  color: rgba(200, 170, 255, 1);
+}
+.char-tab.tab-other:not(.active):hover {
+  background: rgba(160, 120, 220, 0.06);
+}
+
+.char-tab-owner {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(160, 120, 220, 0.65);
+  pointer-events: none;
+  line-height: 1;
+}
+
 .char-tab-dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: rgba(180,120,255,0.75);
+  background: rgba(80, 200, 180, 0.75);
   flex-shrink: 0;
   pointer-events: none;
 }
+
+.char-tab-assign {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.2);
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 32px;
+  min-height: 44px;
+  padding: 0 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.char-tab-assign:hover { color: rgba(160, 120, 220, 0.9); }
 
 .char-tab-del {
   background: none;
@@ -212,6 +262,24 @@ input, textarea, select { font-size: max(16px, 1em); }
   display: flex;
   flex-direction: column;
 }
+
+#shop-wallet-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--card-border);
+  flex-shrink: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+}
+#shop-wallet-bar i { font-size: 13px; opacity: 0.5; }
+#shop-wallet-bar .coin-pp { color: rgba(190,145,255,0.9); }
+#shop-wallet-bar .coin-gp { color: rgba(255,205,60,0.9);  }
+#shop-wallet-bar .coin-sp { color: rgba(200,200,215,0.85); }
+#shop-wallet-bar .coin-cp { color: rgba(205,135,65,0.85);  }
+.shop-wallet-empty { font-size: 13px; font-style: italic; opacity: 0.45; }
 
 #shop-filter-bar {
   padding: 10px 12px;
@@ -420,12 +488,54 @@ input, textarea, select { font-size: max(16px, 1em); }
   flex-shrink: 0;
 }
 
+.shop-item-unaffordable .shop-item-name { color: rgba(255, 90, 90, 0.85); }
+.shop-item-unaffordable .shop-item-cost { color: rgba(255, 90, 90, 0.7); }
+
 #role-btn { font-weight: 600; font-size: 0.85rem; white-space: nowrap; font-family: inherit; padding: 0 10px; }
 #role-btn[data-role="dm"]     { color: rgba(180,120,255,0.9); }
 #role-btn[data-role="player"] { opacity: 0.4; }
 
-#shop-tab-btn.drag-trash       { color: rgba(255, 80, 80, 0.85); }
-#shop-tab-btn.drag-trash-hover { color: #fff; background: rgba(220, 50, 50, 0.35); transform: scale(1.1); }
+#drag-trash-btn {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(30, 10, 10, 0.85);
+  border: 2px solid rgba(255, 80, 80, 0.6);
+  color: rgba(255, 80, 80, 0.85);
+  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: color 0.15s, background 0.15s, transform 0.15s, border-color 0.15s;
+}
+
+#drag-trash-btn.drag-trash-hover {
+  color: #fff;
+  background: rgba(200, 40, 40, 0.5);
+  border-color: rgba(255, 100, 100, 1);
+  transform: translateX(-50%) scale(1.15);
+}
+
+/* Shop tab sell zone — shown during inventory-item drag */
+#shop-tab-btn.shop-tab-sell-zone {
+  outline: 2px solid rgba(180, 140, 30, 0.5);
+  outline-offset: 2px;
+  transition: outline-color 0.15s, background 0.15s, color 0.15s, transform 0.15s;
+}
+#shop-tab-btn.shop-tab-sell-hover {
+  color: #f0c830;
+  background: rgba(180, 140, 20, 0.25);
+  outline-color: rgba(240, 200, 48, 1);
+  transform: scale(1.18);
+}
 
 /* During inventory-item drag, show tabs as potential targets */
 .is-dragging .char-tab:not(.active) {
@@ -491,6 +601,120 @@ input, textarea, select { font-size: max(16px, 1em); }
 
 .char-field input:focus {
   border-color: rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.1);
+}
+
+.char-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.char-name-row input { flex: 1; }
+
+#char-assign-btn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.25);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+#char-assign-btn:hover {
+  color: rgba(160,120,220,0.9);
+  background: rgba(160,120,220,0.1);
+}
+
+#assign-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--card-bg, #1e1e2a);
+  border: 1px solid rgba(160,120,220,0.4);
+  border-radius: 10px;
+  padding: 12px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+}
+
+.assign-popover-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.assign-popover-input-row {
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.assign-popover-input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 6px 8px;
+  outline: none;
+  min-width: 0;
+}
+
+.assign-popover-input.assign-input-error {
+  color: #ff6060;
+}
+
+.assign-popover-suffix {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 0 8px 0 0;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.assign-popover-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.assign-popover-confirm,
+.assign-popover-cancel {
+  flex: 1;
+  padding: 7px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.assign-popover-confirm {
+  background: rgba(160,120,220,0.2);
+  border-color: rgba(160,120,220,0.45);
+  color: rgba(200,170,255,1);
+}
+.assign-popover-confirm:hover {
+  background: rgba(160,120,220,0.35);
+}
+
+.assign-popover-cancel {
+  background: rgba(255,255,255,0.05);
+  border-color: var(--card-border);
+  color: var(--muted);
+}
+.assign-popover-cancel:hover {
   background: rgba(255,255,255,0.1);
 }
 
@@ -1067,10 +1291,11 @@ main {
 }
 
 .coin-inline-var .insp-inline-label { margin-right: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
-.coin-label-pp { color: rgba(190, 145, 255, 0.9); }
-.coin-label-gp { color: rgba(255, 205,  60, 0.9); }
-.coin-label-sp { color: rgba(200, 200, 215, 0.85); }
-.coin-label-cp { color: rgba(205, 135,  65, 0.9); }
+.coin-label-pp    { color: rgba(190, 145, 255, 0.9); }
+.coin-label-gp    { color: rgba(255, 205,  60, 0.9); }
+.coin-label-sp    { color: rgba(200, 200, 215, 0.85); }
+.coin-label-cp    { color: rgba(205, 135,  65, 0.9); }
+.coin-label-white { color: rgba(255, 255, 255, 0.85); }
 
 .insp-num-coin {
   width: 110px;

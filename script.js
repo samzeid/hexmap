@@ -601,15 +601,20 @@ const loginError    = document.getElementById("login-error");
 const loginEmail    = document.getElementById("login-email");
 const loginPassword = document.getElementById("login-password");
 
+function toFirebaseEmail(username) {
+    const s = (username || '').trim();
+    return s.includes('@') ? s : `${s}@bytespritegames.com`;
+}
+
 function showLoginError(msg) {
     loginError.textContent = msg;
     loginError.classList.remove("hidden");
 }
 
 document.getElementById("email-sign-in-btn").addEventListener("click", () => {
-    const email    = loginEmail.value.trim();
+    const email    = toFirebaseEmail(loginEmail.value.trim());
     const password = loginPassword.value;
-    if (!email || !password) { showLoginError("Enter email and password."); return; }
+    if (!loginEmail.value.trim() || !password) { showLoginError("Enter username and password."); return; }
     loginError.classList.add("hidden");
     const btn = document.getElementById("email-sign-in-btn");
     btn.textContent = "Signing in…";
@@ -635,8 +640,11 @@ signOutBtn.addEventListener("click", () => {
 auth.onAuthStateChanged((user) => {
     if (user) {
         loginScreen.classList.add("hidden");
-        signOutBtn.title  = `Sign out (${user.displayName || user.email || 'Player'})`;
+        signOutBtn.title  = `Sign out (${user.displayName || (user.email || '').split('@')[0] || 'Player'})`;
         signOutBtn.hidden = false;
+        // Register username → uid so DMs can assign characters by username
+        const username = (user.displayName || user.email || '').split('@')[0];
+        if (username) database.ref(`/inventory_user_lookup/${username}`).set(user.uid);
     } else {
         loginScreen.classList.remove("hidden");
         signOutBtn.hidden = true;
@@ -883,9 +891,9 @@ invBtn.addEventListener("click", () => {
     invBtn.classList.toggle("active", open);
     info.classList.toggle("inv-open", open);
     if (open) {
-        const email    = loginEmail.value.trim();
+        const email    = toFirebaseEmail(loginEmail.value.trim());
         const password = loginPassword.value;
-        if (email && password) {
+        if (loginEmail.value.trim() && password) {
             document.getElementById('inv-frame')
                 ?.contentWindow?.postMessage({ type: 'signIn', email, password }, '*');
         }

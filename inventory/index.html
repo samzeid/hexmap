@@ -37,6 +37,7 @@
 
     <!-- Shop panel (shown instead of inv-scroll when shop tab is active) -->
     <div id="shop-panel" hidden>
+      <div id="shop-wallet-bar"></div>
       <div id="shop-filter-bar">
         <input id="shop-search" type="text" placeholder="Search items…" autocomplete="off" spellcheck="false" />
         <select id="shop-category"><option value="">All categories</option></select>
@@ -56,7 +57,10 @@
           </div>
         </div>
         <div class="char-field grow">
-          <input type="text" id="char-name" placeholder="Character name" autocomplete="off" />
+          <div class="char-name-row">
+            <input type="text" id="char-name" placeholder="Character name" autocomplete="off" />
+            <button id="char-assign-btn" hidden title="Assign to player"><i class="fas fa-user-pen"></i></button>
+          </div>
           <div id="coin-counter" hidden></div>
         </div>
       </header>
@@ -68,6 +72,8 @@
       <div id="autocomplete-dropdown" hidden></div>
 
     </div><!-- /inv-scroll -->
+
+    <div id="drag-trash-btn" hidden><i class="fa-solid fa-trash"></i></div>
 
     <div id="inspector" class="inspector-collapsed">
       <div id="insp-header">
