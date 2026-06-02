@@ -169,6 +169,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     let used = 0;
     for (const container of state.containers) {
       if (container.id === 'equipped') continue;
+      // A Pouch (linked container) counts as 1 slot regardless of how many items are inside
+      if (container.name === 'Pouch' && container.linkedTo) { used += 1; continue; }
       for (const row of container.slots) {
         const [left, right] = row;
         if (left && isSlotBulky(left) && !left.conflict) {
@@ -307,6 +309,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
                        : !container.permanent         ? ' card-added' : '';
     const isOpen = container.linkedTo && !container.collapsed;
     card.className = 'inv-card' + specialClass + (isOpen ? ' card-open' : '');
+    card.dataset.containerId = container.id;
 
     const hdr = document.createElement('div');
     hdr.className = 'inv-hdr';
@@ -315,6 +318,19 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     toggle.className = 'inv-hdr-toggle';
     toggle.innerHTML = `<span>${container.name}</span><span class="inv-chevron">${container.collapsed ? '▶' : '▼'}</span>`;
     toggle.addEventListener('click', () => { container.collapsed = !container.collapsed; render(); });
+
+    if (!container.permanent) {
+      const handle = document.createElement('button');
+      handle.className = 'container-drag-handle';
+      handle.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+      handle.title = 'Drag to reorder';
+      handle.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        startContainerDrag(container.id, card, e.pointerId, e.clientY);
+      });
+      hdr.appendChild(handle);
+    }
 
     hdr.appendChild(toggle);
     card.appendChild(hdr);
@@ -1626,6 +1642,84 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (ghostEl) { ghostEl.remove(); ghostEl = null; }
     document.body.classList.remove('is-dragging');
     dragState = null;
+    render();
+  });
+
+  // ── CONTAINER REORDER ────────────────────────────────────────────────────
+  const cDropLine = document.createElement('div');
+  cDropLine.className = 'container-drop-line';
+
+  let cDrag = null; // { id, el }
+  let cDropBeforeId = undefined; // undefined = not dragging, null = append at end, string = insert before this id
+
+  function startContainerDrag(containerId, cardEl, pointerId, startY) {
+    cDrag = { id: containerId, el: cardEl };
+    cDropBeforeId = null;
+    cardEl.classList.add('container-dragging');
+    document.documentElement.setPointerCapture(pointerId);
+  }
+
+  function updateContainerDrop(clientY) {
+    if (!cDrag) return;
+    if (cDropLine.parentNode) cDropLine.remove();
+
+    // All non-permanent, non-dragged cards in DOM order
+    const candidates = [...containersEl.querySelectorAll('.inv-card:not(.container-dragging)')]
+      .filter(el => {
+        const c = state.containers.find(c => c.id === el.dataset.containerId);
+        return c && !c.permanent;
+      });
+
+    let beforeCard = null;
+    for (const card of candidates) {
+      const rect = card.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) { beforeCard = card; break; }
+    }
+
+    if (beforeCard) {
+      containersEl.insertBefore(cDropLine, beforeCard);
+      cDropBeforeId = beforeCard.dataset.containerId;
+    } else {
+      containersEl.appendChild(cDropLine);
+      cDropBeforeId = null;
+    }
+  }
+
+  function commitContainerDrop() {
+    if (!cDrag) return;
+    cDrag.el.classList.remove('container-dragging');
+    if (cDropLine.parentNode) cDropLine.remove();
+
+    const dragId    = cDrag.id;
+    const beforeId  = cDropBeforeId;
+    cDrag = null; cDropBeforeId = undefined;
+
+    const dragIdx = state.containers.findIndex(c => c.id === dragId);
+    if (dragIdx === -1) { render(); return; }
+    const [dragged] = state.containers.splice(dragIdx, 1);
+    if (beforeId) {
+      const targetIdx = state.containers.findIndex(c => c.id === beforeId);
+      state.containers.splice(targetIdx === -1 ? state.containers.length : targetIdx, 0, dragged);
+    } else {
+      state.containers.push(dragged);
+    }
+    render();
+  }
+
+  document.addEventListener('pointermove', e => {
+    if (!cDrag) return;
+    updateContainerDrop(e.clientY);
+  });
+
+  document.addEventListener('pointerup', e => {
+    if (cDrag) commitContainerDrop();
+  });
+
+  document.addEventListener('pointercancel', () => {
+    if (!cDrag) return;
+    cDrag.el.classList.remove('container-dragging');
+    if (cDropLine.parentNode) cDropLine.remove();
+    cDrag = null; cDropBeforeId = undefined;
     render();
   });
 
