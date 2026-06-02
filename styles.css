@@ -108,7 +108,11 @@ body {
 
 #container {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 #canvas {
@@ -173,19 +177,6 @@ body {
   -webkit-user-select: none;
 }
 
-/* Extend panel background into Android gesture/nav bar area */
-#info::after {
-  content: '';
-  position: absolute;
-  bottom: -80px;
-  left: 0;
-  right: 0;
-  height: 80px;
-  background: rgba(10, 10, 18, 0.92);
-  pointer-events: none;
-}
-
-#info.panel-top::after { display: none; }
 
 #info.inv-open { display: none; }
 
