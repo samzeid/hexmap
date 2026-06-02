@@ -2610,6 +2610,7 @@ window.CharacterManager = ({ auth, database }) => {
         }
 
         tab.addEventListener('click', () => {
+          if (shopOpen) closeShop();
           if (char.id !== currentCharId) switchToChar(char.id, false);
         });
 
