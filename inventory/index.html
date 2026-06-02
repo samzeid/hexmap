@@ -3,6 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <script>
+    // iOS keeps the landscape viewport width when rotating back to portrait,
+    // causing the page to scale down. Toggling the meta content forces a re-evaluation.
+    window.addEventListener('orientationchange', function () {
+      var meta = document.querySelector('meta[name=viewport]');
+      var c = meta.getAttribute('content');
+      meta.setAttribute('content', c + ',width=1');
+      setTimeout(function () { meta.setAttribute('content', c); }, 300);
+    });
+  </script>
   <title>Inventory</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">

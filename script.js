@@ -203,9 +203,11 @@ function drawHex(x, y, options = {}) {
     canvasContext.restore();
 }
 
+const canvasContainer = canvas.parentElement;
+
 function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.width  = canvasContainer.clientWidth;
+    canvas.height = canvasContainer.clientHeight;
 
     const zoomX = canvas.width / image.naturalWidth;
     const zoomY = canvas.height / image.naturalHeight;
@@ -218,7 +220,7 @@ function resizeCanvas() {
     drawGridLatestActive();
 }
 
-window.addEventListener('resize', resizeCanvas);
+new ResizeObserver(() => resizeCanvas()).observe(canvasContainer);
 resizeCanvas();
 
 // Draw the entire hex grid, optionally highlighting a hovered hex

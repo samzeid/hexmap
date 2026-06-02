@@ -1514,6 +1514,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
   };
 };
 
+
 // ── CHARACTER MANAGER ──────────────────────────────────────────────────────
 window.CharacterManager = ({ auth, database }) => {
   let currentUser  = null;
