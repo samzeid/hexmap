@@ -170,38 +170,49 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     let used = 0;
     for (const container of state.containers) {
       if (container.id === 'equipped') continue;
-      // A Pouch (linked container) counts as 1 slot regardless of how many items are inside
-      if (container.name === 'Pouch' && container.linkedTo) { used += 1; continue; }
-      for (const row of container.slots) {
-        const [left, right] = row;
-        if (left && isSlotBulky(left) && !left.conflict) {
-          if (!isNoCarry(left)) used += 2;
-        } else {
-          if (left  && !isNoCarry(left))  used += 1;
-          if (right && !isNoCarry(right)) used += 1;
-        }
-      }
+      const libC = container.linkedTo ? getLibraryItem(container.name) : null;
+      if (libC && libC.weightlessContents) continue;
+      for (const row of container.slots)
+        for (const slot of row)
+          if (slot && !isNoCarry(slot)) used += itemFillCost(slot);
     }
-    return used;
+    return parseFloat(used.toFixed(2));
   }
 
-  function isSlotBulky(slotData) {
-    if (!slotData) return false;
+  function itemFillCost(slotData) {
+    if (!slotData) return 0;
     const id = slotData.bulk ? slotData.bulk.id
-              : (getLibraryItem(slotData.name) || {bulk: Bulk.STOCK}).bulk.id;
-    return id === 'bulky' || id === 'verybulky';
+             : (getLibraryItem(slotData.name) || { bulk: Bulk.STOCK }).bulk.id;
+    if (id === 'packable') return (slotData.variables?.qty?.value || 1) * 0.25;
+    if (id === 'bulky' || id === 'verybulky') return 2;
+    return 1;
   }
 
-  function isSlotPackable(slotData) {
-    if (!slotData) return false;
-    if (slotData._isPouch) return true;
+  function containerFillUsed(container) {
+    let fill = 0;
+    for (const row of container.slots)
+      for (const slot of row) fill += itemFillCost(slot);
+    return fill;
+  }
+
+  function containerFillCapacity(container) {
+    if (!container.maxRows) return Infinity;
+    return container.maxRows * 2;
+  }
+
+  function containerFillAvailable(container) {
+    return containerFillCapacity(container) - containerFillUsed(container);
+  }
+
+  function ensurePackableQty(slotData) {
+    if (!slotData) return;
     const id = slotData.bulk ? slotData.bulk.id
-              : (getLibraryItem(slotData.name) || { bulk: Bulk.STOCK }).bulk.id;
-    return id === 'packable';
-  }
-
-  function packName(slotData) {
-    return (slotData && slotData.name) || '';
+             : (getLibraryItem(slotData.name) || { bulk: Bulk.STOCK }).bulk.id;
+    if (id !== 'packable') return;
+    slotData.variables = slotData.variables || {};
+    if (!('qty' in slotData.variables)) {
+      slotData.variables.qty = { value: 1, control: 'both', min: 1, max: 999 };
+    }
   }
 
   // ── DOM REFS ────────────────────────────────────────────────────────────
@@ -222,7 +233,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   let longPressTimer   = null;
   let dragScrollVel    = 0;
   let dragScrollRaf    = null;
-  // Manual scroll state — used while disambiguating drag vs. scroll on touch
   let manualScrolling  = false;
   let manualScrollLastY = 0;
 
@@ -259,10 +269,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
   function growContainer(container) {
-    // Migrate old containers that pre-date maxRows: treat their current size as the cap
     if (!container.maxRows) container.maxRows = container.rows;
     const hasEmptyRow = container.slots.some(row => row[0] === null && row[1] === null);
-    if (!hasEmptyRow && container.slots.length < container.maxRows) {
+    if (!hasEmptyRow && containerFillAvailable(container) > 0.001) {
       container.slots.push([null, null]);
       container.rows++;
     }
@@ -281,22 +290,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
   }
 
-  function checkPouchDissolve() {
-    for (let i = state.containers.length - 1; i >= 0; i--) {
-      const c = state.containers[i];
-      if (c.name !== 'Pouch' || !c.linkedTo) continue;
-      const items = c.slots.flatMap(row => row).filter(Boolean);
-      if (items.length > 1) continue;
-      const { containerId, r } = c.linkedTo;
-      const parent = state.containers.find(p => p.id === containerId);
-      if (!parent) continue;
-      parent.slots[r][0] = items.length === 1 ? items[0] : null;
-      state.containers.splice(i, 1);
-    }
-  }
-
   function render() {
-    checkPouchDissolve();
     growEquipped();
     shrinkEquipped();
     state.containers.forEach(c => {
@@ -342,9 +336,20 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     const toggle = document.createElement('button');
     toggle.className = 'inv-hdr-toggle';
-    const _capHtml = (container.linkedTo && container.maxRows)
-      ? `<span class="container-capacity">${container.slots.flatMap(r => r).filter(Boolean).length}/${container.maxRows * 2}</span>`
-      : '';
+    let _capHtml = '';
+    if (container.linkedTo && container.maxRows) {
+      const _fillUsed = containerFillUsed(container);
+      const _fillCap  = container.maxRows * 2;
+      const _over = _fillUsed > _fillCap + 0.001;
+      _capHtml = `<span class="container-capacity${_over ? ' container-capacity-over' : ''}">${parseFloat(_fillUsed.toFixed(2))}/${_fillCap}</span>`;
+    } else if (container.id === 'strapped') {
+      const _cap = parseFloat(state.carryCapacity);
+      if (!isNaN(_cap) && _cap > 0) {
+        const _used = containerFillUsed(container);
+        const _over = _used > _cap;
+        _capHtml = `<span class="container-capacity${_over ? ' container-capacity-over' : ''}">${parseFloat(_used.toFixed(2))}/${_cap}</span>`;
+      }
+    }
     toggle.innerHTML = `<span>${container.name}${_capHtml}</span><span class="inv-chevron">${container.collapsed ? '▶' : '▼'}</span>`;
     toggle.addEventListener('click', () => { container.collapsed = !container.collapsed; render(); });
 
@@ -369,13 +374,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       grid.className = 'inv-grid';
 
       container.slots.forEach((row, r) => {
-        const leftBulky = row[0] && isSlotBulky(row[0]) && !row[0].conflict;
-        if (leftBulky) {
-          grid.appendChild(buildSlot(container, r, 0, row[0], true));
-        } else {
-          grid.appendChild(buildSlot(container, r, 0, row[0], false));
-          grid.appendChild(buildSlot(container, r, 1, row[1], false));
-        }
+        grid.appendChild(buildSlot(container, r, 0, row[0]));
+        grid.appendChild(buildSlot(container, r, 1, row[1]));
       });
 
       card.appendChild(grid);
@@ -385,21 +385,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
 
-  function buildSlot(container, r, c, slotData, full) {
+  function buildSlot(container, r, c, slotData) {
     const conflict = slotData && slotData.conflict;
     const linkedContainer = slotData && slotData.containerId
       ? state.containers.find(cnt => cnt.id === slotData.containerId)
       : null;
     const containerIsOpen = !!(linkedContainer && !linkedContainer.collapsed);
-    const pouchWarning = !!(slotData && container.name === 'Pouch' && !isSlotPackable(slotData));
-
-    const isPackable = !!(slotData && !slotData._isPouch && isSlotPackable(slotData));
 
     const wrap = document.createElement('div');
     wrap.className = 'slot'
-      + (full            ? ' slot-full'          : '')
-      + (containerIsOpen ? ' slot-container-open': '')
-      + (isPackable      ? ' slot-packable'       : '');
+      + (containerIsOpen ? ' slot-container-open': '');
     wrap.dataset.containerId = container.id;
     wrap.dataset.r = r;
     wrap.dataset.c = c;
@@ -471,96 +466,26 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const isInspected = inspectorItemKey === itemKey && !inspectorEl.classList.contains('inspector-collapsed');
 
       const label = document.createElement('span');
-      const isContainerItem2 = isNoCarry(slotData) && !isSlotPackable(slotData);
-      const showWarning = conflict || pouchWarning;
+      const isContainerItem2 = isNoCarry(slotData);
+      const showWarning = conflict;
       label.className = 'slot-label'
         + (showWarning      ? ' slot-label-conflict'  : '')
         + (isContainerItem2 ? ' slot-label-container' : '');
 
-      const vars = Object.values(slotData.variables || {});
-      const numVar = vars.find(v => (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number') || null;
+      const varEntries = Object.entries(slotData.variables || {});
+      const numVarEntry = varEntries.find(([k, v]) => k !== 'qty' && (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number')
+                       || varEntries.find(([, v]) => (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number')
+                       || null;
+      const numVar = numVarEntry ? numVarEntry[1] : null;
+      const _bulkId = slotData.bulk ? slotData.bulk.id
+                    : (getLibraryItem(slotData.name) || { bulk: Bulk.STOCK }).bulk.id;
+      const isPackableSlot = _bulkId === 'packable';
       const _silverPfx = (slotData.silvered || slotData.material === 'silvered') ? 'Silvered ' : '';
       const _metalMat  = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
       const matPfx = _silverPfx + (_metalMat ? _metalMat.charAt(0).toUpperCase() + _metalMat.slice(1) + ' ' : '');
       const dispName = computeDisplayName(slotData);
 
-      if (slotData.name === 'Pouch' && linkedContainer) {
-        label.classList.add('slot-label-pouch');
-        linkedContainer.slots.forEach((pRow, pr) => {
-          pRow.forEach((pItem, pc) => {
-            const cell = document.createElement('span');
-            cell.className = 'pouch-cell' + (pItem ? '' : ' empty');
-            // Data attrs let endDrag target this cell as a drop slot
-            cell.dataset.containerId = linkedContainer.id;
-            cell.dataset.r = pr;
-            cell.dataset.c = pc;
-            cell.style.pointerEvents = 'auto';
-
-            // Prevent clicks/presses from bubbling to the slot wrap (which would
-            // either start dragging the whole Pouch or toggle its collapse state)
-            cell.addEventListener('pointerdown',   e => e.stopPropagation());
-            cell.addEventListener('pointerup',     e => e.stopPropagation());
-            cell.addEventListener('pointercancel', e => e.stopPropagation());
-
-            if (pItem) {
-              const iVars = Object.values(pItem.variables || {});
-              const iNumVar = iVars.find(v => (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number') || null;
-              const _iSilverPfx = (pItem.silvered || pItem.material === 'silvered') ? 'Silvered ' : '';
-              const _iMetalMat  = (pItem.material === 'mithral' || pItem.material === 'adamantine') ? pItem.material : null;
-              const iMatPfx = _iSilverPfx + (_iMetalMat ? _iMetalMat.charAt(0).toUpperCase() + _iMetalMat.slice(1) + ' ' : '');
-              const iName = computeDisplayName(pItem);
-              cell.textContent = iNumVar ? `${iNumVar.value} × ${iMatPfx}${iName}` : `${iMatPfx}${iName}`;
-              cell.style.cursor = 'pointer';
-              cell.style.touchAction = 'none';
-
-              // Click opens the inspector for this specific pouch item
-              cell.addEventListener('click', e => {
-                e.stopPropagation();
-                toggleInspectorFor(`${linkedContainer.id}-${pr}-${pc}`, pItem, linkedContainer, pr, pc);
-              });
-
-              // Long-press to drag item out of the pouch
-              let pDownX, pDownY, pPointerId, pLongTimer, pScrolling = false, pLastY = 0;
-              cell.addEventListener('pointerdown', e => {
-                if (dragState || e.button !== 0) return;
-                pDownX = e.clientX; pDownY = e.clientY; pPointerId = e.pointerId;
-                pScrolling = false;
-                pLongTimer = setTimeout(() => {
-                  pLongTimer = null; pScrolling = false;
-                  document.documentElement.setPointerCapture(pPointerId);
-                  const sr = cell.getBoundingClientRect();
-                  startDrag(pItem, linkedContainer, pr, pc, pDownX, pDownY,
-                    { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 },
-                    () => { linkedContainer.slots[pr][pc] = null; });
-                }, 380);
-              });
-              cell.addEventListener('pointermove', e => {
-                if (pScrolling) {
-                  document.getElementById('inv-scroll').scrollTop += pLastY - e.clientY;
-                  pLastY = e.clientY; return;
-                }
-                if (!pLongTimer) return;
-                if ((e.clientX - pDownX) ** 2 + (e.clientY - pDownY) ** 2 > 64) {
-                  clearTimeout(pLongTimer); pLongTimer = null;
-                  pScrolling = true; pLastY = e.clientY;
-                }
-              });
-              const cancelP = () => {
-                if (pLongTimer) { clearTimeout(pLongTimer); pLongTimer = null; }
-                pScrolling = false;
-              };
-              cell.addEventListener('pointerup',     cancelP);
-              cell.addEventListener('pointercancel', cancelP);
-            } else {
-              cell.textContent = '—';
-              // Click on an empty cell does nothing — stop propagation so wrap
-              // doesn't treat it as a container-toggle click
-              cell.addEventListener('click', e => e.stopPropagation());
-            }
-            label.appendChild(cell);
-          });
-        });
-      } else {
+      {
         const libForLabel = getLibraryItem(slotData.name);
         const gridSymbol  = libForLabel && libForLabel.gridSymbol;
         if (gridSymbol) {
@@ -575,9 +500,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
             : `${gridSymbol}&nbsp;${libForLabel.name}`;
           label.classList.add('slot-label-symbol');
         } else {
-          label.textContent = numVar
-            ? `${numVar.value} × ${matPfx}${dispName}`
-            : `${matPfx}${dispName}`;
+          if (isPackableSlot) {
+            const qty = slotData.variables?.qty?.value ?? 1;
+            const chargesEntry = varEntries.find(([k, v]) => k !== 'qty' && (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number');
+            const chargesSuffix = chargesEntry ? ` (${chargesEntry[1].value})` : '';
+            label.textContent = `${qty} × ${matPfx}${dispName}${chargesSuffix}`;
+          } else {
+            label.textContent = (numVar && numVar.value !== 1)
+              ? `${numVar.value} × ${matPfx}${dispName}`
+              : `${matPfx}${dispName}`;
+          }
         }
       }
 
@@ -631,13 +563,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       wrap.appendChild(label);
     }
 
-    if (conflict || pouchWarning) {
+    if (conflict) {
       const warn = document.createElement('span');
       warn.className = 'slot-warn';
       warn.textContent = '⚠';
-      warn.title = pouchWarning
-        ? 'Not packable — only packable items belong in a Pouch'
-        : (slotData.conflictMsg || 'Item is too bulky — clear an adjacent slot to resolve');
+      warn.title = slotData.conflictMsg || 'Slot conflict';
       wrap.appendChild(warn);
     }
 
@@ -668,7 +598,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
       wrap.addEventListener('pointermove', e => {
         if (manualScrolling) {
-          // Scroll the list manually since touch-action:none suppresses browser scroll
           document.getElementById('inv-scroll').scrollTop += manualScrollLastY - e.clientY;
           manualScrollLastY = e.clientY;
           return;
@@ -677,7 +606,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if ((e.clientX - downX) ** 2 + (e.clientY - downY) ** 2 > 64) {
           clearTimeout(longPressTimer);
           longPressTimer = null;
-          // Switch to manual scroll mode
           manualScrolling  = true;
           manualScrollLastY = e.clientY;
         }
@@ -720,36 +648,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }),
     };
 
-    if (isSlotBulky(slotData)) {
-      const otherCol = 1 - c;
-      const displaced = row[otherCol];
-
-      if (!displaced) {
-        row[0] = slotData;
-        row[1] = null;
-      } else {
-        let targetRow = container.slots.findIndex(
-          (sr, ri) => ri !== r && !sr[0] && !sr[1]
-        );
-        if (targetRow === -1) {
-          container.slots.push([null, null]);
-          container.rows++;
-          targetRow = container.slots.length - 1;
-        }
-        container.slots[targetRow][0] = slotData;
-        container.slots[targetRow][1] = null;
-        closeDropdown();
-        render();
-        return;
-      }
-    } else {
-      row[c] = slotData;
+    const existingFill = existing ? itemFillCost(existing) : 0;
+    if (itemFillCost(slotData) - existingFill > containerFillAvailable(container) + 0.001) {
+      closeDropdown();
+      render();
+      return;
     }
 
-    // Determine where the item actually landed
-    const finalC = (isSlotBulky(slotData) && !slotData.conflict) ? 0 : c;
+    ensurePackableQty(slotData);
+    row[c] = slotData;
+
     if (isContainerItem(slotData) && !slotData.containerId) {
-      createLinkedContainer(slotData, container.id, r, finalC);
+      createLinkedContainer(slotData, container.id, r, c);
     }
 
     closeDropdown();
@@ -760,7 +670,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     for (let r = 0; r < container.slots.length; r++) {
       if (r === excludeRow) continue;
       const [left, right] = container.slots[r];
-      if (left && isSlotBulky(left)) continue; // row fully taken by bulky item
       if (!left)  return { r, c: 0 };
       if (!right) return { r, c: 1 };
     }
@@ -1079,10 +988,17 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       propsEl.appendChild(bulkSel);
     }
 
-    // Material chips — before selects
+    // Material chips and type selects — always in propsEl (header row), for both inventory and shop
     const effectiveCat = getEffectiveCategory(slotData);
     const canSilver = ['weapon','ammunition'].includes(effectiveCat);
     const canMetal  = ['weapon','armor','shield','ammunition'].includes(effectiveCat);
+    const ctrlTarget = propsEl;
+
+    // When modifying a shop item's properties via the inspector, refresh its row cost display
+    const refreshShopRow = () => {
+      const shopRow = document.querySelector(`.shop-item-row[data-item-name="${CSS.escape(slotData.name)}"]`);
+      if (shopRow?._applyRowState) shopRow._applyRowState();
+    };
 
     if (canSilver) {
       const btn = document.createElement('button');
@@ -1092,9 +1008,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       btn.onclick = () => {
         slotData.silvered = !(slotData.silvered || slotData.material === 'silvered');
         if (slotData.material === 'silvered') slotData.material = null;
+        if (!container) refreshShopRow();
         render(); showInspector(slotData, container, r, c, packIdx);
       };
-      propsEl.appendChild(btn);
+      ctrlTarget.appendChild(btn);
     }
 
     if (canMetal) {
@@ -1106,12 +1023,30 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       btn.onclick = () => {
         const idx = metals.indexOf(curMetal);
         slotData.material = metals[(idx + 1) % metals.length];
+        if (!container) refreshShopRow();
         render(); showInspector(slotData, container, r, c, packIdx);
       };
-      propsEl.appendChild(btn);
+      ctrlTarget.appendChild(btn);
     }
 
     // Weapon / armor / element selects
+    const _addPlaceholder = (sel, label, currentVal) => {
+      if (!container) {
+        const ph = document.createElement('option');
+        ph.value = ''; ph.textContent = label;
+        if (currentVal === '') ph.selected = true;
+        sel.insertBefore(ph, sel.firstChild);
+      }
+    };
+
+    // After a select changes, sync _unresolved with whether any select still holds ''
+    const _updateUnresolved = () => {
+      const v = slotData.variables || {};
+      const stillEmpty = Object.values(v).some(m => m.control === 'select' && m.value === '');
+      if (stillEmpty) slotData._unresolved = true;
+      else delete slotData._unresolved;
+    };
+
     const weaponMeta = slotData.variables && slotData.variables.weapon;
     if (weaponMeta && weaponMeta.control === 'select') {
       const sel = document.createElement('select');
@@ -1122,13 +1057,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if (opt === weaponMeta.value) o.selected = true;
         sel.appendChild(o);
       });
+      _addPlaceholder(sel, 'Weapon', weaponMeta.value);
       sel.addEventListener('change', () => {
         slotData.variables.weapon.value = sel.value;
         const libWeapon = getLibraryItem(sel.value);
         if (libWeapon && libWeapon.bulk) slotData.bulk = libWeapon.bulk;
+        _updateUnresolved();
+        if (!container) refreshShopRow();
         render();
       });
-      propsEl.appendChild(sel);
+      ctrlTarget.appendChild(sel);
     }
 
     const armorMeta = slotData.variables && slotData.variables.armor;
@@ -1141,13 +1079,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if (opt === armorMeta.value) o.selected = true;
         sel.appendChild(o);
       });
+      _addPlaceholder(sel, 'Armor', armorMeta.value);
       sel.addEventListener('change', () => {
         slotData.variables.armor.value = sel.value;
         const libArmor = getLibraryItem(sel.value);
         if (libArmor && libArmor.bulk) slotData.bulk = libArmor.bulk;
+        _updateUnresolved();
+        if (!container) refreshShopRow();
         render();
       });
-      propsEl.appendChild(sel);
+      ctrlTarget.appendChild(sel);
     }
 
     const elementMeta = slotData.variables && slotData.variables.element;
@@ -1160,11 +1101,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if (opt === elementMeta.value) o.selected = true;
         sel.appendChild(o);
       });
+      _addPlaceholder(sel, 'Elemental', elementMeta.value);
       sel.addEventListener('change', () => {
         slotData.variables.element.value = sel.value;
+        _updateUnresolved();
+        if (!container) refreshShopRow();
         render();
       });
-      propsEl.appendChild(sel);
+      ctrlTarget.appendChild(sel);
     }
 
     // Has Uses toggle — custom items only
@@ -1191,7 +1135,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       propsEl.appendChild(chip);
     }
 
-    propsEl.hidden = !container || propsEl.children.length === 0;
+    propsEl.hidden = propsEl.children.length === 0;
 
     // Container rows input (only when container chip is active)
     const rowsRowEl = document.getElementById('insp-container-rows-row');
@@ -1368,7 +1312,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if (!container.slots[r][0]) {
           placeSlotData(slotData, container, r, 0); placed = true; break;
         }
-        if (!container.slots[r][1] && !isSlotBulky(slotData)) {
+        if (!container.slots[r][1]) {
           placeSlotData(slotData, container, r, 1); placed = true; break;
         }
       }
@@ -1388,7 +1332,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     ghostEl = document.createElement('div');
     ghostEl.className = 'drag-ghost';
-    ghostEl.textContent = packName(slotData);
+    ghostEl.textContent = slotData.name || '';
     document.body.appendChild(ghostEl);
     document.body.classList.add('is-dragging');
 
@@ -1438,6 +1382,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const isShopDrag = !!dragState._shopDrag;
     const { slotData, srcContainer, srcR, srcC, srcCenter, removeFromSource } = dragState;
     dragState = null;
+
     if (_overTrash && srcContainer) {
       const trashLib = getLibraryItem(slotData.name);
       if (trashLib && trashLib.warnOnRemove) {
@@ -1507,19 +1452,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         return;
       }
 
-      // Reject drops onto a filled pouch cell — no swapping into a pouch from outside
-      if (targetContainer.name === 'Pouch' && targetContainer.linkedTo
-          && targetContainer.slots[tR]?.[tC] !== null && srcContainer !== targetContainer) {
-        render();
-        return;
-      }
-
-      // Reject non-packable items dropped onto a Pouch container
-      if (targetContainer.name === 'Pouch' && targetContainer.linkedTo && !isSlotPackable(slotData)) {
-        render();
-        return;
-      }
-
       // Same slot — no-op
       if (targetContainer === srcContainer && tR === srcR && tC === srcC) {
         render();
@@ -1531,30 +1463,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       // Capture dest rect before render() rebuilds the DOM
       const destRect = wrap.getBoundingClientRect();
       const destCenter = { x: destRect.left + destRect.width / 2, y: destRect.top + destRect.height / 2 };
-
-      // Pouch auto-creation: two plain packables meet — wrap them in a linked Pouch container
-      // (but not when already inside a Pouch container)
-      const isPlainPackable = sd => isSlotPackable(sd) && !sd.isContainer && !sd.containerId;
-      if (targetItem && isPlainPackable(slotData) && isPlainPackable(targetItem)
-          && !(targetContainer.name === 'Pouch' && targetContainer.linkedTo)) {
-        const pouchSlot = { name: 'Pouch', bulk: Bulk.PACKABLE, isContainer: true, containerRows: 2, variables: {} };
-        const otherC = 1 - tC;
-        const bystander = targetContainer.slots[tR][otherC];
-        const displace = bystander && bystander !== slotData;
-        removeFromSource();
-        targetContainer.slots[tR][0] = pouchSlot;
-        targetContainer.slots[tR][1] = null;
-        if (displace) {
-          const free = findEmptySlot(targetContainer, tR);
-          if (free) targetContainer.slots[free.r][free.c] = bystander;
-          else { targetContainer.slots.push([bystander, null]); targetContainer.rows++; }
-        }
-        createLinkedContainer(pouchSlot, targetContainer.id, tR, 0);
-        const linked = state.containers.find(c => c.id === pouchSlot.containerId);
-        if (linked) { linked.slots[0][0] = targetItem; linked.slots[0][1] = slotData; }
-        render();
-        return;
-      }
 
       // Coin Purse merge: drop one onto another of the same name that has coin variables
       if (targetItem && targetItem.name === slotData.name) {
@@ -1572,27 +1480,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
 
       // Smart drop into container: if target slot holds a container item, try placing inside it
-      if (targetItem && targetItem.containerId && !isSlotBulky(slotData)) {
+      if (targetItem && targetItem.containerId) {
         const linked = state.containers.find(c => c.id === targetItem.containerId);
         if (linked) {
-          const wouldWarn = linked.name === 'Pouch' && !isSlotPackable(slotData);
-          if (!wouldWarn) {
-            const freeSlot = findEmptySlot(linked, -1);
-            if (freeSlot) {
-              removeFromSource();
-              placeSlotData(slotData, linked, freeSlot.r, freeSlot.c);
-              if (isShopDrag && onShopPurchase) onShopPurchase(slotData);
-              return;
-            }
+          const freeSlot = findEmptySlot(linked, -1);
+          if (freeSlot && itemFillCost(slotData) <= containerFillAvailable(linked) + 0.001) {
+            removeFromSource();
+            if (placeSlotData(slotData, linked, freeSlot.r, freeSlot.c) && isShopDrag && onShopPurchase) onShopPurchase(slotData);
+            return;
           }
         }
-      }
-
-      // Never swap WITH a Pouch container slot — if the smart-drop above didn't
-      // handle it (e.g. pouch is full), just reject rather than disconnecting the pouch.
-      if (targetItem && targetItem.containerId) {
-        const _tc = state.containers.find(c => c.id === targetItem.containerId);
-        if (_tc && _tc.name === 'Pouch') { render(); return; }
       }
 
       // Commit: remove item from source now that we know the drop is valid
@@ -1600,32 +1497,30 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
       if (targetItem && srcContainer) {
         // Swap — fly both items between their old and new slots (only for inventory→inventory)
-        const swapName = packName(targetItem);
+        const swapName = targetItem.name || '';
         targetContainer.slots[tR][tC] = null;
         srcContainer.slots[srcR][srcC] = targetItem;
         placeSlotData(slotData, targetContainer, tR, tC);
         const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
-        if (srcCenter) spawnFlightClone(packName(slotData), srcCenter, actualDest);
+        if (srcCenter) spawnFlightClone(slotData.name || '', srcCenter, actualDest);
         const actualSwapDest = postRenderCenter(srcContainer.id, srcR, srcC, targetItem);
         if (actualSwapDest) spawnFlightClone(swapName, destCenter, actualSwapDest);
         return;
       }
 
-      placeSlotData(slotData, targetContainer, tR, tC);
-      if (isShopDrag && onShopPurchase) onShopPurchase(slotData);
+      const _placed = placeSlotData(slotData, targetContainer, tR, tC);
+      if (_placed && isShopDrag && onShopPurchase) onShopPurchase(slotData);
       const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
-      if (srcCenter) spawnFlightClone(packName(slotData), srcCenter, actualDest);
+      if (srcCenter) spawnFlightClone(slotData.name || '', srcCenter, actualDest);
     } else {
       // Dropped outside any container — item stays in slot
       render();
     }
   }
 
-  // After render, find where an item actually ended up — bulky items always render at c=0.
   function postRenderCenter(containerId, r, c, item) {
-    const col = (isSlotBulky(item) && !item.conflict) ? 0 : c;
     const el = document.querySelector(
-      `[data-container-id="${containerId}"][data-r="${r}"][data-c="${col}"]`
+      `[data-container-id="${containerId}"][data-r="${r}"][data-c="${c}"]`
     );
     if (!el) return null;
     const rect = el.getBoundingClientRect();
@@ -1662,50 +1557,46 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
   function placeSlotData(slotData, container, r, c) {
-    slotData.conflict = false;
-    const row = container.slots[r];
-    let finalC = c;
-
-    if (isSlotBulky(slotData)) {
-      const otherCol = 1 - c;
-      const displaced = row[otherCol];
-
-      if (!displaced) {
-        row[0] = slotData; row[1] = null; finalC = 0;
-      } else {
-        // Target row isn't fully free — find or create a fully free row
-        let targetRow = container.slots.findIndex(
-          (sr, ri) => ri !== r && !sr[0] && !sr[1]
-        );
-        if (targetRow === -1) {
-          container.slots.push([null, null]);
-          container.rows++;
-          targetRow = container.slots.length - 1;
+    if (slotData._unresolved) {
+      if (slotData._shopItem) {
+        const key = `shop-${slotData.name}`;
+        if (inspectorItemKey !== key || inspectorEl.classList.contains('inspector-collapsed')) {
+          showInspector(slotData, null, -1, -1);
+          inspectorItemKey = key;
         }
-        container.slots[targetRow][0] = slotData;
-        container.slots[targetRow][1] = null;
-        if (slotData.containerId) {
-          const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
-          if (linked) linked.linkedTo = { containerId: container.id, r: targetRow, c: 0 };
-        } else if (isContainerItem(slotData)) {
-          createLinkedContainer(slotData, container.id, targetRow, 0);
-        }
-        render();
-        return;
+        requestAnimationFrame(() => {
+          document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
+            if (sel.value !== '') return;
+            sel.classList.remove('flash-required');
+            void sel.offsetWidth;
+            sel.classList.add('flash-required');
+            setTimeout(() => sel.classList.remove('flash-required'), 700);
+          });
+        });
       }
-    } else {
-      row[c] = slotData;
+      render();
+      return false;
+    }
+    slotData.conflict = false;
+    const existing = container.slots[r][c];
+    const existingFill = existing ? itemFillCost(existing) : 0;
+    if (itemFillCost(slotData) - existingFill > containerFillAvailable(container) + 0.001) {
+      render();
+      return;
     }
 
-    // Keep linked container's back-reference in sync
+    ensurePackableQty(slotData);
+    container.slots[r][c] = slotData;
+
     if (slotData.containerId) {
       const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
-      if (linked) linked.linkedTo = { containerId: container.id, r, c: finalC };
+      if (linked) linked.linkedTo = { containerId: container.id, r, c };
     } else if (isContainerItem(slotData)) {
-      createLinkedContainer(slotData, container.id, r, finalC);
+      createLinkedContainer(slotData, container.id, r, c);
     }
 
     render();
+    return true;
   }
 
   document.addEventListener('pointermove', e => {
@@ -1727,22 +1618,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       _shopTabBtn.classList.toggle('shop-tab-sell-hover', overShop);
     }
 
-    // Auto-scroll #inv-scroll when dragging near top/bottom edges
-    const scrollEl = document.getElementById('inv-scroll');
-    if (scrollEl.hidden) { dragScrollVel = 0; return; }
-    const rect = scrollEl.getBoundingClientRect();
-    const ZONE = 100;
-    const MAX  = 12;
-    if (e.clientY < rect.top + ZONE) {
-      dragScrollVel = -MAX * Math.pow(1 - Math.max(0, e.clientY - rect.top) / ZONE, 2);
-    } else if (e.clientY > rect.bottom - ZONE) {
-      dragScrollVel = MAX * Math.pow(1 - Math.max(0, rect.bottom - e.clientY) / ZONE, 2);
-    } else {
-      dragScrollVel = 0;
-    }
-    if (dragScrollVel !== 0 && !dragScrollRaf) {
-      dragScrollRaf = requestAnimationFrame(dragScrollStep);
-    }
+    dragScrollVel = 0;
   });
 
   document.addEventListener('pointerup', e => {
@@ -1889,6 +1765,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       state.containers    = (newState.containers && newState.containers.length)
                             ? newState.containers : createDefaultContainers();
       flattenPackableGroups(state.containers);
+      for (const c of state.containers)
+        for (const row of c.slots)
+          for (const slot of row) ensurePackableQty(slot);
       document.getElementById('char-name').value  = state.charName;
       document.getElementById('char-carry').value = state.carryCapacity;
       render();
@@ -2148,14 +2027,20 @@ window.CharacterManager = ({ auth, database }) => {
                        : null;
       const elementVar = item.variables?.element?.control === 'select' ? item.variables.element : null;
 
-      // Mutable state tracked in closure
-      let silvered   = false;
-      let metalMat   = null; // null | 'mithral' | 'adamantine'
-      let typeSel    = null;
-      let elementSel = null;
+      // Persistent slotData for this row — mutated by the inspector, read by getSlotData()
+      // Type/element start as '' (unselected placeholder) so user must pick before purchasing
+      const cachedSlotData = buildShopSlotData(
+        item, typeVar?.value, false, null, elementVar?.value, 0
+      );
+      if (typeVar    && cachedSlotData.variables?.weapon?.control  === 'select') cachedSlotData.variables.weapon.value  = '';
+      if (typeVar    && cachedSlotData.variables?.armor?.control   === 'select') cachedSlotData.variables.armor.value   = '';
+      if (elementVar && cachedSlotData.variables?.element?.control === 'select') cachedSlotData.variables.element.value = '';
+      // Explicit unresolved flag — more reliable than checking '' values at drag time
+      if (typeVar || elementVar) cachedSlotData._unresolved = true;
 
       const getTypeCostCp = () => {
-        const name = typeSel ? typeSel.value : typeVar?.value;
+        const name = cachedSlotData.variables?.weapon?.value
+                  ?? cachedSlotData.variables?.armor?.value;
         if (!name) return 0;
         const lib = ITEM_LIBRARY.find(i => i.name === name);
         return lib?.cost ? shopCostToCp(lib.cost) : 0;
@@ -2163,8 +2048,22 @@ window.CharacterManager = ({ auth, database }) => {
 
       const getTotalCostCp = () =>
         baseCostCp + getTypeCostCp()
-        + (silvered ? 10000 : 0)
-        + (metalMat ? 50000  : 0);
+        + (cachedSlotData.silvered  ? 10000 : 0)
+        + (cachedSlotData.material  ? 50000 : 0);
+
+      const getDisplayName = () => {
+        let name = item.name;
+        const wv = cachedSlotData.variables?.weapon;
+        const av = cachedSlotData.variables?.armor;
+        const ev = cachedSlotData.variables?.element;
+        if (wv?.control === 'select' && wv.value) name = name.replace('Weapon', wv.value);
+        if (av?.control === 'select' && av.value) name = name.replace('Armor',  av.value);
+        if (ev?.control === 'select' && ev.value) name = name.replace('Elemental', ev.value);
+        const silverPfx = cachedSlotData.silvered ? 'Silvered ' : '';
+        const metal = (cachedSlotData.material === 'mithral' || cachedSlotData.material === 'adamantine')
+          ? cachedSlotData.material : null;
+        return silverPfx + (metal ? metal.charAt(0).toUpperCase() + metal.slice(1) + ' ' : '') + name;
+      };
 
       const row = document.createElement('div');
       row.dataset.section  = currentSection;
@@ -2183,6 +2082,7 @@ window.CharacterManager = ({ auth, database }) => {
           + (!avail ? ' shop-item-unavailable' : '')
           + (cantAfford ? ' shop-item-unaffordable' : '');
         costSpan.innerHTML = item.cost ? renderCostHtml(totalCp, costSuffix) : '';
+        nameSpan.textContent = getDisplayName();
       };
 
       const costSpan = document.createElement('span');
@@ -2198,73 +2098,6 @@ window.CharacterManager = ({ auth, database }) => {
 
       row.appendChild(infoIcon);
       row.appendChild(nameSpan);
-
-      // Type select (weapon/armor variants — adds base type cost)
-      if (typeVar) {
-        typeSel = document.createElement('select');
-        typeSel.className = 'shop-type-select';
-        (typeVar.options || []).forEach(opt => {
-          const o = document.createElement('option');
-          o.value = opt; o.textContent = opt;
-          if (opt === typeVar.value) o.selected = true;
-          typeSel.appendChild(o);
-        });
-        typeSel.addEventListener('pointerdown', e => e.stopPropagation());
-        typeSel.addEventListener('click',       e => e.stopPropagation());
-        typeSel.addEventListener('change', applyRowState);
-        row.appendChild(typeSel);
-      }
-
-      // Element select (no cost change — just sets the element choice)
-      if (elementVar) {
-        elementSel = document.createElement('select');
-        elementSel.className = 'shop-type-select';
-        (elementVar.options || []).forEach(opt => {
-          const o = document.createElement('option');
-          o.value = opt; o.textContent = opt;
-          if (opt === elementVar.value) o.selected = true;
-          elementSel.appendChild(o);
-        });
-        elementSel.addEventListener('pointerdown', e => e.stopPropagation());
-        elementSel.addEventListener('click',       e => e.stopPropagation());
-        row.appendChild(elementSel);
-      }
-
-      // Silver toggle (+100gp)
-      if (canSilver) {
-        const silverBtn = document.createElement('button');
-        silverBtn.className = 'shop-mat-btn';
-        silverBtn.textContent = 'Silver';
-        silverBtn.title = '+100gp';
-        silverBtn.addEventListener('pointerdown', e => e.stopPropagation());
-        silverBtn.addEventListener('click', e => {
-          e.stopPropagation();
-          silvered = !silvered;
-          silverBtn.className = 'shop-mat-btn' + (silvered ? ' active-silvered' : '');
-          applyRowState();
-        });
-        row.appendChild(silverBtn);
-      }
-
-      // Mithral / Adamantine toggle (+500gp)
-      if (canMetal) {
-        const metals = [null, 'mithral', 'adamantine'];
-        const metalBtn = document.createElement('button');
-        metalBtn.className = 'shop-mat-btn';
-        metalBtn.textContent = 'Metal';
-        metalBtn.title = '+500gp';
-        metalBtn.addEventListener('pointerdown', e => e.stopPropagation());
-        metalBtn.addEventListener('click', e => {
-          e.stopPropagation();
-          metalMat = metals[(metals.indexOf(metalMat) + 1) % metals.length];
-          metalBtn.textContent = metalMat
-            ? metalMat.charAt(0).toUpperCase() + metalMat.slice(1)
-            : 'Metal';
-          metalBtn.className = 'shop-mat-btn' + (metalMat ? ` active-${metalMat}` : '');
-          applyRowState();
-        });
-        row.appendChild(metalBtn);
-      }
 
       row.appendChild(costSpan);
 
@@ -2298,23 +2131,17 @@ window.CharacterManager = ({ auth, database }) => {
 
       // Initial state
       applyRowState();
+      row._applyRowState = applyRowState;
 
-      const getSlotData = () => buildShopSlotData(
-        item,
-        typeSel?.value,
-        silvered,
-        metalMat,
-        elementSel?.value,
-        getTotalCostCp()
-      );
+      const getSlotData = () => {
+        cachedSlotData._shopCostCp = getTotalCostCp();
+        return cachedSlotData;
+      };
 
       row.addEventListener('click', e => {
         if (row._shopDragging
           || e.target.closest('.shop-item-vis-btn')
-          || e.target.closest('.shop-item-avail-btn')
-          || e.target.closest('.shop-type-select')
-          || e.target.closest('.shop-mat-btn')
-          || e.target.tagName === 'SELECT') return;
+          || e.target.closest('.shop-item-avail-btn')) return;
         inv.toggleShopItem(getSlotData(), `shop-${item.name}`);
       });
 
@@ -2869,7 +2696,7 @@ window.CharacterManager = ({ auth, database }) => {
       if (!equipped.slots[r][0]) {
         equipped.slots[r][0] = cleanItem; finalR = r; finalC = 0; placed = true; break;
       }
-      if (!equipped.slots[r][1] && !isBulky(cleanItem)) {
+      if (!equipped.slots[r][1]) {
         equipped.slots[r][1] = cleanItem; finalR = r; finalC = 1; placed = true; break;
       }
     }
@@ -2899,12 +2726,6 @@ window.CharacterManager = ({ auth, database }) => {
       tabEl.classList.add('tab-received');
       setTimeout(() => tabEl.classList.remove('tab-received'), 1200);
     }
-  }
-
-  function isBulky(item) {
-    if (!item) return false;
-    const id = item.bulk?.id || 'stock';
-    return id === 'bulky' || id === 'verybulky';
   }
 
   // ── TABS ────────────────────────────────────────────────────────────────

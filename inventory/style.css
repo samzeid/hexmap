@@ -904,6 +904,9 @@ main {
   text-transform: none;
   margin-left: 6px;
 }
+.container-capacity-over {
+  color: #ff4444;
+}
 
 .inv-hdr-toggle {
   flex: 1;
@@ -961,13 +964,17 @@ main {
 
 #coin-counter {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   align-items: center;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
-  padding: 2px 2px 0;
+  padding: 2px 0 0;
+}
+.coin-icon {
+  color: rgba(255, 205, 60, 0.7);
+  font-size: 11px;
 }
 
 .coin-pp { color: rgba(190, 145, 255, 0.85); }
@@ -1703,4 +1710,13 @@ body.is-dragging #inv-scroll {
   flex-shrink: 1;
   min-width: 60px;
   max-width: 140px;
+}
+
+.insp-select.flash-required {
+  animation: select-flash 0.65s ease-out forwards;
+}
+@keyframes select-flash {
+  0%   { border-color: rgba(255,255,255,0.15); box-shadow: none; }
+  20%  { border-color: #ff4444; box-shadow: 0 0 0 2px rgba(255,68,68,0.4); }
+  100% { border-color: rgba(255,255,255,0.15); box-shadow: none; }
 }
