@@ -107,15 +107,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   function createLinkedContainer(slotData, srcContainerId, r, c) {
     const lib = getLibraryItem(slotData.name);
-    const rows = slotData.isContainer
+    const maxRows = slotData.isContainer
       ? (slotData.containerRows || 2)
       : (lib && lib.containerRows) || 2;
     const linked = {
       id: `linked-${Date.now()}`,
       name: slotData.name,
-      rows,
+      rows: 1,
+      maxRows,
       collapsed: false,
-      slots: Array.from({ length: rows }, () => [null, null]),
+      slots: [[null, null]],
       linkedTo: { containerId: srcContainerId, r, c }
     };
     slotData.containerId = linked.id;
@@ -245,13 +246,35 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   function shrinkEquipped() {
     const equipped = state.containers.find(c => c.id === 'equipped');
     if (!equipped) return;
-    // Remove trailing empty rows while more than one empty row exists at the end
     while (equipped.slots.length > 1) {
       const last = equipped.slots[equipped.slots.length - 1];
       const prev = equipped.slots[equipped.slots.length - 2];
       if (last[0] === null && last[1] === null && prev[0] === null && prev[1] === null) {
         equipped.slots.pop();
         equipped.rows--;
+      } else {
+        break;
+      }
+    }
+  }
+
+  function growContainer(container) {
+    // Migrate old containers that pre-date maxRows: treat their current size as the cap
+    if (!container.maxRows) container.maxRows = container.rows;
+    const hasEmptyRow = container.slots.some(row => row[0] === null && row[1] === null);
+    if (!hasEmptyRow && container.slots.length < container.maxRows) {
+      container.slots.push([null, null]);
+      container.rows++;
+    }
+  }
+
+  function shrinkContainer(container) {
+    while (container.slots.length > 1) {
+      const last = container.slots[container.slots.length - 1];
+      const prev = container.slots[container.slots.length - 2];
+      if (last[0] === null && last[1] === null && prev[0] === null && prev[1] === null) {
+        container.slots.pop();
+        container.rows--;
       } else {
         break;
       }
@@ -276,6 +299,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     checkPouchDissolve();
     growEquipped();
     shrinkEquipped();
+    state.containers.forEach(c => {
+      if (c.linkedTo) { growContainer(c); shrinkContainer(c); }
+    });
     containersEl.innerHTML = '';
     state.containers.forEach(c => containersEl.appendChild(buildCard(c)));
     updateCarryDisplay();
@@ -316,7 +342,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     const toggle = document.createElement('button');
     toggle.className = 'inv-hdr-toggle';
-    toggle.innerHTML = `<span>${container.name}</span><span class="inv-chevron">${container.collapsed ? '▶' : '▼'}</span>`;
+    const _capHtml = (container.linkedTo && container.maxRows)
+      ? `<span class="container-capacity">${container.slots.flatMap(r => r).filter(Boolean).length}/${container.maxRows * 2}</span>`
+      : '';
+    toggle.innerHTML = `<span>${container.name}${_capHtml}</span><span class="inv-chevron">${container.collapsed ? '▶' : '▼'}</span>`;
     toggle.addEventListener('click', () => { container.collapsed = !container.collapsed; render(); });
 
     if (!container.permanent) {
@@ -457,20 +486,76 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
       if (slotData.name === 'Pouch' && linkedContainer) {
         label.classList.add('slot-label-pouch');
-        linkedContainer.slots.forEach(row => {
-          row.forEach(item => {
+        linkedContainer.slots.forEach((pRow, pr) => {
+          pRow.forEach((pItem, pc) => {
             const cell = document.createElement('span');
-            cell.className = 'pouch-cell' + (item ? '' : ' empty');
-            if (item) {
-              const iVars = Object.values(item.variables || {});
+            cell.className = 'pouch-cell' + (pItem ? '' : ' empty');
+            // Data attrs let endDrag target this cell as a drop slot
+            cell.dataset.containerId = linkedContainer.id;
+            cell.dataset.r = pr;
+            cell.dataset.c = pc;
+            cell.style.pointerEvents = 'auto';
+
+            // Prevent clicks/presses from bubbling to the slot wrap (which would
+            // either start dragging the whole Pouch or toggle its collapse state)
+            cell.addEventListener('pointerdown',   e => e.stopPropagation());
+            cell.addEventListener('pointerup',     e => e.stopPropagation());
+            cell.addEventListener('pointercancel', e => e.stopPropagation());
+
+            if (pItem) {
+              const iVars = Object.values(pItem.variables || {});
               const iNumVar = iVars.find(v => (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number') || null;
-              const _iSilverPfx = (item.silvered || item.material === 'silvered') ? 'Silvered ' : '';
-              const _iMetalMat  = (item.material === 'mithral' || item.material === 'adamantine') ? item.material : null;
+              const _iSilverPfx = (pItem.silvered || pItem.material === 'silvered') ? 'Silvered ' : '';
+              const _iMetalMat  = (pItem.material === 'mithral' || pItem.material === 'adamantine') ? pItem.material : null;
               const iMatPfx = _iSilverPfx + (_iMetalMat ? _iMetalMat.charAt(0).toUpperCase() + _iMetalMat.slice(1) + ' ' : '');
-              const iName = computeDisplayName(item);
+              const iName = computeDisplayName(pItem);
               cell.textContent = iNumVar ? `${iNumVar.value} × ${iMatPfx}${iName}` : `${iMatPfx}${iName}`;
+              cell.style.cursor = 'pointer';
+              cell.style.touchAction = 'none';
+
+              // Click opens the inspector for this specific pouch item
+              cell.addEventListener('click', e => {
+                e.stopPropagation();
+                toggleInspectorFor(`${linkedContainer.id}-${pr}-${pc}`, pItem, linkedContainer, pr, pc);
+              });
+
+              // Long-press to drag item out of the pouch
+              let pDownX, pDownY, pPointerId, pLongTimer, pScrolling = false, pLastY = 0;
+              cell.addEventListener('pointerdown', e => {
+                if (dragState || e.button !== 0) return;
+                pDownX = e.clientX; pDownY = e.clientY; pPointerId = e.pointerId;
+                pScrolling = false;
+                pLongTimer = setTimeout(() => {
+                  pLongTimer = null; pScrolling = false;
+                  document.documentElement.setPointerCapture(pPointerId);
+                  const sr = cell.getBoundingClientRect();
+                  startDrag(pItem, linkedContainer, pr, pc, pDownX, pDownY,
+                    { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 },
+                    () => { linkedContainer.slots[pr][pc] = null; });
+                }, 380);
+              });
+              cell.addEventListener('pointermove', e => {
+                if (pScrolling) {
+                  document.getElementById('inv-scroll').scrollTop += pLastY - e.clientY;
+                  pLastY = e.clientY; return;
+                }
+                if (!pLongTimer) return;
+                if ((e.clientX - pDownX) ** 2 + (e.clientY - pDownY) ** 2 > 64) {
+                  clearTimeout(pLongTimer); pLongTimer = null;
+                  pScrolling = true; pLastY = e.clientY;
+                }
+              });
+              const cancelP = () => {
+                if (pLongTimer) { clearTimeout(pLongTimer); pLongTimer = null; }
+                pScrolling = false;
+              };
+              cell.addEventListener('pointerup',     cancelP);
+              cell.addEventListener('pointercancel', cancelP);
             } else {
               cell.textContent = '—';
+              // Click on an empty cell does nothing — stop propagation so wrap
+              // doesn't treat it as a container-toggle click
+              cell.addEventListener('click', e => e.stopPropagation());
             }
             label.appendChild(cell);
           });
@@ -1126,7 +1211,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
               if (last[0] === null && last[1] === null) linked.slots.pop();
               else break;
             }
-            linked.rows = linked.slots.length; render();
+            linked.rows = linked.slots.length;
+            linked.maxRows = target;
+            render();
           }
         }
       };
@@ -1414,6 +1501,25 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const tR = parseInt(wrap.dataset.r);
       const tC = parseInt(wrap.dataset.c);
 
+      // Reject dropping a container into itself
+      if (slotData.containerId && slotData.containerId === targetContainer.id) {
+        render();
+        return;
+      }
+
+      // Reject drops onto a filled pouch cell — no swapping into a pouch from outside
+      if (targetContainer.name === 'Pouch' && targetContainer.linkedTo
+          && targetContainer.slots[tR]?.[tC] !== null && srcContainer !== targetContainer) {
+        render();
+        return;
+      }
+
+      // Reject non-packable items dropped onto a Pouch container
+      if (targetContainer.name === 'Pouch' && targetContainer.linkedTo && !isSlotPackable(slotData)) {
+        render();
+        return;
+      }
+
       // Same slot — no-op
       if (targetContainer === srcContainer && tR === srcR && tC === srcC) {
         render();
@@ -1427,8 +1533,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const destCenter = { x: destRect.left + destRect.width / 2, y: destRect.top + destRect.height / 2 };
 
       // Pouch auto-creation: two plain packables meet — wrap them in a linked Pouch container
+      // (but not when already inside a Pouch container)
       const isPlainPackable = sd => isSlotPackable(sd) && !sd.isContainer && !sd.containerId;
-      if (targetItem && isPlainPackable(slotData) && isPlainPackable(targetItem)) {
+      if (targetItem && isPlainPackable(slotData) && isPlainPackable(targetItem)
+          && !(targetContainer.name === 'Pouch' && targetContainer.linkedTo)) {
         const pouchSlot = { name: 'Pouch', bulk: Bulk.PACKABLE, isContainer: true, containerRows: 2, variables: {} };
         const otherC = 1 - tC;
         const bystander = targetContainer.slots[tR][otherC];
@@ -1478,6 +1586,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
             }
           }
         }
+      }
+
+      // Never swap WITH a Pouch container slot — if the smart-drop above didn't
+      // handle it (e.g. pouch is full), just reject rather than disconnecting the pouch.
+      if (targetItem && targetItem.containerId) {
+        const _tc = state.containers.find(c => c.id === targetItem.containerId);
+        if (_tc && _tc.name === 'Pouch') { render(); return; }
       }
 
       // Commit: remove item from source now that we know the drop is valid

@@ -896,6 +896,15 @@ main {
   pointer-events: none;
 }
 
+.container-capacity {
+  font-size: 10px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.25);
+  letter-spacing: normal;
+  text-transform: none;
+  margin-left: 6px;
+}
+
 .inv-hdr-toggle {
   flex: 1;
   display: flex;
