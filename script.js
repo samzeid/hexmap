@@ -205,6 +205,12 @@ function drawHex(x, y, options = {}) {
 
 const canvasContainer = canvas.parentElement;
 
+function fitContainer() {
+    canvasContainer.style.height = window.innerHeight + 'px';
+}
+window.addEventListener('resize', fitContainer);
+fitContainer();
+
 function resizeCanvas() {
     canvas.width  = canvasContainer.clientWidth;
     canvas.height = canvasContainer.clientHeight;

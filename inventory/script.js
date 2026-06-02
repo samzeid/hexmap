@@ -680,7 +680,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, isHiddenF
         closeDropdown();
       };
       opt.addEventListener('mousedown', e => { e.preventDefault(); pick(); });
-      opt.addEventListener('touchstart', e => { e.preventDefault(); pick(); }, { passive: false });
+      opt.addEventListener('touchstart', e => { opt._touchY = e.touches[0].clientY; }, { passive: true });
+      opt.addEventListener('touchend', e => {
+        if (Math.abs(e.changedTouches[0].clientY - (opt._touchY || 0)) < 10) {
+          e.preventDefault();
+          pick();
+        }
+      }, { passive: false });
       dropdownEl.appendChild(opt);
     });
 
