@@ -88,6 +88,9 @@ input, textarea, select { font-size: max(16px, 1em); }
   margin-left: 2px;
 }
 
+#shop-tab-btn,
+#inv-close-btn { border-radius: 0; }
+
 #inv-close-btn:hover, #add-char-btn:hover,
 #shop-tab-btn:hover,  #role-btn:hover {
   background: rgba(255,255,255,0.1);
@@ -110,8 +113,8 @@ input, textarea, select { font-size: max(16px, 1em); }
 
 #char-tabs {
   display: flex;
-  gap: 2px;
-  padding: 4px 6px;
+  gap: 0;
+  padding: 0;
   min-width: min-content;
 }
 
@@ -119,10 +122,11 @@ input, textarea, select { font-size: max(16px, 1em); }
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 14px;
+  padding: 14px 14px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 0;
+  box-shadow: -1px 0 0 var(--card-border);
   color: var(--muted);
   font-size: 16px;
   font-weight: 500;
@@ -130,12 +134,13 @@ input, textarea, select { font-size: max(16px, 1em); }
   white-space: nowrap;
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, border-radius 0.15s ease, transform 0.1s ease;
 }
+
+.char-tab:first-child { box-shadow: none; }
 
 .char-tab.active {
   background: rgba(255,255,255,0.08);
-  border-color: var(--card-border);
   color: var(--text);
 }
 
@@ -148,8 +153,9 @@ input, textarea, select { font-size: max(16px, 1em); }
   75%       { rotate:  5deg; }
 }
 
-.char-tab.tab-drag-over .char-tab-info {
-  animation: tab-name-jiggle 0.5s ease-in-out infinite;
+/* Item received — jiggle the name */
+.char-tab.tab-received .char-tab-info {
+  animation: tab-name-jiggle 0.4s ease-in-out 3;
 }
 
 /* All tabs: white tint during drag */
@@ -162,30 +168,29 @@ input, textarea, select { font-size: max(16px, 1em); }
   color: rgba(120,220,150,0.85);
 }
 
-/* Hover — all tabs: white */
+/* Drag-over — all tabs: transform to rounded bordered button */
 .char-tab.tab-drag-over,
 .char-tab.tab-drag-over.active,
 .char-tab.tab-drag-over.tab-other,
 .char-tab.tab-drag-over.active.tab-other {
   background: rgba(255,255,255,0.18) !important;
   border-color: rgba(255,255,255,0.85) !important;
+  border-radius: 10px !important;
   color: #fff !important;
   transform: scale(1.12);
 }
-/* Hover — user's own tab: strong green, white name */
+/* Drag-over — user's own tab: green */
 .char-tab.tab-drag-over.tab-mine,
 .char-tab.tab-drag-over.active.tab-mine {
   background: rgba(80,200,120,0.35) !important;
   border-color: rgba(120,240,160,1) !important;
+  border-radius: 10px !important;
   color: #fff !important;
   transform: scale(1.12);
 }
 
 .char-tab.tab-received {
-  background: rgba(80,210,130,0.18);
-  border-color: rgba(80,210,130,0.45);
-  color: rgba(120,240,160,0.95);
-  transition: background 0.35s, border-color 0.35s, color 0.35s;
+  transition: none;
 }
 
 .char-tab-info {
@@ -212,12 +217,10 @@ input, textarea, select { font-size: max(16px, 1em); }
 
 /* Own character tab — green accent */
 .char-tab.tab-mine {
-  border-color: rgba(80, 200, 120, 0.3);
   color: rgba(120, 220, 150, 0.75);
 }
 .char-tab.tab-mine.active {
   background: rgba(80, 200, 120, 0.08);
-  border-color: rgba(80, 200, 120, 0.4);
   color: rgba(120, 220, 150, 0.95);
 }
 .char-tab.tab-mine:not(.active):hover {
@@ -225,12 +228,8 @@ input, textarea, select { font-size: max(16px, 1em); }
 }
 
 /* Other players' tabs — white accent */
-.char-tab.tab-other {
-  border-color: rgba(255, 255, 255, 0.12);
-}
 .char-tab.tab-other.active {
   background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.35);
   color: rgba(255, 255, 255, 0.9);
 }
 .char-tab.tab-other:not(.active):hover {
@@ -609,12 +608,14 @@ input, textarea, select { font-size: max(16px, 1em); }
 
 /* Shop tab sell zone — shown during inventory-item drag */
 #shop-tab-btn.shop-tab-sell-zone {
+  border-radius: 10px;
   color: rgb(180, 140, 30);
   outline: 2px solid rgba(180, 140, 30, 0.5);
   outline-offset: 2px;
-  transition: outline-color 0.15s, background 0.15s, color 0.15s, transform 0.15s;
+  transition: outline-color 0.15s, background 0.15s, color 0.15s, transform 0.15s, border-radius 0.15s;
 }
 #shop-tab-btn.shop-tab-sell-hover {
+  border-radius: 10px;
   color: #fff;
   background: rgba(180, 140, 20, 0.25);
   outline-color: rgba(240, 200, 48, 1);
