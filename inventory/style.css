@@ -141,10 +141,30 @@ input, textarea, select { font-size: max(16px, 1em); }
 
 .char-tab:not(.active):hover { background: rgba(255,255,255,0.04); }
 
-.char-tab.tab-drag-over {
-  background: rgba(180,120,255,0.18);
+@keyframes jiggle-subtle {
+  0%, 100% { rotate: 0deg; }
+  25%       { rotate: -4deg; }
+  75%       { rotate:  4deg; }
+}
+
+.char-tab-info.drag-jiggle { animation: jiggle-subtle 0.6s ease-in-out infinite; }
+
+/* All tabs (including active) show purple tint during drag */
+.char-tab.drag-target,
+.char-tab.drag-target.tab-mine,
+.char-tab.drag-target.tab-other {
   border-color: rgba(180,120,255,0.45);
-  color: rgba(200,160,255,0.95);
+  color: rgba(190,150,255,0.85);
+}
+
+/* Hover: all tabs go white, matching trash/shop behaviour */
+.char-tab.tab-drag-over,
+.char-tab.tab-drag-over.tab-mine,
+.char-tab.tab-drag-over.tab-other {
+  background: rgba(180,120,255,0.28) !important;
+  border-color: rgba(180,120,255,0.7) !important;
+  color: #fff !important;
+  transform: scale(1.06);
 }
 
 .char-tab.tab-received {
@@ -602,10 +622,6 @@ input, textarea, select { font-size: max(16px, 1em); }
   transform: scale(1.18);
 }
 
-/* During inventory-item drag, show tabs as potential targets */
-.is-dragging .char-tab:not(.active) {
-  border-color: rgba(255,255,255,0.08);
-}
 
 /* Tab reorder drag */
 .char-tab.tab-reordering {

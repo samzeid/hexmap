@@ -1260,6 +1260,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     _trashBtn.hidden = true;
     _trashBtn.classList.remove('drag-trash-hover', 'drag-jiggle');
     _shopTabBtn.classList.remove('shop-tab-sell-zone', 'shop-tab-sell-hover', 'drag-jiggle');
+    document.querySelectorAll('.char-tab.drag-target').forEach(tab => {
+      tab.classList.remove('drag-target');
+      const info = tab.querySelector('.char-tab-info');
+      if (info) info.classList.remove('drag-jiggle');
+    });
   }
 
   function parseCostCp(costStr) {
@@ -1355,6 +1360,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     document.body.classList.add('is-dragging');
 
     if (container !== null) activateTrash();
+
+    document.querySelectorAll('.char-tab').forEach(tab => {
+      tab.classList.add('drag-target');
+      const info = tab.querySelector('.char-tab-info');
+      if (info) {
+        info.classList.remove('drag-jiggle');
+        void info.offsetWidth;
+        info.classList.add('drag-jiggle');
+      }
+    });
 
     moveGhost(x, y);
     closeDropdown();
