@@ -1262,8 +1262,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     _shopTabBtn.classList.remove('shop-tab-sell-zone', 'shop-tab-sell-hover', 'drag-jiggle');
     document.querySelectorAll('.char-tab.drag-target').forEach(tab => {
       tab.classList.remove('drag-target');
-      const info = tab.querySelector('.char-tab-info');
-      if (info) info.classList.remove('drag-jiggle');
     });
   }
 
@@ -1363,12 +1361,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     document.querySelectorAll('.char-tab').forEach(tab => {
       tab.classList.add('drag-target');
-      const info = tab.querySelector('.char-tab-info');
-      if (info) {
-        info.classList.remove('drag-jiggle');
-        void info.offsetWidth;
-        info.classList.add('drag-jiggle');
-      }
     });
 
     moveGhost(x, y);
@@ -2891,7 +2883,7 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
     const el  = document.elementFromPoint(e.clientX, e.clientY);
     const tab = el && el.closest('[data-char-id]');
     document.querySelectorAll('[data-char-id]').forEach(t => t.classList.remove('tab-drag-over'));
-    if (tab && tab.dataset.charId !== currentCharId) tab.classList.add('tab-drag-over');
+    if (tab) tab.classList.add('tab-drag-over');
   });
 
   // ── TAB REORDER ────────────────────────────────────────────────────────────

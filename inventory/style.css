@@ -110,8 +110,8 @@ input, textarea, select { font-size: max(16px, 1em); }
 
 #char-tabs {
   display: flex;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: 2px;
+  padding: 4px 6px;
   min-width: min-content;
 }
 
@@ -119,10 +119,10 @@ input, textarea, select { font-size: max(16px, 1em); }
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 14px 16px;
+  padding: 9px 14px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--muted);
   font-size: 16px;
   font-weight: 500;
@@ -130,7 +130,7 @@ input, textarea, select { font-size: max(16px, 1em); }
   white-space: nowrap;
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
 }
 
 .char-tab.active {
@@ -139,32 +139,46 @@ input, textarea, select { font-size: max(16px, 1em); }
   color: var(--text);
 }
 
-.char-tab:not(.active):hover { background: rgba(255,255,255,0.04); }
+.char-tab:not(.active):hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.char-tab:active { transform: scale(0.92); background: rgba(255,255,255,0.08); }
 
-@keyframes jiggle-subtle {
+@keyframes tab-name-jiggle {
   0%, 100% { rotate: 0deg; }
-  25%       { rotate: -4deg; }
-  75%       { rotate:  4deg; }
+  25%       { rotate: -5deg; }
+  75%       { rotate:  5deg; }
 }
 
-.char-tab-info.drag-jiggle { animation: jiggle-subtle 0.6s ease-in-out infinite; }
+.char-tab.tab-drag-over .char-tab-info {
+  animation: tab-name-jiggle 0.5s ease-in-out infinite;
+}
 
-/* All tabs (including active) show purple tint during drag */
+/* All tabs: white tint during drag */
 .char-tab.drag-target,
-.char-tab.drag-target.tab-mine,
 .char-tab.drag-target.tab-other {
-  border-color: rgba(180,120,255,0.45);
-  color: rgba(190,150,255,0.85);
+  color: rgba(255,255,255,0.65);
+}
+/* User's own tab keeps green during drag */
+.char-tab.drag-target.tab-mine:not(.active) {
+  color: rgba(120,220,150,0.85);
 }
 
-/* Hover: all tabs go white, matching trash/shop behaviour */
+/* Hover — all tabs: white */
 .char-tab.tab-drag-over,
-.char-tab.tab-drag-over.tab-mine,
-.char-tab.tab-drag-over.tab-other {
-  background: rgba(180,120,255,0.28) !important;
-  border-color: rgba(180,120,255,0.7) !important;
+.char-tab.tab-drag-over.active,
+.char-tab.tab-drag-over.tab-other,
+.char-tab.tab-drag-over.active.tab-other {
+  background: rgba(255,255,255,0.18) !important;
+  border-color: rgba(255,255,255,0.85) !important;
   color: #fff !important;
-  transform: scale(1.06);
+  transform: scale(1.12);
+}
+/* Hover — user's own tab: strong green, white name */
+.char-tab.tab-drag-over.tab-mine,
+.char-tab.tab-drag-over.active.tab-mine {
+  background: rgba(80,200,120,0.35) !important;
+  border-color: rgba(120,240,160,1) !important;
+  color: #fff !important;
+  transform: scale(1.12);
 }
 
 .char-tab.tab-received {
@@ -203,30 +217,30 @@ input, textarea, select { font-size: max(16px, 1em); }
 }
 .char-tab.tab-mine.active {
   background: rgba(80, 200, 120, 0.08);
-  border-color: rgba(80, 200, 120, 0.3);
+  border-color: rgba(80, 200, 120, 0.4);
   color: rgba(120, 220, 150, 0.95);
 }
 .char-tab.tab-mine:not(.active):hover {
   background: rgba(80, 200, 120, 0.06);
 }
 
-/* Other players' tabs — muted purple accent */
+/* Other players' tabs — white accent */
 .char-tab.tab-other {
-  border-color: rgba(160, 120, 220, 0.18);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 .char-tab.tab-other.active {
-  background: rgba(160, 120, 220, 0.1);
-  border-color: rgba(160, 120, 220, 0.45);
-  color: rgba(200, 170, 255, 1);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.9);
 }
 .char-tab.tab-other:not(.active):hover {
-  background: rgba(160, 120, 220, 0.06);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .char-tab-owner {
   font-size: 10px;
   font-weight: 500;
-  color: rgba(160, 120, 220, 0.65);
+  color: rgba(255, 255, 255, 0.4);
   pointer-events: none;
   line-height: 1;
 }
