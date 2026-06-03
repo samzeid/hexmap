@@ -823,9 +823,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     matches.forEach(item => {
       const opt = document.createElement('div');
       opt.className = 'ac-opt';
-      const bid = item.bulk.id;
-      const tag = bid !== 'stock'
-        ? `<span class="ac-tag ${bid}">${bid}</span>` : '';
+      const bid = item.bulk ? item.bulk.id : 'stock';
+      const isAmmoItem = item.category === 'ammunition';
+      const tag = isAmmoItem
+        ? `<span class="ac-tag ammo">Ammo</span>`
+        : bid !== 'stock' ? `<span class="ac-tag ${bid}">${bid}</span>` : '';
       opt.innerHTML = `<span class="ac-name">${item.name}</span>${tag}`;
 
       const pick = () => {
