@@ -441,6 +441,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     input.placeholder = '—';
     input.autocomplete = 'off';
     input.spellcheck = false;
+    input.enterKeyHint = 'done';
 
     const prev = slotData ? slotData.name : '';
     // typedValue tracks the user's live input independently of input.value, which
@@ -488,8 +489,15 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     input.addEventListener('blur', () => {
       input.classList.remove('slot-editing');
       if (ignoreNextBlur) { ignoreNextBlur = false; return; }
-      // Do NOT reset typedValue here — on Android, blur fires before keyup,
-      // so typedValue must survive until the key event handler runs.
+      // Commit if the user typed something different (covers mobile "Next"/"Done"
+      // which fires blur without an Enter event). Safe on Android too — if blur
+      // fires before keyup, commitFromTyped() clears typedValue and renders,
+      // removing the input from the DOM so the keyup handler returns early.
+      if (typedValue.trim() && typedValue !== prev) {
+        commitFromTyped();
+        return;
+      }
+      typedValue = '';
       input.value = prev;
       closeDropdown();
     });
