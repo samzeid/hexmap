@@ -1072,7 +1072,7 @@ main {
 .slot-label:hover .slot-info-inline.active { color: rgba(130, 190, 255, 0.95); }
 
 /* Slot highlight when linked container is open */
-.slot-container-open { background: rgba(160, 100, 255, 0.16); }
+.slot-container-open { }
 .slot-container-open .slot-input.slot-filled { border-left-color: rgba(180, 120, 255, 0.85); }
 
 /* Packable item green tint */
@@ -1098,7 +1098,8 @@ main {
 }
 
 .slot-label-conflict  { color: #ff6060; right: 72px; }
-.slot-label-container { color: rgba(180, 120, 255, 0.9); }
+.slot-label-container { color: rgba(170, 110, 255, 0.9); }
+.slot-container-open .slot-label-container { color: rgba(212, 183, 255, 1); }
 .slot-label-symbol    { color: rgba(255, 205, 60, 0.9); }
 .slot-packable .slot-label { color: rgba(80, 210, 130, 0.9); }
 
