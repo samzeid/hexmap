@@ -31,7 +31,7 @@
         <div id="char-tabs"></div>
       </div>
       <button id="add-char-btn" title="New character">＋</button>
-      <button id="shop-tab-btn" title="Item shop">🛒</button>
+      <button id="shop-tab-btn" title="Item shop"><i class="fa-solid fa-cart-shopping"></i></button>
       <button id="role-btn" title="Toggle DM / Player role" hidden></button>
     </div>
 
@@ -49,19 +49,17 @@
     <div id="inv-scroll">
 
       <header id="char-header">
-        <div class="char-field">
-          <div class="carry-row">
-            <span id="carry-used">0</span>
-            <span class="carry-slash">/</span>
-            <input type="text" id="char-carry" placeholder="—" autocomplete="off" />
-          </div>
-          <div id="coin-counter" hidden><i class="fas fa-coins coin-icon"></i></div>
-        </div>
         <div class="char-field grow">
           <div class="char-name-row">
             <input type="text" id="char-name" placeholder="Character name" autocomplete="off" />
+            <div class="carry-row">
+              <span id="carry-used">0</span>
+              <span class="carry-slash">/</span>
+              <input type="text" id="char-carry" placeholder="—" autocomplete="off" />
+            </div>
             <button id="char-assign-btn" hidden title="Assign to player"><i class="fas fa-user-pen"></i></button>
           </div>
+          <div id="coin-counter" hidden></div>
         </div>
       </header>
 

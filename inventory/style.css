@@ -579,14 +579,24 @@ input, textarea, select { font-size: max(16px, 1em); }
   transform: translateX(-50%) scale(1.15);
 }
 
+@keyframes jiggle {
+  0%, 100% { rotate: 0deg; }
+  25%       { rotate: -11deg; }
+  75%       { rotate:  11deg; }
+}
+
+#shop-tab-btn.drag-jiggle i,
+#drag-trash-btn.drag-jiggle i { animation: jiggle 0.55s ease-in-out infinite; }
+
 /* Shop tab sell zone — shown during inventory-item drag */
 #shop-tab-btn.shop-tab-sell-zone {
+  color: rgb(180, 140, 30);
   outline: 2px solid rgba(180, 140, 30, 0.5);
   outline-offset: 2px;
   transition: outline-color 0.15s, background 0.15s, color 0.15s, transform 0.15s;
 }
 #shop-tab-btn.shop-tab-sell-hover {
-  color: #f0c830;
+  color: #fff;
   background: rgba(180, 140, 20, 0.25);
   outline-color: rgba(240, 200, 48, 1);
   transform: scale(1.18);
@@ -663,7 +673,40 @@ input, textarea, select { font-size: max(16px, 1em); }
   display: flex;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
+  height: var(--name-row-h, 44px);
+  opacity: 1;
+  transition: height 0.22s ease, opacity 0.18s ease;
 }
+
+#char-header.header-scrolled .char-name-row {
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.carry-compact-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  max-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+#char-header.header-scrolled .carry-compact-label {
+  max-width: 120px;
+  margin-left: 6px;
+  opacity: 1;
+}
+
+.carry-compact-label.carry-compact-over { color: #ff6060; }
 
 .char-name-row input { flex: 1; }
 
@@ -780,6 +823,12 @@ input, textarea, select { font-size: max(16px, 1em); }
 }
 
 .carry-slash { color: var(--muted); font-size: 16px; }
+
+.carry-weight-icon {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 0 0;
+}
 
 #carry-used {
   font-size: 16px;
@@ -967,13 +1016,13 @@ main {
   gap: 6px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
-  padding: 2px 0 0;
+  padding: 8px 0 0;
 }
 .coin-icon {
-  color: rgba(255, 205, 60, 0.7);
   font-size: 11px;
 }
 
@@ -1713,12 +1762,19 @@ body.is-dragging #inv-scroll {
   max-width: 140px;
 }
 
+@keyframes shop-text-flash {
+  40% { color: #ff5555; }
+}
+.shop-item-name.shop-item-flash,
+.shop-item-cost .shop-item-flash {
+  animation: shop-text-flash 0.28s ease-in-out 3;
+}
+
+
 .insp-select.flash-required {
-  animation: select-flash 0.8s ease-out forwards;
+  animation: select-flash 0.28s ease-in-out 3 forwards;
 }
 @keyframes select-flash {
-  0%   { border-color: rgba(255,255,255,0.15); box-shadow: none; background: rgba(255,255,255,0.1); }
-  20%  { border-color: #ff4444; box-shadow: 0 0 0 3px rgba(255,68,68,0.7); background: rgba(255,68,68,0.25); }
-  60%  { border-color: #ff4444; box-shadow: 0 0 0 3px rgba(255,68,68,0.4); background: rgba(255,68,68,0.15); }
-  100% { border-color: rgba(255,255,255,0.15); box-shadow: none; background: rgba(255,255,255,0.1); }
+  0%, 100% { border-color: rgba(255,255,255,0.15); box-shadow: none; background: rgba(255,255,255,0.1); }
+  45%      { border-color: #ff4444; box-shadow: 0 0 0 3px rgba(255,68,68,0.65); background: rgba(255,68,68,0.25); }
 }

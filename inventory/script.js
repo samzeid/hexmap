@@ -146,13 +146,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         }
       }
     }
-    const parts = [];
-    if (pp > 0) parts.push(`<span class="coin-pp">${pp}pp</span>`);
-    if (gp > 0) parts.push(`<span class="coin-gp">${gp}gp</span>`);
-    if (sp > 0) parts.push(`<span class="coin-sp">${sp}sp</span>`);
-    if (cp > 0) parts.push(`<span class="coin-cp">${cp}cp</span>`);
-    el.innerHTML = parts.join('');
-    el.hidden = parts.length === 0;
+    el.innerHTML = [
+      `<span class="coin-pp"><i class="fas fa-coins coin-icon"></i> ${pp}pp</span>`,
+      `<span class="coin-gp"><i class="fas fa-coins coin-icon"></i> ${gp}gp</span>`,
+      `<span class="coin-sp"><i class="fas fa-coins coin-icon"></i> ${sp}sp</span>`,
+      `<span class="coin-cp"><i class="fas fa-coins coin-icon"></i> ${cp}cp</span>`,
+      `<span id="carry-compact" class="carry-compact-label"></span>`,
+    ].join('');
+    el.hidden = false;
   }
 
   function updateCarryDisplay() {
@@ -164,6 +165,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const over = !isNaN(max) && max > 0 && used > max;
     usedEl.classList.toggle('carry-over', over);
     header.classList.toggle('carry-over', over);
+    const compact = document.getElementById('carry-compact');
+    if (compact) {
+      compact.innerHTML = '';
+      const icon = document.createElement('i');
+      icon.className = 'fas fa-weight-hanging';
+      icon.style.cssText = 'font-size:10px;opacity:0.7;';
+      compact.appendChild(icon);
+      compact.appendChild(document.createTextNode(` ${used}/${state.carryCapacity || '—'}`));
+      compact.classList.toggle('carry-compact-over', over);
+    }
   }
 
   function countCarry() {
@@ -301,8 +312,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     });
     containersEl.innerHTML = '';
     state.containers.forEach(c => containersEl.appendChild(buildCard(c)));
-    updateCarryDisplay();
     updateCurrencyDisplay();
+    updateCarryDisplay();
 
     // Refresh inspector name if panel is open for an inventory slot
     if (inspectorItemKey && !inspectorItemKey.startsWith('shop-')
@@ -1194,6 +1205,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
   function hideInspector() {
+    if (document.querySelector('#insp-props .insp-select.flash-required')) return;
     inspectorEl.classList.add('inspector-collapsed');
     document.getElementById('insp-name').textContent = '';
     inspectorItemKey = null;
@@ -1238,11 +1250,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   function activateTrash() {
     _trashBtn.hidden = false;
     _shopTabBtn.classList.add('shop-tab-sell-zone');
+    [_trashBtn, _shopTabBtn].forEach(el => {
+      el.classList.remove('drag-jiggle');
+      void el.offsetWidth; // force reflow so animation restarts
+      el.classList.add('drag-jiggle');
+    });
   }
   function deactivateTrash() {
     _trashBtn.hidden = true;
-    _trashBtn.classList.remove('drag-trash-hover');
-    _shopTabBtn.classList.remove('shop-tab-sell-zone', 'shop-tab-sell-hover');
+    _trashBtn.classList.remove('drag-trash-hover', 'drag-jiggle');
+    _shopTabBtn.classList.remove('shop-tab-sell-zone', 'shop-tab-sell-hover', 'drag-jiggle');
   }
 
   function parseCostCp(costStr) {
@@ -1744,6 +1761,22 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     addItem(slotData) {
       addItemLocal(slotData);
     },
+    removeItem(slotData) {
+      for (const container of state.containers) {
+        for (let r = 0; r < container.slots.length; r++) {
+          for (let c = 0; c < 2; c++) {
+            if (container.slots[r][c] === slotData) {
+              if (slotData.containerId) {
+                state.containers = state.containers.filter(ct => ct.id !== slotData.containerId);
+              }
+              container.slots[r][c] = null;
+              render();
+              return;
+            }
+          }
+        }
+      }
+    },
     deductCost(costStr)   { deductCost(costStr); },
     deductCostCp(costCp) { deductCostCp(costCp); },
 
@@ -1844,6 +1877,14 @@ window.CharacterManager = ({ auth, database }) => {
   const shopPanel   = document.getElementById('shop-panel');
   const invScrollEl = document.getElementById('inv-scroll');
   const charHeaderEl= document.getElementById('char-header');
+
+  const nameRowEl = document.querySelector('.char-name-row');
+  const rowH = nameRowEl.offsetHeight || 44;
+  charHeaderEl.style.setProperty('--name-row-h', rowH + 'px');
+
+  invScrollEl.addEventListener('scroll', () => {
+    charHeaderEl.classList.toggle('header-scrolled', invScrollEl.scrollTop > 0);
+  }, { passive: true });
 
   let shopVisibility = {};
   let shopVisRef = null;
@@ -2163,19 +2204,31 @@ window.CharacterManager = ({ auth, database }) => {
           !isItemAvailable(item.name) ||
           row.classList.contains('shop-item-unaffordable')
         );
-        if (blocked) return;
+        const flashText = () => {
+          [nameSpan, ...Array.from(costSpan.children)].forEach(el => {
+            el.classList.remove('shop-item-flash');
+            void el.offsetWidth;
+            el.classList.add('shop-item-flash');
+            setTimeout(() => el.classList.remove('shop-item-flash'), 900);
+          });
+        };
+        if (blocked) {
+          flashText();
+          return;
+        }
         lpTimer = setTimeout(() => {
           lpTimer = null;
           lpScrolling = false;
           if (cachedSlotData._unresolved) {
+            flashText();
             inv.showShopItem(getSlotData(), `shop-${item.name}`);
             requestAnimationFrame(() => {
-              document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
+document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
                 if (sel.value !== '') return;
                 sel.classList.remove('flash-required');
                 void sel.offsetWidth;
                 sel.classList.add('flash-required');
-                setTimeout(() => sel.classList.remove('flash-required'), 700);
+                setTimeout(() => sel.classList.remove('flash-required'), 900);
               });
             });
             return;
@@ -2541,7 +2594,6 @@ window.CharacterManager = ({ auth, database }) => {
 
   // ── CHARACTER SWITCHING ──────────────────────────────────────────────────
   function switchToChar(charId, skipSave) {
-    if (shopOpen) closeShop();
     inv.cancelDrag();
     if (!skipSave && currentCharId) saveChar(currentCharId, true);
     dirty = false;
@@ -2550,6 +2602,7 @@ window.CharacterManager = ({ auth, database }) => {
     try { inv.loadState(allChars[charId].state); } catch (e) { console.warn('loadState error:', e); }
     suppressSave = false;
     renderTabs();
+    if (shopOpen) { updateShopWallet(); buildShop(); }
   }
 
   function createChar() {
@@ -2663,8 +2716,20 @@ window.CharacterManager = ({ auth, database }) => {
     if (cp > 0) coinsEl.innerHTML += `<span class="coin-cp">${cp}cp</span>`;
   }
 
-  function handleShopPurchase(slotData) {
+  function confirmSpendingOtherWallet() {
+    const currentChar = allChars[currentCharId];
+    if (!currentChar || !currentUser || currentChar.ownerUid === currentUser.uid) return true;
+    const charName  = currentChar.state?.charName || 'this character';
+    const ownerName = currentChar.ownerName || 'another player';
+    return confirm(`This will spend coins from ${charName} (owned by ${ownerName}). Continue?`);
+  }
+
+  function handleShopPurchase(slotData, skipWalletConfirm = false) {
     if (slotData._unresolved) return;
+    if (!skipWalletConfirm && !confirmSpendingOtherWallet()) {
+      inv.removeItem(slotData);
+      return;
+    }
     if (slotData._shopCostCp != null) {
       inv.deductCostCp(slotData._shopCostCp);
     } else {
@@ -2707,6 +2772,9 @@ window.CharacterManager = ({ auth, database }) => {
       return;
     }
 
+    // For shop items dropping onto another character's tab, confirm wallet spend first
+    if (item._shopItem && !item._unresolved && !confirmSpendingOtherWallet()) return;
+
     const targetState = JSON.parse(JSON.stringify(allChars[targetCharId].state));
     const equipped    = targetState.containers.find(c => c.id === 'equipped');
     if (!equipped) return;
@@ -2740,6 +2808,8 @@ window.CharacterManager = ({ auth, database }) => {
       state: JSON.stringify(targetState),
     });
 
+    if (item._shopItem && !item._unresolved) handleShopPurchase(cleanItem, true);
+
     // Flash the target tab green
     const tabEl = document.querySelector(`[data-char-id="${targetCharId}"]`);
     if (tabEl) {
@@ -2772,13 +2842,7 @@ window.CharacterManager = ({ auth, database }) => {
         nameSpan.textContent = char.state.charName || 'Unnamed';
         infoDiv.appendChild(nameSpan);
 
-        // Owner label — shown when assigned to someone else
-        if (!isOwn && char.ownerName) {
-          const ownerSpan = document.createElement('span');
-          ownerSpan.className   = 'char-tab-owner';
-          ownerSpan.textContent = char.ownerName;
-          infoDiv.appendChild(ownerSpan);
-        }
+
 
         tab.appendChild(infoDiv);
 
@@ -2800,8 +2864,11 @@ window.CharacterManager = ({ auth, database }) => {
         }
 
         tab.addEventListener('click', () => {
-          if (shopOpen) closeShop();
-          if (char.id !== currentCharId) switchToChar(char.id, false);
+          if (char.id === currentCharId) {
+            if (shopOpen) closeShop();
+          } else {
+            switchToChar(char.id, false);
+          }
         });
 
         tabsEl.appendChild(tab);
