@@ -178,20 +178,37 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
   function countCarry() {
+    // Build the set of containers rooted in 'equipped' (direct and nested)
+    const exempt = new Set(['equipped']);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const c of state.containers) {
+        if (!exempt.has(c.id) && c.linkedTo && exempt.has(c.linkedTo.containerId)) {
+          exempt.add(c.id);
+          changed = true;
+        }
+      }
+    }
+
     let used = 0;
     for (const container of state.containers) {
-      if (container.id === 'equipped') continue;
+      if (exempt.has(container.id)) continue;
       const libC = container.linkedTo ? getLibraryItem(container.name) : null;
       if (libC && libC.weightlessContents) continue;
+      if (libC && libC.fixedCarryWeight != null) continue;
       for (const row of container.slots)
         for (const slot of row)
           if (slot && !isNoCarry(slot)) used += itemFillCost(slot);
     }
+
     return parseFloat(used.toFixed(2));
   }
 
   function itemFillCost(slotData) {
     if (!slotData) return 0;
+    const lib = getLibraryItem(slotData.name);
+    if (lib && lib.fixedCarryWeight != null) return lib.fixedCarryWeight;
     const v = slotData.variables;
     if (v && ('pp' in v || 'gp' in v || 'sp' in v || 'cp' in v)) {
       const total = (v.pp?.value || 0) + (v.gp?.value || 0)
@@ -199,7 +216,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       return Math.ceil(total / 50) * 0.25;
     }
     const id = slotData.bulk ? slotData.bulk.id
-             : (getLibraryItem(slotData.name) || { bulk: Bulk.STOCK }).bulk.id;
+             : (lib || { bulk: Bulk.STOCK }).bulk.id;
     if (id === 'packable') return (slotData.variables?.qty?.value || 1) * 0.25;
     if (id === 'bulky' || id === 'verybulky') return 2;
     return 1;
