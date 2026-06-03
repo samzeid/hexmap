@@ -291,6 +291,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
   function render() {
+    // Clear any accidentally persisted maxRows from strapped (it has no capacity cap)
+    const _strapped = state.containers.find(c => c.id === 'strapped');
+    if (_strapped) delete _strapped.maxRows;
     growEquipped();
     shrinkEquipped();
     state.containers.forEach(c => {
@@ -343,12 +346,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const _over = _fillUsed > _fillCap + 0.001;
       _capHtml = `<span class="container-capacity${_over ? ' container-capacity-over' : ''}">${parseFloat(_fillUsed.toFixed(2))}/${_fillCap}</span>`;
     } else if (container.id === 'strapped') {
-      const _cap = parseFloat(state.carryCapacity);
-      if (!isNaN(_cap) && _cap > 0) {
-        const _used = containerFillUsed(container);
-        const _over = _used > _cap;
-        _capHtml = `<span class="container-capacity${_over ? ' container-capacity-over' : ''}">${parseFloat(_used.toFixed(2))}/${_cap}</span>`;
-      }
+      const _fillUsed = containerFillUsed(container);
+      const _fillCap  = container.slots.length * 2;
+      const _over = _fillUsed > _fillCap + 0.001;
+      _capHtml = `<span class="container-capacity${_over ? ' container-capacity-over' : ''}">${parseFloat(_fillUsed.toFixed(2))}/${_fillCap}</span>`;
     }
     toggle.innerHTML = `<span>${container.name}${_capHtml}</span><span class="inv-chevron">${container.collapsed ? '▶' : '▼'}</span>`;
     toggle.addEventListener('click', () => { container.collapsed = !container.collapsed; render(); });
