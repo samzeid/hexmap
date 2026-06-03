@@ -35,9 +35,27 @@
       <button id="role-btn" title="Toggle DM / Player role" hidden></button>
     </div>
 
+    <!-- Character header — always visible above both shop and inventory -->
+    <header id="char-header">
+      <div class="char-field grow">
+        <div class="char-name-row">
+          <input type="text" id="char-name" placeholder="Character name" autocomplete="off" />
+          <div class="carry-row">
+            <span id="carry-used">0</span>
+            <span class="carry-slash">/</span>
+            <input type="text" id="char-carry" placeholder="—" autocomplete="off" />
+          </div>
+          <button id="char-assign-btn" hidden title="Assign to player"><i class="fas fa-user-pen"></i></button>
+        </div>
+        <div class="char-coin-row">
+          <button id="char-fields-edit-btn" title="Edit name &amp; carry capacity"><i class="fas fa-user-pen"></i></button>
+          <div id="coin-counter" hidden></div>
+        </div>
+      </div>
+    </header>
+
     <!-- Shop panel (shown instead of inv-scroll when shop tab is active) -->
     <div id="shop-panel" hidden>
-      <div id="shop-wallet-bar"></div>
       <div id="shop-filter-bar">
         <input id="shop-search" type="text" placeholder="Search items…" autocomplete="off" spellcheck="false" />
         <select id="shop-category"><option value="">All categories</option></select>
@@ -47,24 +65,6 @@
 
     <!-- Scrollable inventory area -->
     <div id="inv-scroll">
-
-      <header id="char-header">
-        <div class="char-field grow">
-          <div class="char-name-row">
-            <input type="text" id="char-name" placeholder="Character name" autocomplete="off" />
-            <div class="carry-row">
-              <span id="carry-used">0</span>
-              <span class="carry-slash">/</span>
-              <input type="text" id="char-carry" placeholder="—" autocomplete="off" />
-            </div>
-            <button id="char-assign-btn" hidden title="Assign to player"><i class="fas fa-user-pen"></i></button>
-          </div>
-          <div class="char-coin-row">
-            <button id="char-fields-edit-btn" title="Edit name &amp; carry capacity"><i class="fas fa-user-pen"></i></button>
-            <div id="coin-counter" hidden></div>
-          </div>
-        </div>
-      </header>
 
       <main>
         <div id="containers"></div>

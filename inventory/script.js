@@ -2373,18 +2373,6 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
   document.getElementById('shop-category').addEventListener('change', filterShop);
 
   function updateShopWallet() {
-    const bar = document.getElementById('shop-wallet-bar');
-    if (!bar) return;
-    // Use live inventory state — allChars may be stale during handleInventoryChange
-    const coins = getCharCoins(inv.getState());
-    const parts = [];
-    if (coins.pp > 0) parts.push(`<span class="coin-pp">${coins.pp}pp</span>`);
-    if (coins.gp > 0) parts.push(`<span class="coin-gp">${coins.gp}gp</span>`);
-    if (coins.sp > 0) parts.push(`<span class="coin-sp">${coins.sp}sp</span>`);
-    if (coins.cp > 0) parts.push(`<span class="coin-cp">${coins.cp}cp</span>`);
-    bar.innerHTML = parts.length
-      ? `<i class="fas fa-coins"></i>${parts.join('')}`
-      : `<span class="shop-wallet-empty">No coins</span>`;
     updateShopAffordability();
   }
 
@@ -2401,9 +2389,8 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
   function openShop() {
     shopOpen = true;
     shopTabBtn.classList.add('active');
-    invScrollEl.hidden  = true;
-    charHeaderEl.hidden = true;
-    shopPanel.hidden    = false;
+    invScrollEl.hidden = true;
+    shopPanel.hidden   = false;
     document.getElementById('shop-search').value = '';
     document.getElementById('shop-category').value = '';
     updateShopWallet();
@@ -2413,9 +2400,8 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
   function closeShop() {
     shopOpen = false;
     shopTabBtn.classList.remove('active');
-    shopPanel.hidden    = true;
-    invScrollEl.hidden  = false;
-    charHeaderEl.hidden = false;
+    shopPanel.hidden   = true;
+    invScrollEl.hidden = false;
   }
 
   shopTabBtn.addEventListener('click', () => {

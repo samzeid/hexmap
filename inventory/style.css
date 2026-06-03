@@ -196,17 +196,18 @@ input, textarea, select { font-size: max(16px, 1em); }
 .char-tab-coins .coin-sp { color: rgba(200, 200, 215, 0.6); }
 .char-tab-coins .coin-cp { color: rgba(205, 135, 65,  0.65); }
 
-/* Own character tab — subtle teal accent */
+/* Own character tab — green accent */
 .char-tab.tab-mine {
-  border-color: rgba(80, 200, 180, 0.25);
+  border-color: rgba(80, 200, 120, 0.3);
+  color: rgba(120, 220, 150, 0.75);
 }
 .char-tab.tab-mine.active {
-  background: rgba(80, 200, 180, 0.1);
-  border-color: rgba(80, 200, 180, 0.5);
-  color: rgba(140, 230, 215, 1);
+  background: rgba(80, 200, 120, 0.08);
+  border-color: rgba(80, 200, 120, 0.3);
+  color: rgba(120, 220, 150, 0.95);
 }
 .char-tab.tab-mine:not(.active):hover {
-  background: rgba(80, 200, 180, 0.07);
+  background: rgba(80, 200, 120, 0.06);
 }
 
 /* Other players' tabs — muted purple accent */
@@ -283,23 +284,7 @@ input, textarea, select { font-size: max(16px, 1em); }
   flex-direction: column;
 }
 
-#shop-wallet-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--card-border);
-  flex-shrink: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--muted);
-}
-#shop-wallet-bar i { font-size: 13px; opacity: 0.5; }
-#shop-wallet-bar .coin-pp { color: rgba(190,145,255,0.9); }
-#shop-wallet-bar .coin-gp { color: rgba(255,205,60,0.9);  }
-#shop-wallet-bar .coin-sp { color: rgba(200,200,215,0.85); }
-#shop-wallet-bar .coin-cp { color: rgba(205,135,65,0.85);  }
-.shop-wallet-empty { font-size: 13px; font-style: italic; opacity: 0.45; }
+
 
 #shop-filter-bar {
   padding: 10px 12px;
@@ -646,9 +631,7 @@ input, textarea, select { font-size: max(16px, 1em); }
   padding: 8px 16px;
   background: rgba(255,255,255,0.03);
   border-bottom: 1px solid var(--card-border);
-  position: sticky;
-  top: 0;         /* sticks to top of #inv-scroll scroll container */
-  z-index: 10;
+  flex-shrink: 0;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
