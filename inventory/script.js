@@ -64,6 +64,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (ev && ev.control === 'select' && ev.value) name = name.replace('Elemental', ev.value);
     const sv = slotData.variables && slotData.variables.spell;
     if (sv && sv.control === 'select' && sv.value) name = name.replace('Spell Storing', sv.value);
+    const crv = slotData.variables && slotData.variables.creature;
+    if (crv && crv.control === 'select' && crv.value) name = name.replace('Creature', crv.value);
     return name;
   }
 
@@ -1271,6 +1273,27 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       ctrlTarget.appendChild(sel);
     }
 
+    const creatureMeta = slotData.variables && slotData.variables.creature;
+    if (creatureMeta && creatureMeta.control === 'select') {
+      const sel = document.createElement('select');
+      sel.className = 'insp-select';
+      (creatureMeta.options || []).forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt; o.textContent = opt;
+        if (opt === creatureMeta.value) o.selected = true;
+        sel.appendChild(o);
+      });
+      _addPlaceholder(sel, 'Creature', creatureMeta.value);
+      sel.addEventListener('change', () => {
+        slotData.variables.creature.value = sel.value;
+        _updateUnresolved();
+        if (!container) refreshShopRow();
+        render();
+        showInspector(slotData, container, r, c);
+      });
+      ctrlTarget.appendChild(sel);
+    }
+
     const spellMeta = slotData.variables && slotData.variables.spell;
     if (spellMeta && spellMeta.control === 'select') {
       const sel = document.createElement('select');
@@ -1326,7 +1349,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     for (const [key, meta] of Object.entries(slotData.variables || {})) {
       // Numeric → shown inline; weapon/armor select → shown in props row
       if (meta.control === 'plusminus' || meta.control === 'both') continue;
-      if ((key === 'weapon' || key === 'armor' || key === 'element' || key === 'spell') && meta.control === 'select') continue;
+      if ((key === 'weapon' || key === 'armor' || key === 'element' || key === 'spell' || key === 'creature') && meta.control === 'select') continue;
 
       const div = document.createElement('div');
       div.className = 'insp-var';
@@ -2503,7 +2526,8 @@ window.CharacterManager = ({ auth, database }) => {
                        : item.variables?.armor?.control   === 'select' ? item.variables.armor
                        : null;
       const elementVar = item.variables?.element?.control === 'select' ? item.variables.element : null;
-      const spellVar   = item.variables?.spell?.control   === 'select' ? item.variables.spell   : null;
+      const spellVar    = item.variables?.spell?.control    === 'select' ? item.variables.spell    : null;
+      const creatureVar = item.variables?.creature?.control === 'select' ? item.variables.creature : null;
 
       // Persistent slotData for this row — mutated by the inspector, read by getSlotData()
       // Type/element start as '' (unselected placeholder) so user must pick before purchasing
@@ -2513,9 +2537,10 @@ window.CharacterManager = ({ auth, database }) => {
       if (typeVar    && cachedSlotData.variables?.weapon?.control  === 'select') cachedSlotData.variables.weapon.value  = '';
       if (typeVar    && cachedSlotData.variables?.armor?.control   === 'select') cachedSlotData.variables.armor.value   = '';
       if (elementVar && cachedSlotData.variables?.element?.control === 'select') cachedSlotData.variables.element.value = '';
-      if (spellVar   && cachedSlotData.variables?.spell?.control   === 'select') cachedSlotData.variables.spell.value   = '';
+      if (spellVar    && cachedSlotData.variables?.spell?.control    === 'select') cachedSlotData.variables.spell.value    = '';
+      if (creatureVar && cachedSlotData.variables?.creature?.control === 'select') cachedSlotData.variables.creature.value = '';
       // Explicit unresolved flag — more reliable than checking '' values at drag time
-      if (typeVar || elementVar || spellVar) cachedSlotData._unresolved = true;
+      if (typeVar || elementVar || spellVar || creatureVar) cachedSlotData._unresolved = true;
 
       const getTypeCostCp = () => {
         const typeName = cachedSlotData.variables?.weapon?.value
@@ -2548,6 +2573,8 @@ window.CharacterManager = ({ auth, database }) => {
         if (ev?.control === 'select' && ev.value) name = name.replace('Elemental', ev.value);
         const sv = cachedSlotData.variables?.spell;
         if (sv?.control === 'select' && sv.value) name = name.replace('Spell Storing', sv.value);
+        const crv = cachedSlotData.variables?.creature;
+        if (crv?.control === 'select' && crv.value) name = name.replace('Creature', crv.value);
         const silverPfx = cachedSlotData.silvered ? 'Silvered ' : '';
         const metal = (cachedSlotData.material === 'mithral' || cachedSlotData.material === 'adamantine')
           ? cachedSlotData.material : null;

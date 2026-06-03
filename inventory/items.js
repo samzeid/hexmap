@@ -40,9 +40,7 @@ window.ELEMENT_OPTIONS = [
 ];
 
 window.CREATURE_OPTIONS = [
-  "Aberration","Beast","Celestial","Construct","Dragon",
-  "Elemental","Fey","Fiend","Giant","Humanoid",
-  "Monstrosity","Ooze","Plant","Undead",
+  "Elemental","Monstrosity","Aberration","Fey","Fiend","Undead",
 ];
 
 window.AMMO_OPTIONS = [
