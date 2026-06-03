@@ -1191,6 +1191,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         _updateUnresolved();
         if (!container) refreshShopRow();
         render();
+        if (container) showInspector(slotData, container, r, c);
       });
       ctrlTarget.appendChild(sel);
     }
@@ -1213,6 +1214,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         _updateUnresolved();
         if (!container) refreshShopRow();
         render();
+        if (container) showInspector(slotData, container, r, c);
       });
       ctrlTarget.appendChild(sel);
     }
@@ -1470,7 +1472,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   function hideInspector() {
     if (document.querySelector('#insp-props .insp-select.flash-required')) return;
     inspectorEl.classList.add('inspector-collapsed');
-    document.getElementById('insp-name').textContent = '';
     inspectorItemKey = null;
     _customEditKey = null; _customEditOpen = false;
   }
@@ -1599,23 +1600,26 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   function addItemLocal(slotData) {
     const targets = state.containers.filter(c => c.id === 'equipped' || c.id === 'strapped');
     for (const container of targets) {
-      let placed = false;
       for (let r = 0; r < container.slots.length; r++) {
         if (!container.slots[r][0]) {
-          placeSlotData(slotData, container, r, 0); placed = true; break;
+          placeSlotData(slotData, container, r, 0);
+          return { container, r, c: 0 };
         }
         if (!container.slots[r][1]) {
-          placeSlotData(slotData, container, r, 1); placed = true; break;
+          placeSlotData(slotData, container, r, 1);
+          return { container, r, c: 1 };
         }
       }
-      if (placed) return;
     }
     const strapped = state.containers.find(c => c.id === 'strapped');
     if (strapped) {
       strapped.slots.push([null, null]);
       strapped.rows++;
-      placeSlotData(slotData, strapped, strapped.slots.length - 1, 0);
+      const r = strapped.slots.length - 1;
+      placeSlotData(slotData, strapped, r, 0);
+      return { container: strapped, r, c: 0 };
     }
+    return null;
   }
 
   // removeFromSource: called only when a drop is committed, to extract the item from its origin.
@@ -1729,8 +1733,15 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         purseVars.gp.value = coins.gp;
         purseVars.sp.value = coins.sp;
         purseVars.cp.value = coins.cp;
-        addItemLocal({ name: 'Coin Purse', variables: purseVars });
+        const placed = addItemLocal({ name: 'Coin Purse', variables: purseVars });
         if (onSound) onSound('coin');
+        if (placed) {
+          const purseData = placed.container.slots[placed.r][placed.c];
+          inspectorItemKey = `${placed.container.id}-${placed.r}-${placed.c}`;
+          showInspector(purseData, placed.container, placed.r, placed.c);
+        } else {
+          hideInspector();
+        }
       } else {
         render();
       }
