@@ -1486,7 +1486,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           const freeSlot = findEmptySlot(linked, -1);
           if (freeSlot && itemFillCost(slotData) <= containerFillAvailable(linked) + 0.001) {
             removeFromSource();
-            if (placeSlotData(slotData, linked, freeSlot.r, freeSlot.c) && isShopDrag && onShopPurchase) onShopPurchase(slotData);
+            if (placeSlotData(slotData, linked, freeSlot.r, freeSlot.c) && !slotData._unresolved && isShopDrag && onShopPurchase) onShopPurchase(slotData);
             return;
           }
         }
@@ -1509,7 +1509,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
 
       const _placed = placeSlotData(slotData, targetContainer, tR, tC);
-      if (_placed && isShopDrag && onShopPurchase) onShopPurchase(slotData);
+      if (_placed && !slotData._unresolved && isShopDrag && onShopPurchase) onShopPurchase(slotData);
       const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
       if (srcCenter) spawnFlightClone(slotData.name || '', srcCenter, actualDest);
     } else {
@@ -2645,6 +2645,7 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   function handleShopPurchase(slotData) {
+    if (slotData._unresolved) return;
     if (slotData._shopCostCp != null) {
       inv.deductCostCp(slotData._shopCostCp);
     } else {
@@ -2676,7 +2677,7 @@ window.CharacterManager = ({ auth, database }) => {
     // Drop onto the currently-open character's own tab
     if (targetCharId === currentCharId) {
       inv.addItem(cleanItem);
-      if (item._shopItem) {
+      if (item._shopItem && !item._unresolved) {
         handleShopPurchase(cleanItem);
         const tabEl = document.querySelector(`[data-char-id="${currentCharId}"]`);
         if (tabEl) {
