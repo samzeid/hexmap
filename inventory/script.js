@@ -1878,43 +1878,14 @@ window.CharacterManager = ({ auth, database }) => {
   const invScrollEl = document.getElementById('inv-scroll');
   const charHeaderEl= document.getElementById('char-header');
 
-  const nameRowEl = document.querySelector('.char-name-row');
-  const rowH = nameRowEl.offsetHeight || 44;
-  nameRowEl.style.height = rowH + 'px'; // fix explicit height so animation has a known start
-
-  let _hRaf = null;
-  let _hCollapsed = false;
-
-  function runHeaderCollapse(toCollapsed) {
-    if (_hRaf) cancelAnimationFrame(_hRaf);
-    const startH     = parseFloat(nameRowEl.style.height) || (toCollapsed ? rowH : 0);
-    const endH       = toCollapsed ? 0 : rowH;
-    if (Math.abs(startH - endH) < 0.5) return;
-    const scrollBase = invScrollEl.scrollTop;
-    const t0         = performance.now();
-    const dur        = 200;
-    const ease       = t => t < .5 ? 2*t*t : -1 + (4 - 2*t) * t;
-    charHeaderEl.classList.toggle('header-scrolled', toCollapsed);
-    function frame(now) {
-      const p = Math.min(1, (now - t0) / dur);
-      const h = startH + (endH - startH) * ease(p);
-      nameRowEl.style.height  = h + 'px';
-      nameRowEl.style.opacity = String(h / rowH);
-      // Compensate scrollTop so content stays visually stable while header collapses
-      const shrunk = startH - h;
-      if (shrunk > 0) invScrollEl.scrollTop = scrollBase + shrunk;
-      if (p < 1) { _hRaf = requestAnimationFrame(frame); return; }
-      _hRaf = null;
-      _hCollapsed = toCollapsed;
-    }
-    _hRaf = requestAnimationFrame(frame);
+  function setFieldsOpen(open) {
+    charHeaderEl.classList.toggle('fields-collapsed', !open);
   }
 
-  invScrollEl.addEventListener('scroll', () => {
-    if (_hRaf) return; // animation owns scrollTop right now
-    const shouldCollapse = invScrollEl.scrollTop > 0;
-    if (shouldCollapse !== _hCollapsed) runHeaderCollapse(shouldCollapse);
-  }, { passive: true });
+  document.getElementById('char-fields-edit-btn').addEventListener('click', () => {
+    setFieldsOpen(charHeaderEl.classList.contains('fields-collapsed'));
+  });
+
 
   let shopVisibility = {};
   let shopVisRef = null;
@@ -2563,6 +2534,8 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
           suppressSave = true;
           try { inv.loadState(allChars[currentCharId].state); } catch (e) { console.warn('loadState error:', e); }
           suppressSave = false;
+          const _s = inv.getState();
+          setFieldsOpen(!_s.charName || !_s.carryCapacity);
         }
       }
 
@@ -2631,6 +2604,8 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
     suppressSave = true;
     try { inv.loadState(allChars[charId].state); } catch (e) { console.warn('loadState error:', e); }
     suppressSave = false;
+    const s = inv.getState();
+    setFieldsOpen(!s.charName || !s.carryCapacity);
     renderTabs();
     if (shopOpen) { updateShopWallet(); buildShop(); }
   }

@@ -674,9 +674,14 @@ input, textarea, select { font-size: max(16px, 1em); }
   align-items: center;
   gap: 6px;
   overflow: hidden;
+  max-height: 60px;
+  opacity: 1;
+  transition: max-height 0.2s ease, opacity 0.15s ease;
 }
 
-#char-header.header-scrolled .char-name-row {
+#char-header.fields-collapsed .char-name-row {
+  max-height: 0;
+  opacity: 0;
   pointer-events: none;
 }
 
@@ -685,20 +690,11 @@ input, textarea, select { font-size: max(16px, 1em); }
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  max-width: 0;
-  overflow: hidden;
+  margin-left: 6px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
-  opacity: 0;
-  transition: opacity 0.22s ease;
-}
-
-#char-header.header-scrolled .carry-compact-label {
-  max-width: 120px;
-  margin-left: 6px;
-  opacity: 1;
 }
 
 .carry-compact-label.carry-compact-over { color: #ff6060; }
@@ -1006,6 +1002,32 @@ main {
   border-color: rgba(80, 210, 130, 0.08);
 }
 
+.char-coin-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+#char-fields-edit-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s, background 0.15s;
+}
+#char-fields-edit-btn:hover  { color: var(--text); }
+#char-fields-edit-btn:active { background: rgba(255,255,255,0.08); }
+
 #coin-counter {
   display: flex;
   gap: 6px;
@@ -1015,7 +1037,6 @@ main {
   font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
-  padding: 8px 0 0;
 }
 .coin-icon {
   font-size: 11px;
