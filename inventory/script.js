@@ -62,6 +62,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (wv && wv.control === 'select' && wv.value) name = name.replace('Weapon', wv.value);
     if (av && av.control === 'select' && av.value) name = name.replace('Armor', av.value);
     if (ev && ev.control === 'select' && ev.value) name = name.replace('Elemental', ev.value);
+    const sv = slotData.variables && slotData.variables.spell;
+    if (sv && sv.control === 'select' && sv.value) name = name.replace('Spell Storing', sv.value);
     return name;
   }
 
@@ -959,7 +961,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       inlineEl.appendChild(wrap);
     }
     const refreshCostDisplay = () => {
-      if (slotData.hasUses !== 'coins') return;
+      const _hasUses = slotData.hasUses ?? lib?.hasUses;
+      if (_hasUses !== 'coins') return;
       const costEl = document.getElementById('insp-cost');
       if (!costEl || costEl.hidden) return;
       const cv = slotData.variables || {};
@@ -1044,11 +1047,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const cc = slotData.costCoins;
     const ccTotalCp = cc ? (cc.pp||0)*1000 + (cc.gp||0)*100 + (cc.sp||0)*10 + (cc.cp||0) : 0;
     const typeCostCp = getSlotTypeCostCp(slotData);
+    const materialCostCp = ((slotData.silvered || slotData.material === 'silvered') ? 10000 : 0)
+      + ((slotData.material === 'mithral' || slotData.material === 'adamantine') ? 50000 : 0);
     const coinUsesMult = getSlotCoinUsesMultiplier(slotData);
     let displayCostStr;
-    if (typeCostCp > 0 || coinUsesMult > 1) {
+    if (typeCostCp > 0 || materialCostCp > 0 || coinUsesMult > 1) {
       const baseCp = ccTotalCp > 0 ? ccTotalCp : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
-      const totalCp = (baseCp + typeCostCp) * coinUsesMult;
+      const totalCp = (baseCp + typeCostCp + materialCostCp) * coinUsesMult;
       const parts = [];
       let rem = totalCp;
       const gp = Math.floor(rem / 100); rem %= 100;
@@ -1266,6 +1271,27 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       ctrlTarget.appendChild(sel);
     }
 
+    const spellMeta = slotData.variables && slotData.variables.spell;
+    if (spellMeta && spellMeta.control === 'select') {
+      const sel = document.createElement('select');
+      sel.className = 'insp-select';
+      (spellMeta.options || []).forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt; o.textContent = opt;
+        if (opt === spellMeta.value) o.selected = true;
+        sel.appendChild(o);
+      });
+      _addPlaceholder(sel, 'Spell', spellMeta.value);
+      sel.addEventListener('change', () => {
+        slotData.variables.spell.value = sel.value;
+        _updateUnresolved();
+        if (!container) refreshShopRow();
+        render();
+        showInspector(slotData, container, r, c);
+      });
+      ctrlTarget.appendChild(sel);
+    }
+
     propsEl.hidden = propsEl.children.length === 0;
 
     // Container rows input (only when container chip is active)
@@ -1300,7 +1326,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     for (const [key, meta] of Object.entries(slotData.variables || {})) {
       // Numeric → shown inline; weapon/armor select → shown in props row
       if (meta.control === 'plusminus' || meta.control === 'both') continue;
-      if ((key === 'weapon' || key === 'armor' || key === 'element') && meta.control === 'select') continue;
+      if ((key === 'weapon' || key === 'armor' || key === 'element' || key === 'spell') && meta.control === 'select') continue;
 
       const div = document.createElement('div');
       div.className = 'insp-var';
@@ -1579,13 +1605,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   function getSlotTypeCostCp(slotData) {
     const typeName = slotData.variables?.weapon?.value || slotData.variables?.armor?.value;
-    if (!typeName) return 0;
-    const lib = getLibraryItem(typeName);
-    return lib?.cost ? parseCostCp(lib.cost) : 0;
+    if (typeName) {
+      const lib = getLibraryItem(typeName);
+      return lib?.cost ? parseCostCp(lib.cost) : 0;
+    }
+    const spellName = slotData.variables?.spell?.value;
+    if (spellName) return window.SPELL_STORING_COSTS?.[spellName] || 0;
+    return 0;
   }
 
   function getSlotCoinUsesMultiplier(slotData) {
-    if (slotData.hasUses !== 'coins') return 1;
+    const hasUses = slotData.hasUses ?? getLibraryItem(slotData.name)?.hasUses;
+    if (hasUses !== 'coins') return 1;
     const v = slotData.variables || {};
     return Math.max(1, v.uses?.value ?? v.count?.value ?? 1);
   }
@@ -1763,10 +1794,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const isTreasure = !!(lib && lib.treasure) || !!slotData.treasure;
       const sc = slotData.costCoins;
       const qty = slotData.variables?.qty?.value || 1;
+      const _matCp = ((slotData.silvered || slotData.material === 'silvered') ? 10000 : 0)
+        + ((slotData.material === 'mithral' || slotData.material === 'adamantine') ? 50000 : 0);
       const unitCp = ((sc
         ? (sc.pp||0)*1000 + (sc.gp||0)*100 + (sc.sp||0)*10 + (sc.cp||0)
         : (lib && lib.cost ? parseCostCp(lib.cost) : 0))
-        + getSlotTypeCostCp(slotData))
+        + getSlotTypeCostCp(slotData) + _matCp)
         * getSlotCoinUsesMultiplier(slotData);
       const fullCp = unitCp * qty;
       const halfCp = fullCp > 0 ? (isTreasure ? fullCp : Math.floor(fullCp / 2)) : 0;
@@ -2470,6 +2503,7 @@ window.CharacterManager = ({ auth, database }) => {
                        : item.variables?.armor?.control   === 'select' ? item.variables.armor
                        : null;
       const elementVar = item.variables?.element?.control === 'select' ? item.variables.element : null;
+      const spellVar   = item.variables?.spell?.control   === 'select' ? item.variables.spell   : null;
 
       // Persistent slotData for this row — mutated by the inspector, read by getSlotData()
       // Type/element start as '' (unselected placeholder) so user must pick before purchasing
@@ -2479,21 +2513,30 @@ window.CharacterManager = ({ auth, database }) => {
       if (typeVar    && cachedSlotData.variables?.weapon?.control  === 'select') cachedSlotData.variables.weapon.value  = '';
       if (typeVar    && cachedSlotData.variables?.armor?.control   === 'select') cachedSlotData.variables.armor.value   = '';
       if (elementVar && cachedSlotData.variables?.element?.control === 'select') cachedSlotData.variables.element.value = '';
+      if (spellVar   && cachedSlotData.variables?.spell?.control   === 'select') cachedSlotData.variables.spell.value   = '';
       // Explicit unresolved flag — more reliable than checking '' values at drag time
-      if (typeVar || elementVar) cachedSlotData._unresolved = true;
+      if (typeVar || elementVar || spellVar) cachedSlotData._unresolved = true;
 
       const getTypeCostCp = () => {
-        const name = cachedSlotData.variables?.weapon?.value
-                  ?? cachedSlotData.variables?.armor?.value;
-        if (!name) return 0;
-        const lib = ITEM_LIBRARY.find(i => i.name === name);
-        return lib?.cost ? shopCostToCp(lib.cost) : 0;
+        const typeName = cachedSlotData.variables?.weapon?.value
+                      ?? cachedSlotData.variables?.armor?.value;
+        if (typeName) {
+          const lib = ITEM_LIBRARY.find(i => i.name === typeName);
+          return lib?.cost ? shopCostToCp(lib.cost) : 0;
+        }
+        const spellName = cachedSlotData.variables?.spell?.value;
+        if (spellName) return window.SPELL_STORING_COSTS?.[spellName] || 0;
+        return 0;
       };
 
-      const getTotalCostCp = () =>
-        baseCostCp + getTypeCostCp()
-        + (cachedSlotData.silvered  ? 10000 : 0)
-        + (cachedSlotData.material  ? 50000 : 0);
+      const getTotalCostCp = () => {
+        const base = baseCostCp + getTypeCostCp()
+          + (cachedSlotData.silvered ? 10000 : 0)
+          + (cachedSlotData.material ? 50000 : 0);
+        if (item.hasUses !== 'coins') return base;
+        const cv = cachedSlotData.variables || {};
+        return base * Math.max(1, cv.uses?.value ?? cv.count?.value ?? 1);
+      };
 
       const getDisplayName = () => {
         let name = item.name;
@@ -2503,6 +2546,8 @@ window.CharacterManager = ({ auth, database }) => {
         if (wv?.control === 'select' && wv.value) name = name.replace('Weapon', wv.value);
         if (av?.control === 'select' && av.value) name = name.replace('Armor',  av.value);
         if (ev?.control === 'select' && ev.value) name = name.replace('Elemental', ev.value);
+        const sv = cachedSlotData.variables?.spell;
+        if (sv?.control === 'select' && sv.value) name = name.replace('Spell Storing', sv.value);
         const silverPfx = cachedSlotData.silvered ? 'Silvered ' : '';
         const metal = (cachedSlotData.material === 'mithral' || cachedSlotData.material === 'adamantine')
           ? cachedSlotData.material : null;
@@ -2716,8 +2761,9 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
     }
     if (selectedElement && vars.element?.control === 'select') vars.element.value = selectedElement;
     const slotData = { name: libItem.name, variables: vars, _shopItem: true };
-    if (silvered)     slotData.silvered    = true;
-    if (material)     slotData.material    = material;
+    if (libItem.hasUses)  slotData.hasUses   = libItem.hasUses;
+    if (silvered)         slotData.silvered  = true;
+    if (material)         slotData.material  = material;
     if (totalCostCp != null) slotData._shopCostCp = totalCostCp;
     return slotData;
   }
