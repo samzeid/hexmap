@@ -596,17 +596,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         infoIcon.innerHTML = _infoIconHtml;
         label.appendChild(infoIcon);
 
-        // Eye icon (left:18px, right of info) — visual open/closed indicator only
-        const eyeIcon = document.createElement('span');
-        eyeIcon.className = 'slot-eye-inline';
-        eyeIcon.style.left = '18px';
-        eyeIcon.innerHTML = containerIsOpen
-          ? '<i class="fas fa-eye"></i>'
-          : '<i class="fas fa-eye-slash"></i>';
-        label.appendChild(eyeIcon);
-
-        // Label (name + icons) opens inspector; stop propagation so wrap toggle doesn't fire
-        label.style.paddingLeft = '34px';
+        // Label (name + info icon) opens inspector; stop propagation so wrap toggle doesn't fire
+        label.style.paddingLeft = '20px';
         label.style.cursor = 'pointer';
         label.style.pointerEvents = 'auto';
         label.addEventListener('click', e => {
@@ -638,22 +629,22 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
       wrap.appendChild(label);
 
-      // Corner tags (container left, bulk right)
+      // Corner tags (bulk left, container right)
       const _isContainerSlot = !!(slotData.isContainer || (getLibraryItem(slotData.name) || {}).containerRows);
       const _showBulkTag = _bulkId === 'packable' || _bulkId === 'bulky' || _bulkId === 'verybulky';
       if (_isContainerSlot || _showBulkTag) {
         const tagsWrap = document.createElement('div');
         tagsWrap.className = 'slot-tags';
-        if (_isContainerSlot) {
-          const t = document.createElement('span');
-          t.className = 'slot-bulk-tag slot-bulk-tag--container';
-          t.textContent = 'Container';
-          tagsWrap.appendChild(t);
-        }
         if (_showBulkTag) {
           const t = document.createElement('span');
           t.className = `slot-bulk-tag slot-bulk-tag--${_bulkId}`;
           t.textContent = _bulkId === 'packable' ? 'Packable' : 'Bulky';
+          tagsWrap.appendChild(t);
+        }
+        if (_isContainerSlot) {
+          const t = document.createElement('span');
+          t.className = 'slot-bulk-tag slot-bulk-tag--container';
+          t.textContent = 'Container';
           tagsWrap.appendChild(t);
         }
         wrap.appendChild(tagsWrap);
@@ -774,6 +765,17 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     return null;
   }
 
+  function flashBlockedContainer(slotContainerId, r, c, linkedId) {
+    const linked = state.containers.find(cnt => cnt.id === linkedId);
+    if (linked) linked.collapsed = false;
+    render();
+    const slotEl = document.querySelector(`[data-container-id="${slotContainerId}"][data-r="${r}"][data-c="${c}"]`);
+    const cardEl = document.querySelector(`.inv-card[data-container-id="${linkedId}"]`);
+    const reflow = el => { if (el) { el.classList.remove('slot-blocked-flash', 'card-blocked-flash'); void el.offsetWidth; } };
+    if (slotEl) { reflow(slotEl); slotEl.classList.add('slot-blocked-flash'); }
+    if (cardEl) { reflow(cardEl); cardEl.classList.add('card-blocked-flash'); }
+  }
+
   function clearSlot(container, r, c) {
     ignoreNextBlur = true;
     const slotData = container.slots[r][c];
@@ -781,10 +783,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (slotData && slotData.containerId) {
       const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
       if (linked && containerHasItems(linked)) {
-        if (!confirm(`${slotData.name} has items inside. Remove it anyway?`)) {
-          ignoreNextBlur = false;
-          return;
-        }
+        ignoreNextBlur = false;
+        flashBlockedContainer(container.id, r, c, slotData.containerId);
+        return;
       }
       state.containers = state.containers.filter(cnt => cnt.id !== slotData.containerId);
     }
@@ -1016,13 +1017,28 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const isTreasure = !!(lib && lib.treasure) || !!slotData.treasure;
     const cc = slotData.costCoins;
     const ccTotalCp = cc ? (cc.pp||0)*1000 + (cc.gp||0)*100 + (cc.sp||0)*10 + (cc.cp||0) : 0;
-    const ccStr = cc && ccTotalCp > 0 ? [
-      cc.pp ? `${cc.pp}pp` : '', cc.gp ? `${cc.gp}gp` : '',
-      cc.sp ? `${cc.sp}sp` : '', cc.cp ? `${cc.cp}cp` : '',
-    ].filter(Boolean).join(' ') : null;
-    const displayCost = ccStr || (lib && lib.cost);
-    costEl.hidden = !displayCost || itemHidden;
-    if (displayCost && !itemHidden) {
+    const typeCostCp = getSlotTypeCostCp(slotData);
+    let displayCostStr;
+    if (typeCostCp > 0) {
+      const baseCp = ccTotalCp > 0 ? ccTotalCp : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
+      const totalCp = baseCp + typeCostCp;
+      const parts = [];
+      let rem = totalCp;
+      const gp = Math.floor(rem / 100); rem %= 100;
+      const sp = Math.floor(rem / 10);  rem %= 10;
+      if (gp) parts.push(gp + 'gp');
+      if (sp) parts.push(sp + 'sp');
+      if (rem) parts.push(rem + 'cp');
+      displayCostStr = parts.join(' ') || '0cp';
+    } else {
+      const ccStr = cc && ccTotalCp > 0 ? [
+        cc.pp ? `${cc.pp}pp` : '', cc.gp ? `${cc.gp}gp` : '',
+        cc.sp ? `${cc.sp}sp` : '', cc.cp ? `${cc.cp}cp` : '',
+      ].filter(Boolean).join(' ') : null;
+      displayCostStr = ccStr || (lib && lib.cost) || null;
+    }
+    costEl.hidden = !displayCostStr || itemHidden;
+    if (displayCostStr && !itemHidden) {
       costEl.innerHTML = '';
       if (isTreasure) {
         const icon = document.createElement('i');
@@ -1031,7 +1047,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         icon.style.cssText = 'font-size:10px;margin-right:4px;color:rgba(255,205,60,0.85);';
         costEl.appendChild(icon);
       }
-      costEl.appendChild(document.createTextNode(displayCost));
+      costEl.appendChild(document.createTextNode(displayCostStr));
     }
 
     // ── Remove ──
@@ -1318,7 +1334,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       nameInp.addEventListener('blur', commitName);
       addRow(makeLabel('Name'), nameInp);
 
-      // Type + Bulk
+      // Type (+ Rows if container)
       const curCat = slotData.category || (slotData.isContainer ? 'container' : slotData.isWeapon ? 'weapon' : '');
       const catSel = document.createElement('select'); catSel.className = 'insp-select';
       [['','None'],['weapon','Weapon'],['armor','Armor'],['ammunition','Ammo'],
@@ -1353,60 +1369,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         render(); showInspector(slotData, container, r, c);
       });
 
-      const curBulk = slotData.bulk ? slotData.bulk.id : 'stock';
-      const bulkSel = document.createElement('select'); bulkSel.className = 'insp-select';
-      [['stock','Stock'],['packable','Pack'],['bulky','Bulky']].forEach(([bid, lbl]) => {
-        const o = document.createElement('option');
-        o.value = bid; o.textContent = lbl;
-        if (bid === curBulk) o.selected = true;
-        bulkSel.appendChild(o);
-      });
-      bulkSel.addEventListener('change', () => {
-        const newBulk = Bulk[bulkSel.value.toUpperCase()] || Bulk.STOCK;
-        container.slots[r][c] = null; slotData.bulk = newBulk;
-        placeSlotData(slotData, container, r, c); showInspector(slotData, container, r, c);
-      });
-      // Treasure + Has Uses chips
-      const vars = slotData.variables || {};
-      const isTreasureCustom = !!slotData.treasure;
-      const hasUsesActive = !!(slotData.hasUses || vars.uses || vars.count);
-
-      const makeChip = (label, active, onclick) => {
-        const b = document.createElement('button');
-        b.className = 'prop-chip' + (active ? ' active' : '');
-        b.textContent = label; b.onclick = onclick;
-        return b;
-      };
-
-      const treasureChip = makeChip('Treasure', isTreasureCustom, () => {
-        slotData.treasure = !slotData.treasure;
-        render(); showInspector(slotData, container, r, c);
-      });
-      const usesChip = makeChip('Has Uses', hasUsesActive, () => {
-        if (hasUsesActive) { slotData.hasUses = false; delete (slotData.variables || {}).uses; delete (slotData.variables || {}).count; }
-        else { slotData.hasUses = true; slotData.variables = slotData.variables || {}; if (!slotData.variables.uses && !slotData.variables.count) slotData.variables.uses = { value: 1, control: 'both', min: 0 }; }
-        render(); showInspector(slotData, container, r, c);
-      });
-
-      addRow(makeLabel('Type'), catSel, makeLabel('Bulk'), bulkSel, treasureChip, usesChip);
-
-      // Cost fields
-      if (!slotData.costCoins) slotData.costCoins = { pp: 0, gp: 0, sp: 0, cp: 0 };
-      const costCoins = slotData.costCoins;
-      const costWrap = document.createElement('div');
-      costWrap.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;';
-      [['pp','rgba(190,145,255,0.9)'],['gp','rgba(255,205,60,0.9)'],['sp','rgba(200,200,215,0.85)'],['cp','rgba(205,135,65,0.85)']].forEach(([key, color]) => {
-        const lbl = document.createElement('span');
-        lbl.textContent = key.toUpperCase();
-        lbl.style.cssText = `font-size:10px;font-weight:700;color:${color};`;
-        const inp = document.createElement('input');
-        inp.type = 'number'; inp.min = '0'; inp.max = '999999';
-        inp.value = costCoins[key] || 0;
-        inp.className = 'cost-coin-inp';
-        inp.style.cssText = 'width:48px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--text);font-size:13px;font-weight:600;text-align:center;padding:3px 4px;outline:none;';
-        inp.addEventListener('change', () => { costCoins[key] = Math.max(0, parseInt(inp.value) || 0); showInspector(slotData, container, r, c, packIdx); render(); });
-        costWrap.appendChild(lbl); costWrap.appendChild(inp);
-      });
       if (slotData.isContainer) {
         const rowsInp = document.createElement('input');
         rowsInp.type = 'number'; rowsInp.min = '1'; rowsInp.max = '20';
@@ -1429,10 +1391,67 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
             render();
           }
         });
-        addRow(makeLabel('Cost'), costWrap, makeLabel('Rows'), rowsInp);
+        addRow(makeLabel('Type'), catSel, makeLabel('Rows'), rowsInp);
       } else {
-        addRow(makeLabel('Cost'), costWrap);
+        addRow(makeLabel('Type'), catSel);
       }
+
+      // Bulk + Has Uses + Treasure
+      const curBulk = slotData.bulk ? slotData.bulk.id : 'stock';
+      const bulkSel = document.createElement('select'); bulkSel.className = 'insp-select';
+      [['stock','Stock'],['packable','Pack'],['bulky','Bulky']].forEach(([bid, lbl]) => {
+        const o = document.createElement('option');
+        o.value = bid; o.textContent = lbl;
+        if (bid === curBulk) o.selected = true;
+        bulkSel.appendChild(o);
+      });
+      bulkSel.addEventListener('change', () => {
+        const newBulk = Bulk[bulkSel.value.toUpperCase()] || Bulk.STOCK;
+        container.slots[r][c] = null; slotData.bulk = newBulk;
+        placeSlotData(slotData, container, r, c); showInspector(slotData, container, r, c);
+      });
+
+      const vars = slotData.variables || {};
+      const isTreasureCustom = !!slotData.treasure;
+      const hasUsesActive = !!(slotData.hasUses || vars.uses || vars.count);
+
+      const makeChip = (label, active, onclick) => {
+        const b = document.createElement('button');
+        b.className = 'prop-chip' + (active ? ' active' : '');
+        b.textContent = label; b.onclick = onclick;
+        return b;
+      };
+
+      const usesChip = makeChip('Has Uses', hasUsesActive, () => {
+        if (hasUsesActive) { slotData.hasUses = false; delete (slotData.variables || {}).uses; delete (slotData.variables || {}).count; }
+        else { slotData.hasUses = true; slotData.variables = slotData.variables || {}; if (!slotData.variables.uses && !slotData.variables.count) slotData.variables.uses = { value: 1, control: 'both', min: 0 }; }
+        render(); showInspector(slotData, container, r, c);
+      });
+      const treasureChip = makeChip('Treasure', isTreasureCustom, () => {
+        slotData.treasure = !slotData.treasure;
+        render(); showInspector(slotData, container, r, c);
+      });
+
+      addRow(makeLabel('Bulk'), bulkSel, usesChip, treasureChip);
+
+      // Cost fields
+      if (!slotData.costCoins) slotData.costCoins = { pp: 0, gp: 0, sp: 0, cp: 0 };
+      const costCoins = slotData.costCoins;
+      const costWrap = document.createElement('div');
+      costWrap.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;';
+      [['pp','rgba(190,145,255,0.9)'],['gp','rgba(255,205,60,0.9)'],['sp','rgba(200,200,215,0.85)'],['cp','rgba(205,135,65,0.85)']].forEach(([key, color]) => {
+        const lbl = document.createElement('span');
+        lbl.textContent = key.toUpperCase();
+        lbl.style.cssText = `font-size:10px;font-weight:700;color:${color};`;
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.min = '0'; inp.max = '999999';
+        inp.value = costCoins[key] || 0;
+        inp.className = 'cost-coin-inp';
+        inp.style.cssText = 'width:48px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--text);font-size:13px;font-weight:600;text-align:center;padding:3px 4px;outline:none;';
+        inp.addEventListener('change', () => { costCoins[key] = Math.max(0, parseInt(inp.value) || 0); showInspector(slotData, container, r, c, packIdx); render(); });
+        costWrap.appendChild(lbl); costWrap.appendChild(inp);
+      });
+      addRow(makeLabel('Cost'), costWrap);
 
       // Description
       const descTa = document.createElement('textarea');
@@ -1508,6 +1527,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     document.querySelectorAll('.char-tab.drag-target').forEach(tab => {
       tab.classList.remove('drag-target');
     });
+  }
+
+  function getSlotTypeCostCp(slotData) {
+    const typeName = slotData.variables?.weapon?.value || slotData.variables?.armor?.value;
+    if (!typeName) return 0;
+    const lib = getLibraryItem(typeName);
+    return lib?.cost ? parseCostCp(lib.cost) : 0;
   }
 
   function parseCostCp(costStr) {
@@ -1670,16 +1696,20 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       // Block selling a container that still has items
       if (slotData.containerId) {
         const linked = state.containers.find(c => c.id === slotData.containerId);
-        if (linked && containerHasItems(linked)) { render(); return; }
+        if (linked && containerHasItems(linked)) {
+          flashBlockedContainer(srcContainer.id, srcR, srcC, slotData.containerId);
+          return;
+        }
       }
 
       const lib = getLibraryItem(slotData.name);
       const isTreasure = !!(lib && lib.treasure) || !!slotData.treasure;
       const sc = slotData.costCoins;
       const qty = slotData.variables?.qty?.value || 1;
-      const unitCp = sc
+      const unitCp = (sc
         ? (sc.pp||0)*1000 + (sc.gp||0)*100 + (sc.sp||0)*10 + (sc.cp||0)
-        : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
+        : (lib && lib.cost ? parseCostCp(lib.cost) : 0))
+        + getSlotTypeCostCp(slotData);
       const fullCp = unitCp * qty;
       const halfCp = fullCp > 0 ? (isTreasure ? fullCp : Math.floor(fullCp / 2)) : 0;
       if (halfCp > 0) {
@@ -2733,14 +2763,35 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
     });
   });
 
+  const charHideBtn = document.getElementById('char-hide-btn');
+
+  charHideBtn.addEventListener('click', () => {
+    if (!currentCharId || !allChars[currentCharId]) return;
+    const char = allChars[currentCharId];
+    char.hiddenFromPlayers = !char.hiddenFromPlayers;
+    database.ref(`/inventory_characters/${currentCharId}`).update({ hiddenFromPlayers: char.hiddenFromPlayers });
+    updateCharHideBtn();
+    renderTabs();
+  });
+
+  function updateCharHideBtn() {
+    if (!window._isDM) return;
+    const hidden = !!(currentCharId && allChars[currentCharId]?.hiddenFromPlayers);
+    charHideBtn.innerHTML = hidden ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+    charHideBtn.classList.toggle('char-hide-active', hidden);
+    charHideBtn.title = hidden ? 'Unhide — currently hidden from players' : 'Hide from players';
+  }
+
   function applyRole(role) {
     const isDM = (role === 'dm') && userCanBeDM;
     window._isDM         = isDM;
     roleBtn.hidden       = !userCanBeDM;
     charAssignBtn.hidden = !isDM;
+    charHideBtn.hidden   = !isDM;
     roleBtn.textContent  = 'DM';
     roleBtn.title        = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
     roleBtn.dataset.role = isDM ? 'dm' : 'player';
+    if (isDM) updateCharHideBtn();
     if (shopOpen) buildShop();
     // Re-render tabs now that DM status is known (subscribeToChars fires before this resolves)
     if (Object.keys(allChars).length) renderTabs();
@@ -2799,11 +2850,12 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
         if (pendingDeletes.has(id)) return; // skip until server confirms removal
         allChars[id] = {
           id,
-          ownerUid:  data.ownerUid  || '',
-          ownerName: data.ownerName || '',
-          state:     parseState(data.state),
-          createdAt: data.createdAt || 0,
-          sortOrder: data.sortOrder ?? data.createdAt ?? 0,
+          ownerUid:          data.ownerUid  || '',
+          ownerName:         data.ownerName || '',
+          hiddenFromPlayers: !!data.hiddenFromPlayers,
+          state:             parseState(data.state),
+          createdAt:         data.createdAt || 0,
+          sortOrder:         data.sortOrder ?? data.createdAt ?? 0,
         };
       });
 
@@ -2893,6 +2945,7 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
     suppressSave = false;
     const s = inv.getState();
     setFieldsOpen(!s.charName || !s.carryCapacity);
+    updateCharHideBtn();
     renderTabs();
     if (shopOpen) { updateShopWallet(); buildShop(); }
   }
@@ -3116,12 +3169,14 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
 
     Object.values(allChars)
       .sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt))
+      .filter(char => window._isDM || !char.hiddenFromPlayers)
       .forEach(char => {
         const isOwn = char.ownerUid === currentUser?.uid;
         const tab = document.createElement('button');
         tab.className  = 'char-tab'
           + (char.id === currentCharId ? ' active' : '')
-          + (isOwn ? ' tab-mine' : ' tab-other');
+          + (isOwn ? ' tab-mine' : ' tab-other')
+          + (window._isDM && char.hiddenFromPlayers ? ' tab-hidden' : '');
         tab.dataset.charId = char.id;
         tab.title = char.ownerName || '';
 
@@ -3139,6 +3194,14 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
 
         // DM-only controls
         if (window._isDM) {
+          // Hidden indicator
+          if (char.hiddenFromPlayers) {
+            const hiddenIcon = document.createElement('span');
+            hiddenIcon.className = 'char-tab-hidden-icon';
+            hiddenIcon.innerHTML = '<i class="fas fa-eye-slash"></i>';
+            tab.appendChild(hiddenIcon);
+          }
+
           // Delete button
           const del = document.createElement('button');
           del.className   = 'char-tab-del';
