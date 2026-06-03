@@ -192,6 +192,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   function itemFillCost(slotData) {
     if (!slotData) return 0;
+    const v = slotData.variables;
+    if (v && ('pp' in v || 'gp' in v || 'sp' in v || 'cp' in v)) {
+      const total = (v.pp?.value || 0) + (v.gp?.value || 0)
+                  + (v.sp?.value || 0) + (v.cp?.value || 0);
+      return Math.ceil(total / 50) * 0.25;
+    }
     const id = slotData.bulk ? slotData.bulk.id
              : (getLibraryItem(slotData.name) || { bulk: Bulk.STOCK }).bulk.id;
     if (id === 'packable') return (slotData.variables?.qty?.value || 1) * 0.25;
