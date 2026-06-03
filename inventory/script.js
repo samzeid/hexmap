@@ -1732,6 +1732,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     toggleShopItem(slotData, key) {
       toggleInspectorFor(key, slotData, null, -1, -1);
     },
+    showShopItem(slotData, key) {
+      showInspector(slotData, null, -1, -1);
+      inspectorItemKey = key;
+      render();
+    },
     startShopDrag(slotData, x, y) {
       startDrag(slotData, null, -1, -1, x, y, null, () => {});
       dragState._shopDrag = true;
@@ -2162,6 +2167,19 @@ window.CharacterManager = ({ auth, database }) => {
         lpTimer = setTimeout(() => {
           lpTimer = null;
           lpScrolling = false;
+          if (cachedSlotData._unresolved) {
+            inv.showShopItem(getSlotData(), `shop-${item.name}`);
+            requestAnimationFrame(() => {
+              document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
+                if (sel.value !== '') return;
+                sel.classList.remove('flash-required');
+                void sel.offsetWidth;
+                sel.classList.add('flash-required');
+                setTimeout(() => sel.classList.remove('flash-required'), 700);
+              });
+            });
+            return;
+          }
           row._shopDragging = true;
           row.classList.add('shop-item-dragging');
           document.documentElement.setPointerCapture(lpPointerId);
