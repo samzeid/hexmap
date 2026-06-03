@@ -1,4 +1,4 @@
-window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, isHiddenFromPlayer }) => {
+window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, isHiddenFromPlayer, onSound }) => {
 
   // ── STATE ──────────────────────────────────────────────────────────────
   function createDefaultContainers() {
@@ -1416,6 +1416,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if (hasCoins && !confirm(trashLib.warnOnRemove)) { render(); return; }
       }
       clearSlot(srcContainer, srcR, srcC);
+      if (onSound) onSound('bin');
       return;
     }
 
@@ -1439,6 +1440,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         purseVars.sp.value = coins.sp;
         purseVars.cp.value = coins.cp;
         addItemLocal({ name: 'Coin Purse', variables: purseVars });
+        if (onSound) onSound('coin');
       } else {
         render();
       }
@@ -1512,6 +1514,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           if (freeSlot && itemFillCost(slotData) <= containerFillAvailable(linked) + 0.001) {
             removeFromSource();
             if (placeSlotData(slotData, linked, freeSlot.r, freeSlot.c) && !slotData._unresolved && isShopDrag && onShopPurchase) onShopPurchase(slotData);
+            if (onSound) onSound(isShopDrag ? 'coin' : 'place');
             return;
           }
         }
@@ -1530,11 +1533,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if (srcCenter) spawnFlightClone(slotData.name || '', srcCenter, actualDest);
         const actualSwapDest = postRenderCenter(srcContainer.id, srcR, srcC, targetItem);
         if (actualSwapDest) spawnFlightClone(swapName, destCenter, actualSwapDest);
+        if (onSound) onSound('place');
         return;
       }
 
       const _placed = placeSlotData(slotData, targetContainer, tR, tC);
       if (_placed && !slotData._unresolved && isShopDrag && onShopPurchase) onShopPurchase(slotData);
+      if (_placed && onSound) onSound(isShopDrag ? 'coin' : 'place');
       const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
       if (srcCenter) spawnFlightClone(slotData.name || '', srcCenter, actualDest);
     } else {
@@ -1834,6 +1839,34 @@ window.CharacterManager = ({ auth, database }) => {
   const pendingDeletes   = new Set(); // char IDs removed locally but not yet confirmed by Firebase
   let inv                = null;
 
+  // ── SOUND ────────────────────────────────────────────────────────────────
+  const playSound = (() => {
+    let ctx = null;
+    const buffers = {};
+    const getCtx = () => {
+      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      return ctx;
+    };
+    ['bin', 'coin', 'place'].forEach(async name => {
+      try {
+        const res = await fetch(`../sounds/${name}.ogg`);
+        buffers[name] = await getCtx().decodeAudioData(await res.arrayBuffer());
+      } catch (e) {}
+    });
+    return name => {
+      try {
+        const c = getCtx();
+        if (c.state === 'suspended') c.resume();
+        const b = buffers[name];
+        if (!b) return;
+        const src = c.createBufferSource();
+        src.buffer = b;
+        src.connect(c.destination);
+        src.start(0);
+      } catch (e) {}
+    };
+  })();
+
   // ── INVENTORY SYSTEM ────────────────────────────────────────────────────
   inv = window.InventorySystem({
     database: null,
@@ -1842,6 +1875,7 @@ window.CharacterManager = ({ auth, database }) => {
     onCrossCharDrop:     handleCrossCharDrop,
     onShopPurchase:      handleShopPurchase,
     isHiddenFromPlayer:  (itemName) => !isItemVisible(itemName, getItemSection(itemName)),
+    onSound:             playSound,
   });
 
   // ── CLOSE / LOGOUT ──────────────────────────────────────────────────────
@@ -2734,6 +2768,7 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
       const lib = window.ITEM_LIBRARY.find(i => i.name === slotData.name);
       if (lib && lib.cost) inv.deductCost(lib.cost);
     }
+    playSound('coin');
     if (shopOpen) updateShopWallet();
   }
 
@@ -2761,11 +2796,13 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
       inv.addItem(cleanItem);
       if (item._shopItem && !item._unresolved) {
         handleShopPurchase(cleanItem);
-        const tabEl = document.querySelector(`[data-char-id="${currentCharId}"]`);
-        if (tabEl) {
-          tabEl.classList.add('tab-received');
-          setTimeout(() => tabEl.classList.remove('tab-received'), 1200);
-        }
+      } else {
+        playSound('place');
+      }
+      const tabEl = document.querySelector(`[data-char-id="${currentCharId}"]`);
+      if (tabEl) {
+        tabEl.classList.add('tab-received');
+        setTimeout(() => tabEl.classList.remove('tab-received'), 1200);
       }
       return;
     }
@@ -2806,9 +2843,12 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
       state: JSON.stringify(targetState),
     });
 
-    if (item._shopItem && !item._unresolved) handleShopPurchase(cleanItem, true);
+    if (item._shopItem && !item._unresolved) {
+      handleShopPurchase(cleanItem, true);
+    } else {
+      playSound('place');
+    }
 
-    // Flash the target tab green
     const tabEl = document.querySelector(`[data-char-id="${targetCharId}"]`);
     if (tabEl) {
       tabEl.classList.add('tab-received');
