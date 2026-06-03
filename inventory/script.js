@@ -205,6 +205,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   function itemFillCost(slotData) {
     if (!slotData) return 0;
     const lib = getLibraryItem(slotData.name);
+    if (slotData.category === 'ammunition' || lib?.category === 'ammunition') return 0;
     if (lib && lib.fixedCarryWeight != null) return lib.fixedCarryWeight;
     const v = slotData.variables;
     if (v && ('pp' in v || 'gp' in v || 'sp' in v || 'cp' in v)) {
@@ -213,7 +214,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       return Math.ceil(total / 50) * 0.25;
     }
     const id = slotData.bulk ? slotData.bulk.id
-             : (lib || { bulk: Bulk.STOCK }).bulk.id;
+             : (lib?.bulk || Bulk.STOCK).id;
     const qty = v?.qty?.value || 1;
     if (id === 'packable') return qty * 0.25;
     if (id === 'bulky' || id === 'verybulky') return 2 * qty;
@@ -239,7 +240,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   function ensurePackableQty(slotData) {
     if (!slotData) return;
     const id = slotData.bulk ? slotData.bulk.id
-             : (getLibraryItem(slotData.name) || { bulk: Bulk.STOCK }).bulk.id;
+             : (getLibraryItem(slotData.name)?.bulk || Bulk.STOCK).id;
     if (id !== 'packable') return;
     slotData.variables = slotData.variables || {};
     if (!('qty' in slotData.variables)) {
@@ -521,7 +522,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
                        || null;
       const numVar = numVarEntry ? numVarEntry[1] : null;
       const _bulkId = slotData.bulk ? slotData.bulk.id
-                    : (getLibraryItem(slotData.name) || { bulk: Bulk.STOCK }).bulk.id;
+                    : (getLibraryItem(slotData.name)?.bulk || Bulk.STOCK).id;
       const isPackableSlot = _bulkId === 'packable';
       if (isPackableSlot) wrap.classList.add('slot-packable');
       else if (_bulkId === 'bulky' || _bulkId === 'verybulky') wrap.classList.add('slot-bulky');
@@ -635,8 +636,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
       // Corner tags (bulk left, container right)
       const _isContainerSlot = !!(slotData.isContainer || (getLibraryItem(slotData.name) || {}).containerRows);
-      const _showBulkTag = _bulkId === 'packable' || _bulkId === 'bulky' || _bulkId === 'verybulky';
-      if (_isContainerSlot || _showBulkTag) {
+      const _isAmmoSlot = slotData.category === 'ammunition' || ((getLibraryItem(slotData.name) || {}).category === 'ammunition');
+      const _showBulkTag = !_isAmmoSlot && (_bulkId === 'packable' || _bulkId === 'bulky' || _bulkId === 'verybulky');
+      if (_isContainerSlot || _showBulkTag || _isAmmoSlot) {
         const tagsWrap = document.createElement('div');
         tagsWrap.className = 'slot-tags';
         if (_showBulkTag) {
@@ -649,6 +651,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           const t = document.createElement('span');
           t.className = 'slot-bulk-tag slot-bulk-tag--container';
           t.textContent = 'Container';
+          tagsWrap.appendChild(t);
+        }
+        if (_isAmmoSlot) {
+          const t = document.createElement('span');
+          t.className = 'slot-bulk-tag slot-bulk-tag--ammo';
+          t.textContent = 'Ammo';
           tagsWrap.appendChild(t);
         }
         wrap.appendChild(tagsWrap);
@@ -905,22 +913,23 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     // Always show qty stepper — except containers (always qty 1) and coin purses
     const _isContainerItem = !!(slotData.isContainer || (lib && lib.containerRows));
-    if (container && !isCoinItem && !_isContainerItem) {
+    if (!isCoinItem && !_isContainerItem && (container || slotData._shopItem)) {
       const qtyVal = slotData.variables?.qty?.value ?? 1;
       const qtyWrap = document.createElement('div');
       qtyWrap.className = 'insp-inline-var';
       qtyWrap.innerHTML = `
         <span class="insp-inline-label">qty</span>
         <button class="insp-btn-sm" data-qd="-1">−</button>
-        <input class="insp-num-sm" type="number" value="${qtyVal}" min="1" max="999" data-qinp />
+        <input class="insp-num-sm" type="number" value="${qtyVal}" min="1" max="99" data-qinp />
         <button class="insp-btn-sm" data-qd="1">+</button>
       `;
       const setQty = v => {
-        v = Math.max(1, Math.min(999, v));
+        v = Math.max(1, Math.min(99, v));
         slotData.variables = slotData.variables || {};
-        slotData.variables.qty = { value: v, control: 'both', min: 1, max: 999 };
+        slotData.variables.qty = { value: v, control: 'both', min: 1, max: 99 };
         qtyWrap.querySelector('[data-qinp]').value = v;
-        render();
+        if (container) render();
+        else { refreshShopRow(); showInspector(slotData, container, r, c); }
       };
       qtyWrap.querySelectorAll('[data-qd]').forEach(btn =>
         btn.addEventListener('click', () => setQty((slotData.variables?.qty?.value ?? 1) + parseInt(btn.dataset.qd)))
@@ -1049,8 +1058,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const cc = slotData.costCoins;
     const ccTotalCp = cc ? (cc.pp||0)*1000 + (cc.gp||0)*100 + (cc.sp||0)*10 + (cc.cp||0) : 0;
     const typeCostCp = getSlotTypeCostCp(slotData);
-    const materialCostCp = ((slotData.silvered || slotData.material === 'silvered') ? 10000 : 0)
-      + ((slotData.material === 'mithral' || slotData.material === 'adamantine') ? 50000 : 0);
+    const materialCostCp = getSlotMaterialCostCp(slotData, lib?.category === 'ammunition');
     const coinUsesMult = getSlotCoinUsesMultiplier(slotData);
     let displayCostStr;
     if (typeCostCp > 0 || materialCostCp > 0 || coinUsesMult > 1) {
@@ -1104,12 +1112,21 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     // Bulk tag — leftmost chip, shown for packable and bulky items
     const _inspBulkId = slotData.bulk ? slotData.bulk.id
-      : (lib || { bulk: Bulk.STOCK }).bulk.id;
-    if (_inspBulkId === 'packable' || _inspBulkId === 'bulky' || _inspBulkId === 'verybulky') {
+      : (lib?.bulk || Bulk.STOCK).id;
+    const _isAmmoInsp = slotData.category === 'ammunition' || (lib && lib.category === 'ammunition');
+    if (!_isAmmoInsp && (_inspBulkId === 'packable' || _inspBulkId === 'bulky' || _inspBulkId === 'verybulky')) {
       const bulkTag = document.createElement('span');
       bulkTag.className = `ac-tag ${_inspBulkId}`;
       bulkTag.textContent = _inspBulkId === 'packable' ? 'Packable' : 'Bulky';
       propsEl.appendChild(bulkTag);
+    }
+
+    // Ammo tag
+    if (_isAmmoInsp) {
+      const ammoTag = document.createElement('span');
+      ammoTag.className = 'ac-tag ammo';
+      ammoTag.textContent = 'Ammo';
+      propsEl.appendChild(ammoTag);
     }
 
     // Container tag — immediately after bulk tag
@@ -1160,14 +1177,22 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       if (shopRow?._applyRowState) shopRow._applyRowState();
     };
 
+    const updateAmmoUnresolved = () => {
+      if (!container && slotData.name === 'Ammunition') {
+        slotData._unresolved = !slotData.silvered && !slotData.material;
+      }
+    };
+
     if (canSilver) {
       const btn = document.createElement('button');
       const isSilvered = slotData.silvered || slotData.material === 'silvered';
       btn.className = 'prop-chip' + (isSilvered ? ' active-silvered' : '');
       btn.textContent = 'Silvered';
+      btn.dataset.matChip = 'true';
       btn.onclick = () => {
         slotData.silvered = !(slotData.silvered || slotData.material === 'silvered');
         if (slotData.material === 'silvered') slotData.material = null;
+        updateAmmoUnresolved();
         if (!container) refreshShopRow();
         render(); showInspector(slotData, container, r, c, packIdx);
       };
@@ -1180,9 +1205,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const btn = document.createElement('button');
       btn.className = 'prop-chip' + (curMetal ? ` active-${curMetal}` : '');
       btn.textContent = curMetal ? curMetal.charAt(0).toUpperCase() + curMetal.slice(1) : 'Metal';
+      btn.dataset.matChip = 'true';
       btn.onclick = () => {
         const idx = metals.indexOf(curMetal);
         slotData.material = metals[(idx + 1) % metals.length];
+        updateAmmoUnresolved();
         if (!container) refreshShopRow();
         render(); showInspector(slotData, container, r, c, packIdx);
       };
@@ -1475,19 +1502,22 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
 
       // Bulk + Has Uses + Treasure
-      const curBulk = slotData.bulk ? slotData.bulk.id : 'stock';
-      const bulkSel = document.createElement('select'); bulkSel.className = 'insp-select';
-      [['stock','Stock'],['packable','Pack'],['bulky','Bulky']].forEach(([bid, lbl]) => {
-        const o = document.createElement('option');
-        o.value = bid; o.textContent = lbl;
-        if (bid === curBulk) o.selected = true;
-        bulkSel.appendChild(o);
-      });
-      bulkSel.addEventListener('change', () => {
-        const newBulk = Bulk[bulkSel.value.toUpperCase()] || Bulk.STOCK;
+      const isAmmoCustom = slotData.category === 'ammunition';
+      const bulkStates = ['stock', 'packable', 'bulky'];
+      const getBulkId = () => slotData.bulk ? slotData.bulk.id : 'stock';
+      const bulkBtn = document.createElement('button');
+      const refreshBulkBtn = () => {
+        const s = getBulkId();
+        bulkBtn.className = 'prop-chip' + (s === 'packable' ? ' active-packable' : s === 'bulky' ? ' active-bulky' : '');
+        bulkBtn.textContent = s === 'packable' ? 'Packable' : s === 'bulky' ? 'Bulky' : 'Stock';
+      };
+      refreshBulkBtn();
+      bulkBtn.onclick = () => {
+        const next = bulkStates[(bulkStates.indexOf(getBulkId()) + 1) % bulkStates.length];
+        const newBulk = Bulk[next.toUpperCase()] || Bulk.STOCK;
         container.slots[r][c] = null; slotData.bulk = newBulk;
         placeSlotData(slotData, container, r, c); showInspector(slotData, container, r, c);
-      });
+      };
 
       const vars = slotData.variables || {};
       const isTreasureCustom = !!slotData.treasure;
@@ -1530,7 +1560,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         render(); showInspector(slotData, container, r, c);
       });
 
-      addRow(makeLabel('Bulk'), bulkSel, usesChip, treasureChip);
+      if (isAmmoCustom) addRow(usesChip, treasureChip);
+      else addRow(makeLabel('Bulk'), bulkBtn, usesChip, treasureChip);
 
       // Cost fields
       if (!slotData.costCoins) slotData.costCoins = { pp: 0, gp: 0, sp: 0, cp: 0 };
@@ -1567,6 +1598,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   function hideInspector() {
     if (document.querySelector('#insp-props .insp-select.flash-required')) return;
+    if (document.querySelector('#insp-props .chip-flash-required')) return;
     inspectorEl.classList.add('inspector-collapsed');
     inspectorItemKey = null;
     _customEditKey = null; _customEditOpen = false;
@@ -1635,6 +1667,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const spellName = slotData.variables?.spell?.value;
     if (spellName) return window.SPELL_STORING_COSTS?.[spellName] || 0;
     return 0;
+  }
+
+  function getSlotMaterialCostCp(slotData, isAmmo) {
+    const silverCp = isAmmo ? 1000  : 10000;
+    const metalCp  = isAmmo ? 5000  : 50000;
+    return ((slotData.silvered || slotData.material === 'silvered') ? silverCp : 0)
+         + ((slotData.material === 'mithral' || slotData.material === 'adamantine') ? metalCp : 0);
   }
 
   function getSlotCoinUsesMultiplier(slotData) {
@@ -1817,8 +1856,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const isTreasure = !!(lib && lib.treasure) || !!slotData.treasure;
       const sc = slotData.costCoins;
       const qty = slotData.variables?.qty?.value || 1;
-      const _matCp = ((slotData.silvered || slotData.material === 'silvered') ? 10000 : 0)
-        + ((slotData.material === 'mithral' || slotData.material === 'adamantine') ? 50000 : 0);
+      const _matCp = getSlotMaterialCostCp(slotData, lib?.category === 'ammunition');
       const unitCp = ((sc
         ? (sc.pp||0)*1000 + (sc.gp||0)*100 + (sc.sp||0)*10 + (sc.cp||0)
         : (lib && lib.cost ? parseCostCp(lib.cost) : 0))
@@ -2005,15 +2043,21 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           showInspector(slotData, null, -1, -1);
           inspectorItemKey = key;
         }
-        requestAnimationFrame(() => {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
           document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
             if (sel.value !== '') return;
             sel.classList.remove('flash-required');
             void sel.offsetWidth;
             sel.classList.add('flash-required');
-            setTimeout(() => sel.classList.remove('flash-required'), 700);
+            setTimeout(() => sel.classList.remove('flash-required'), 900);
           });
-        });
+          document.querySelectorAll('#insp-props [data-mat-chip]').forEach(btn => {
+            btn.classList.remove('chip-flash-required');
+            void btn.offsetWidth;
+            btn.classList.add('chip-flash-required');
+            setTimeout(() => btn.classList.remove('chip-flash-required'), 900);
+          });
+        }));
       }
       render();
       return false;
@@ -2541,6 +2585,8 @@ window.CharacterManager = ({ auth, database }) => {
       if (creatureVar && cachedSlotData.variables?.creature?.control === 'select') cachedSlotData.variables.creature.value = '';
       // Explicit unresolved flag — more reliable than checking '' values at drag time
       if (typeVar || elementVar || spellVar || creatureVar) cachedSlotData._unresolved = true;
+      // Base Ammunition requires a material (silvered/mithral/adamantine) before purchase
+      if (item.name === 'Ammunition' && !cachedSlotData.silvered && !cachedSlotData.material) cachedSlotData._unresolved = true;
 
       const getTypeCostCp = () => {
         const typeName = cachedSlotData.variables?.weapon?.value
@@ -2555,12 +2601,17 @@ window.CharacterManager = ({ auth, database }) => {
       };
 
       const getTotalCostCp = () => {
-        const base = baseCostCp + getTypeCostCp()
-          + (cachedSlotData.silvered ? 10000 : 0)
-          + (cachedSlotData.material ? 50000 : 0);
-        if (item.hasUses !== 'coins') return base;
-        const cv = cachedSlotData.variables || {};
-        return base * Math.max(1, cv.uses?.value ?? cv.count?.value ?? 1);
+        const isAmmo = shopCat === 'ammunition';
+        const silverCp = isAmmo ? 1000 : 10000;
+        const metalCp  = isAmmo ? 5000 : 50000;
+        let base = baseCostCp + getTypeCostCp()
+          + (cachedSlotData.silvered ? silverCp : 0)
+          + (cachedSlotData.material ? metalCp  : 0);
+        if (item.hasUses === 'coins') {
+          const cv = cachedSlotData.variables || {};
+          base *= Math.max(1, cv.uses?.value ?? cv.count?.value ?? 1);
+        }
+        return base * Math.max(1, cachedSlotData.variables?.qty?.value || 1);
       };
 
       const getDisplayName = () => {
@@ -2578,7 +2629,9 @@ window.CharacterManager = ({ auth, database }) => {
         const silverPfx = cachedSlotData.silvered ? 'Silvered ' : '';
         const metal = (cachedSlotData.material === 'mithral' || cachedSlotData.material === 'adamantine')
           ? cachedSlotData.material : null;
-        return silverPfx + (metal ? metal.charAt(0).toUpperCase() + metal.slice(1) + ' ' : '') + name;
+        const qty = cachedSlotData.variables?.qty?.value || 1;
+        const qtyPfx = qty > 1 ? `${qty} × ` : '';
+        return qtyPfx + silverPfx + (metal ? metal.charAt(0).toUpperCase() + metal.slice(1) + ' ' : '') + name;
       };
 
       const row = document.createElement('div');
@@ -2691,15 +2744,23 @@ window.CharacterManager = ({ auth, database }) => {
           if (cachedSlotData._unresolved) {
             flashText();
             inv.showShopItem(getSlotData(), `shop-${item.name}`);
-            requestAnimationFrame(() => {
-document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+              document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
                 if (sel.value !== '') return;
                 sel.classList.remove('flash-required');
                 void sel.offsetWidth;
                 sel.classList.add('flash-required');
                 setTimeout(() => sel.classList.remove('flash-required'), 900);
               });
-            });
+              if (item.name === 'Ammunition') {
+                document.querySelectorAll('#insp-props [data-mat-chip]').forEach(btn => {
+                  btn.classList.remove('chip-flash-required');
+                  void btn.offsetWidth;
+                  btn.classList.add('chip-flash-required');
+                  setTimeout(() => btn.classList.remove('chip-flash-required'), 900);
+                });
+              }
+            }));
             return;
           }
           row._shopDragging = true;
@@ -2787,6 +2848,7 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
       if (vars.armor?.control   === 'select') vars.armor.value   = selectedType;
     }
     if (selectedElement && vars.element?.control === 'select') vars.element.value = selectedElement;
+    if (!vars.qty) vars.qty = { value: 1, control: 'both', min: 1, max: 99 };
     const slotData = { name: libItem.name, variables: vars, _shopItem: true };
     if (libItem.hasUses)  slotData.hasUses   = libItem.hasUses;
     if (silvered)         slotData.silvered  = true;

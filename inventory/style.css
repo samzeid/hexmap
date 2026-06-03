@@ -1251,6 +1251,7 @@ main {
 .slot-bulk-tag--bulky,
 .slot-bulk-tag--verybulky  { background: rgba(255, 150, 0, 0.18);  color: #ffaa55; }
 .slot-bulk-tag--container  { background: rgba(160, 100, 255, 0.18); color: #c090ff; }
+.slot-bulk-tag--ammo       { background: rgba(80, 160, 255, 0.18);  color: #66aaff; }
 
 .slot-input:focus ~ .slot-label { display: none; }
 
@@ -1422,6 +1423,7 @@ main {
 .ac-tag.verybulky { background: rgba(255,80,0,0.18);   color: #ff7744; }
 .ac-tag.packable  { background: rgba(80,210,130,0.18); color: #66dd99; }
 .ac-tag.container { background: rgba(160,100,255,0.18); color: #c090ff; }
+.ac-tag.ammo      { background: rgba(80, 160,255,0.18); color: #66aaff; }
 
 /* ── INSPECTOR ───────────────────────────────────────────────── */
 #inspector {
@@ -1729,6 +1731,20 @@ main {
   font-weight: 600;
 }
 
+.prop-chip.active-packable {
+  background: rgba(80,210,130,0.15);
+  border-color: rgba(80,210,130,0.4);
+  color: #66dd99;
+  font-weight: 600;
+}
+
+.prop-chip.active-bulky {
+  background: rgba(255,150,0,0.15);
+  border-color: rgba(255,150,0,0.4);
+  color: #ffaa55;
+  font-weight: 600;
+}
+
 .prop-chip:active { opacity: 0.7; }
 
 /* Container rows row (shown below props when container is active) */
@@ -1954,4 +1970,12 @@ body.is-dragging #inv-scroll {
 @keyframes select-flash {
   0%, 100% { border-color: rgba(255,255,255,0.15); box-shadow: none; background: rgba(255,255,255,0.1); }
   45%      { border-color: #ff4444; box-shadow: 0 0 0 3px rgba(255,68,68,0.65); background: rgba(255,68,68,0.25); }
+}
+
+.prop-chip.chip-flash-required {
+  animation: chip-flash 0.3s ease-in-out 3;
+}
+@keyframes chip-flash {
+  0%, 100% { border-color: rgba(255,255,255,0.15); background: transparent;          box-shadow: none; }
+  45%      { border-color: #ff4444;                background: rgba(255,68,68,0.25); box-shadow: 0 0 0 3px rgba(255,68,68,0.55); }
 }
