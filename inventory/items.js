@@ -403,20 +403,23 @@ window.ITEM_LIBRARY = [
   { name: "Wagon (Large)",  bulk: Bulk.BULKY, cost: "100 gp", description: `400 item slots. Requires 2 large mounts to pilot. Encumbrance limit is 10× the mounts' carry capacity.` },
 
   { _section: "Valuables" },
-  // ── MISC ITEMS ────────────────────────────────────────────────────────────
   // Gems and Jewelry: use the value counter to track worth in gp
-  { name: "Gems",    bulk: Bulk.PACKABLE, description: `Precious or semi-precious stones. Use the value counter to track their total worth in gp.`, variables: { "gp value": { value: 0, control: "both", min: 0, max: 9999 } } },
-  { name: "Jewelry", bulk: Bulk.PACKABLE, description: `Rings, necklaces, bracelets, or other ornaments. Use the value counter to track their total worth in gp.`, variables: { "gp value": { value: 0, control: "both", min: 0, max: 9999 } } },
+  { name: "Gems",    bulk: Bulk.PACKABLE, treasure: true, editableCost: true, description: `Precious or semi-precious stones.` },
+  { name: "Jewelry", bulk: Bulk.PACKABLE, treasure: true, editableCost: true, description: `Rings, necklaces, bracelets, or other ornaments.` },
 
   // Ingots — fixed value, Stock
-  { name: "Copper Ingot",        bulk: Bulk.STOCK,  cost: "125 gp",       description: `A refined copper ingot worth 125 gp.` },
-  { name: "Iron / Silver Ingot", bulk: Bulk.STOCK,  cost: "250 gp",       description: `A refined iron or silver ingot worth 250 gp.` },
-  { name: "Gold Ingot",          bulk: Bulk.STOCK,  cost: "500 gp",       description: `A refined gold ingot worth 500 gp.` },
+  { name: "Copper Ingot",        bulk: Bulk.STOCK, treasure: true, cost: "125 gp",    description: `A refined copper ingot worth 125 gp.` },
+  { name: "Iron / Silver Ingot", bulk: Bulk.STOCK, treasure: true, cost: "250 gp",    description: `A refined iron or silver ingot worth 250 gp.` },
+  { name: "Gold Ingot",          bulk: Bulk.STOCK, treasure: true, cost: "500 gp",    description: `A refined gold ingot worth 500 gp.` },
+  { name: "Mithral Ingot",       bulk: Bulk.STOCK, treasure: true, cost: "500 gp",    description: `A refined mithral ingot worth 500 gp.` },
+  { name: "Adamantine Ingot",    bulk: Bulk.STOCK, treasure: true, cost: "500 gp",    description: `A refined adamantine ingot worth 500 gp.` },
 
   // Nuggets — variable value range, Bulky
-  { name: "Copper Nugget",       bulk: Bulk.BULKY,  cost: "50–125 gp",    description: `A raw copper nugget. Worth 50–125 gp depending on size and purity.` },
-  { name: "Iron / Silver Nugget",bulk: Bulk.BULKY,  cost: "100–250 gp",   description: `A raw iron or silver nugget. Worth 100–250 gp depending on size and purity.` },
-  { name: "Gold Nugget",         bulk: Bulk.BULKY,  cost: "200–500 gp",   description: `A raw gold nugget. Worth 200–500 gp depending on size and purity.` },
+  { name: "Copper Nugget",        bulk: Bulk.BULKY, treasure: true, editableCost: true, cost: "50–125 gp",  description: `A raw copper nugget. Worth 50–125 gp depending on size and purity.` },
+  { name: "Iron / Silver Nugget", bulk: Bulk.BULKY, treasure: true, editableCost: true, cost: "100–250 gp", description: `A raw iron or silver nugget. Worth 100–250 gp depending on size and purity.` },
+  { name: "Gold Nugget",          bulk: Bulk.BULKY, treasure: true, editableCost: true, cost: "200–500 gp", description: `A raw gold nugget. Worth 200–500 gp depending on size and purity.` },
+  { name: "Mithral Nugget",       bulk: Bulk.BULKY, treasure: true, editableCost: true, cost: "200–500 gp", description: `A raw mithral nugget. Worth 200–500 gp depending on size and purity.` },
+  { name: "Adamantine Nugget",    bulk: Bulk.BULKY, treasure: true, editableCost: true, cost: "200–500 gp", description: `A raw adamantine nugget. Worth 200–500 gp depending on size and purity.` },
 
   { _section: "Potions" },
   // ── POTIONS ───────────────────────────────────────────────────────────────

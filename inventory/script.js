@@ -217,9 +217,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
     const id = slotData.bulk ? slotData.bulk.id
              : (lib || { bulk: Bulk.STOCK }).bulk.id;
-    if (id === 'packable') return (slotData.variables?.qty?.value || 1) * 0.25;
-    if (id === 'bulky' || id === 'verybulky') return 2;
-    return 1;
+    const qty = v?.qty?.value || 1;
+    if (id === 'packable') return qty * 0.25;
+    if (id === 'bulky' || id === 'verybulky') return 2 * qty;
+    return 1 * qty;
   }
 
   function containerFillUsed(container) {
@@ -259,7 +260,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   let ignoreNextBlur = false;
 
   // Tracks which item is currently shown in the inspector (key = containerId-r-c or shop-name)
-  let inspectorItemKey = null;
+  let inspectorItemKey    = null;
+  let _customEditKey      = null;
+  let _customEditOpen     = false;
 
   // Drag state
   let dragState        = null;
@@ -543,24 +546,34 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
             : `${gridSymbol}&nbsp;${libForLabel.name}`;
           label.classList.add('slot-label-symbol');
         } else {
-          if (isPackableSlot) {
+          const libForCost = libForLabel;
+          const cc = slotData.costCoins;
+          const costSuffix = (libForCost && libForCost.editableCost) && cc
+            ? (() => {
+                const parts = [cc.pp?`${cc.pp}pp`:'',cc.gp?`${cc.gp}gp`:'',cc.sp?`${cc.sp}sp`:'',cc.cp?`${cc.cp}cp`:''].filter(Boolean);
+                return parts.length ? ` (${parts.join(' ')})` : '';
+              })()
+            : '';
+          {
             const qty = slotData.variables?.qty?.value ?? 1;
-            const chargesEntry = varEntries.find(([k, v]) => k !== 'qty' && (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number');
-            const chargesSuffix = chargesEntry ? ` (${chargesEntry[1].value})` : '';
-            label.textContent = `${qty} × ${matPfx}${dispName}${chargesSuffix}`;
-          } else {
-            label.textContent = (numVar && numVar.value !== 1)
-              ? `${numVar.value} × ${matPfx}${dispName}`
-              : `${matPfx}${dispName}`;
+            const qtyPrefix = qty > 1 ? `${qty} × ` : '';
+            const usesVar = slotData.variables?.uses ?? slotData.variables?.count;
+            const usesSuffix = usesVar !== undefined ? ` (${usesVar.value})` : '';
+            label.textContent = `${qtyPrefix}${matPfx}${dispName}${usesSuffix}${costSuffix}`;
           }
         }
       }
 
+      const _slotLib = getLibraryItem(slotData.name);
+      const _isTreasureSlot = !!(_slotLib && _slotLib.treasure) || !!slotData.treasure;
+      const _infoIconClass = _isTreasureSlot ? 'slot-info-inline slot-treasure' : 'slot-info-inline';
+      const _infoIconHtml  = _isTreasureSlot ? '<i class="fas fa-crown"></i>' : '<i class="fas fa-circle-info"></i>';
+
       if (linkedContainer) {
-        // Info icon (left:4px) — clicking the label opens the inspector
+        // Info/treasure icon (left:4px) — clicking the label opens the inspector
         const infoIcon = document.createElement('span');
-        infoIcon.className = 'slot-info-inline' + (isInspected ? ' active' : '');
-        infoIcon.innerHTML = '<i class="fas fa-circle-info"></i>';
+        infoIcon.className = _infoIconClass + (isInspected ? ' active' : '');
+        infoIcon.innerHTML = _infoIconHtml;
         label.appendChild(infoIcon);
 
         // Eye icon (left:18px, right of info) — visual open/closed indicator only
@@ -589,10 +602,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           render();
         });
       } else {
-        // Info icon inline; clicking label (name + icon) opens inspector
+        // Info/treasure icon inline; clicking label (name + icon) opens inspector
         const infoIcon = document.createElement('span');
-        infoIcon.className = 'slot-info-inline' + (isInspected ? ' active' : '');
-        infoIcon.innerHTML = '<i class="fas fa-circle-info"></i>';
+        infoIcon.className = _infoIconClass + (isInspected ? ' active' : '');
+        infoIcon.innerHTML = _infoIconHtml;
         label.appendChild(infoIcon);
 
         label.style.cursor = 'pointer';
@@ -815,34 +828,67 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       _nameEl.classList.remove('insp-name-symbol');
     }
 
-    // ── Rename button (custom items only, left of name) ──
-    const prevRenameBtn = document.getElementById('insp-rename-btn');
-    if (prevRenameBtn) prevRenameBtn.remove();
+    // ── Edit Item button (custom items only) ──
+    const prevEditBtn = document.getElementById('insp-edit-btn');
+    if (prevEditBtn) prevEditBtn.remove();
     if (slotData.custom && container) {
-      const renameBtn = document.createElement('button');
-      renameBtn.id = 'insp-rename-btn';
-      renameBtn.className = 'insp-rename-btn';
-      renameBtn.innerHTML = '<i class="fas fa-pencil"></i>';
-      renameBtn.title = 'Rename';
-      renameBtn.addEventListener('click', () => {
-        const slotWrap = document.querySelector(
-          `[data-container-id="${container.id}"][data-r="${r}"][data-c="${c}"]`
-        );
-        const slotInput = slotWrap && slotWrap.querySelector('.slot-input');
-        if (slotInput) { slotInput.classList.add('slot-editing'); slotInput.focus(); slotInput.select(); }
+      const itemKey = `${container.id}-${r}-${c}`;
+      if (_customEditKey !== itemKey) { _customEditKey = itemKey; _customEditOpen = false; }
+      const editBtn = document.createElement('button');
+      editBtn.id = 'insp-edit-btn';
+      editBtn.className = 'insp-rename-btn' + (_customEditOpen ? ' active' : '');
+      editBtn.innerHTML = '<i class="fas fa-sliders"></i>';
+      editBtn.title = _customEditOpen ? 'Close item editor' : 'Edit item';
+      editBtn.addEventListener('click', () => {
+        _customEditOpen = !_customEditOpen;
+        showInspector(slotData, container, r, c, packIdx);
       });
-      const nameEl = document.getElementById('insp-name');
-      nameEl.parentNode.insertBefore(renameBtn, nameEl);
+      document.getElementById('insp-name').parentNode.insertBefore(editBtn, document.getElementById('insp-name'));
+    } else {
+      _customEditKey = null; _customEditOpen = false;
     }
 
     // ── Inline numeric vars (count / charges) next to the name ──
     const inlineEl = document.getElementById('insp-inline-vars');
     inlineEl.innerHTML = '';
     const COIN_KEYS = new Set(['pp', 'gp', 'sp', 'cp']);
-    const isCoinItem = Object.keys(slotData.variables || {}).every(k => COIN_KEYS.has(k));
+    const _varKeys = Object.keys(slotData.variables || {});
+    const isCoinItem = _varKeys.length > 0 && _varKeys.every(k => COIN_KEYS.has(k));
     if (isCoinItem) inlineEl.classList.add('coin-vars-layout');
     else            inlineEl.classList.remove('coin-vars-layout');
-    for (const [key, meta] of Object.entries(slotData.variables || {})) {
+
+    // Always show qty stepper for inventory items (not coin purses, not shop-only)
+    if (container && !isCoinItem) {
+      const qtyVal = slotData.variables?.qty?.value ?? 1;
+      const qtyWrap = document.createElement('div');
+      qtyWrap.className = 'insp-inline-var';
+      qtyWrap.innerHTML = `
+        <span class="insp-inline-label">qty</span>
+        <button class="insp-btn-sm" data-qd="-1">−</button>
+        <input class="insp-num-sm" type="number" value="${qtyVal}" min="1" max="999" data-qinp />
+        <button class="insp-btn-sm" data-qd="1">+</button>
+      `;
+      const setQty = v => {
+        v = Math.max(1, Math.min(999, v));
+        slotData.variables = slotData.variables || {};
+        slotData.variables.qty = { value: v, control: 'both', min: 1, max: 999 };
+        qtyWrap.querySelector('[data-qinp]').value = v;
+        render();
+      };
+      qtyWrap.querySelectorAll('[data-qd]').forEach(btn =>
+        btn.addEventListener('click', () => setQty((slotData.variables?.qty?.value ?? 1) + parseInt(btn.dataset.qd)))
+      );
+      qtyWrap.querySelector('[data-qinp]').addEventListener('input', e => {
+        const v = parseInt(e.target.value);
+        if (!isNaN(v)) setQty(v);
+      });
+      inlineEl.appendChild(qtyWrap);
+    }
+
+    const sortedVarEntries = Object.entries(slotData.variables || {})
+      .sort(([a], [b]) => (a === 'qty' ? -1 : b === 'qty' ? 1 : 0));
+    for (const [key, meta] of sortedVarEntries) {
+      if (key === 'qty') continue; // rendered above
       if (meta.control !== 'plusminus' && meta.control !== 'both') continue;
       const wrap = document.createElement('div');
       wrap.className = 'insp-inline-var' + (isCoinItem ? ' coin-inline-var' : '');
@@ -904,9 +950,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const descEdit = document.getElementById('insp-desc-edit');
     const notesEl = document.getElementById('insp-notes');
     if (slotData.custom) {
-      descP.hidden = true; descEdit.hidden = false; notesEl.hidden = true;
-      descEdit.value = slotData.description || '';
-      descEdit.oninput = () => { slotData.description = descEdit.value; };
+      const customDesc = slotData.description || '';
+      descP.hidden = !customDesc; descEdit.hidden = true; notesEl.hidden = true;
+      if (customDesc) descP.innerHTML = customDesc;
     } else if (itemHidden) {
       descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
       descP.innerHTML = '<i>Details not available.</i>';
@@ -925,8 +971,26 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     // ── Cost ──
     const costEl = document.getElementById('insp-cost');
-    costEl.hidden = !(lib && lib.cost) || itemHidden;
-    if (lib && lib.cost && !itemHidden) costEl.textContent = lib.cost;
+    const isTreasure = !!(lib && lib.treasure) || !!slotData.treasure;
+    const cc = slotData.costCoins;
+    const ccTotalCp = cc ? (cc.pp||0)*1000 + (cc.gp||0)*100 + (cc.sp||0)*10 + (cc.cp||0) : 0;
+    const ccStr = cc && ccTotalCp > 0 ? [
+      cc.pp ? `${cc.pp}pp` : '', cc.gp ? `${cc.gp}gp` : '',
+      cc.sp ? `${cc.sp}sp` : '', cc.cp ? `${cc.cp}cp` : '',
+    ].filter(Boolean).join(' ') : null;
+    const displayCost = ccStr || (lib && lib.cost);
+    costEl.hidden = !displayCost || itemHidden;
+    if (displayCost && !itemHidden) {
+      costEl.innerHTML = '';
+      if (isTreasure) {
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-crown';
+        icon.title = 'Treasure — sells at full price';
+        icon.style.cssText = 'font-size:10px;margin-right:4px;color:rgba(255,205,60,0.85);';
+        costEl.appendChild(icon);
+      }
+      costEl.appendChild(document.createTextNode(displayCost));
+    }
 
     // ── Remove ──
     const removeBtnEl = document.getElementById('insp-remove');
@@ -946,90 +1010,32 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const propsEl = document.getElementById('insp-props');
     propsEl.innerHTML = '';
 
-    // Category dropdown — custom items only (first in row)
-    if (slotData.custom) {
-      const curCat = slotData.category
-        || (slotData.isContainer ? 'container' : slotData.isWeapon ? 'weapon' : '');
-      const catSel = document.createElement('select');
-      catSel.className = 'insp-select';
-      [
-        ['','None'], ['weapon','Weapon'], ['armor','Armor'], ['ammunition','Ammunition'],
-        ['shield','Shield'], ['wondrous','Wondrous Item'], ['container','Container'],
-      ].forEach(([val, label]) => {
-        const o = document.createElement('option');
-        o.value = val; o.textContent = label;
-        if (val === curCat) o.selected = true;
-        catSel.appendChild(o);
+    // Editable cost fields — non-custom treasure items with variable cost (DM only)
+    const showCostInput = window._isDM && !itemHidden && container
+      && (lib && lib.editableCost) && !slotData.custom;
+    if (showCostInput) {
+      if (!slotData.costCoins) slotData.costCoins = { pp: 0, gp: 0, sp: 0, cp: 0 };
+      const coins = slotData.costCoins;
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;align-items:center;gap:4px;flex-shrink:0;';
+      [['pp','rgba(190,145,255,0.9)'], ['gp','rgba(255,205,60,0.9)'],
+       ['sp','rgba(200,200,215,0.85)'], ['cp','rgba(205,135,65,0.85)']].forEach(([key, color]) => {
+        const lbl = document.createElement('span');
+        lbl.textContent = key.toUpperCase();
+        lbl.style.cssText = `font-size:10px;font-weight:700;color:${color};`;
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.min = '0'; inp.max = '999999';
+        inp.value = coins[key] || 0;
+        inp.className = 'cost-coin-inp';
+        inp.style.cssText = 'width:48px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--text);font-size:13px;font-weight:600;text-align:center;padding:3px 4px;outline:none;';
+        inp.addEventListener('change', () => {
+          coins[key] = Math.max(0, parseInt(inp.value) || 0);
+          showInspector(slotData, container, r, c, packIdx);
+          render();
+        });
+        wrap.appendChild(lbl); wrap.appendChild(inp);
       });
-      catSel.addEventListener('change', () => {
-        const prevCat = slotData.category || (slotData.isContainer ? 'container' : slotData.isWeapon ? 'weapon' : '');
-        const newCat  = catSel.value;
-
-        // Leaving container — remove linked container with confirmation
-        if (prevCat === 'container' && slotData.isContainer) {
-          if (slotData.containerId) {
-            const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
-            if (linked && containerHasItems(linked)) {
-              if (!confirm(`This will remove the ${slotData.name} container and its contents. Continue?`)) {
-                catSel.value = 'container'; return;
-              }
-            }
-            if (linked) state.containers = state.containers.filter(cnt => cnt !== linked);
-            slotData.containerId = null;
-          }
-          slotData.isContainer = false;
-        }
-
-        slotData.category = newCat;
-        slotData.isWeapon  = (newCat === 'weapon');
-        slotData.variables = slotData.variables || {};
-
-        if (newCat === 'weapon') {
-          if (!slotData.variables.weapon) slotData.variables.weapon = { control: 'select', value: WEAPON_OPTIONS[0], options: WEAPON_OPTIONS };
-          delete slotData.variables.armor;
-        } else if (newCat === 'armor' || newCat === 'shield') {
-          if (!slotData.variables.armor) slotData.variables.armor = { control: 'select', value: ARMOR_OPTIONS[0], options: ARMOR_OPTIONS };
-          delete slotData.variables.weapon;
-        } else if (newCat === 'container') {
-          slotData.isContainer   = true;
-          slotData.containerRows = slotData.containerRows || 2;
-          if (!slotData.containerId) createLinkedContainer(slotData, container.id, r, c);
-          delete slotData.variables.weapon;
-          delete slotData.variables.armor;
-        } else {
-          delete slotData.variables.weapon;
-          delete slotData.variables.armor;
-        }
-
-        const silverOk = ['weapon','ammunition'].includes(newCat);
-        const metalOk  = ['weapon','armor','shield','ammunition'].includes(newCat);
-        if (!silverOk) { slotData.silvered = false; if (slotData.material === 'silvered') slotData.material = null; }
-        if (!metalOk  && (slotData.material === 'mithral' || slotData.material === 'adamantine')) slotData.material = null;
-
-        render(); showInspector(slotData, container, r, c);
-      });
-      propsEl.appendChild(catSel);
-    }
-
-    // Bulk dropdown — custom items only
-    if (slotData.custom) {
-      const curBulk = slotData.bulk ? slotData.bulk.id : 'stock';
-      const bulkSel = document.createElement('select');
-      bulkSel.className = 'insp-select';
-      [['stock','Stock'], ['packable','Pack'], ['bulky','Bulky']].forEach(([bid, label]) => {
-        const o = document.createElement('option');
-        o.value = bid; o.textContent = label;
-        if (bid === curBulk) o.selected = true;
-        bulkSel.appendChild(o);
-      });
-      bulkSel.addEventListener('change', () => {
-        const newBulk = Bulk[bulkSel.value.toUpperCase()] || Bulk.STOCK;
-        container.slots[r][c] = null;
-        slotData.bulk = newBulk;
-        placeSlotData(slotData, container, r, c);
-        showInspector(slotData, container, r, c);
-      });
-      propsEl.appendChild(bulkSel);
+      propsEl.appendChild(wrap);
     }
 
     // Material chips and type selects — always in propsEl (header row), for both inventory and shop
@@ -1155,30 +1161,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       ctrlTarget.appendChild(sel);
     }
 
-    // Has Uses toggle — custom items only
-    if (slotData.custom) {
-      const vars = slotData.variables || {};
-      const hasUsesActive = !!(slotData.hasUses || vars.uses || vars.count);
-      const chip = document.createElement('button');
-      chip.className = 'prop-chip' + (hasUsesActive ? ' active' : '');
-      chip.textContent = 'Has Uses';
-      chip.onclick = () => {
-        if (hasUsesActive) {
-          slotData.hasUses = false;
-          delete slotData.variables.uses;
-          delete slotData.variables.count;
-        } else {
-          slotData.hasUses = true;
-          slotData.variables = slotData.variables || {};
-          if (!slotData.variables.uses && !slotData.variables.count) {
-            slotData.variables.uses = { value: 1, control: 'both', min: 0 };
-          }
-        }
-        render(); showInspector(slotData, container, r, c);
-      };
-      propsEl.appendChild(chip);
-    }
-
     propsEl.hidden = propsEl.children.length === 0;
 
     // Container rows input (only when container chip is active)
@@ -1233,6 +1215,151 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       varsEl.appendChild(div);
     }
 
+    // ── Custom item edit panel ──
+    const prevEditPanel = document.getElementById('insp-custom-edit-panel');
+    if (prevEditPanel) prevEditPanel.remove();
+    if (slotData.custom && container && _customEditOpen) {
+      const panel = document.createElement('div');
+      panel.id = 'insp-custom-edit-panel';
+
+      const addRow = (...children) => {
+        const row = document.createElement('div');
+        row.className = 'custom-edit-row';
+        children.forEach(c => row.appendChild(c));
+        panel.appendChild(row);
+      };
+
+      const makeLabel = text => {
+        const s = document.createElement('span');
+        s.className = 'custom-edit-label';
+        s.textContent = text;
+        return s;
+      };
+
+      // Name
+      const nameInp = document.createElement('input');
+      nameInp.type = 'text'; nameInp.className = 'custom-edit-name-inp';
+      nameInp.placeholder = 'Item name'; nameInp.value = slotData.name || '';
+      nameInp.enterKeyHint = 'done';
+      const commitName = () => {
+        const v = nameInp.value.trim();
+        if (!v || v === slotData.name) return;
+        slotData.name = v;
+        document.getElementById('insp-name').textContent = v;
+        render();
+      };
+      nameInp.addEventListener('input', () => {
+        const v = nameInp.value.trim();
+        if (v) document.getElementById('insp-name').textContent = v;
+      });
+      nameInp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); commitName(); nameInp.blur(); }
+      });
+      nameInp.addEventListener('blur', commitName);
+      addRow(makeLabel('Name'), nameInp);
+
+      // Type + Bulk
+      const curCat = slotData.category || (slotData.isContainer ? 'container' : slotData.isWeapon ? 'weapon' : '');
+      const catSel = document.createElement('select'); catSel.className = 'insp-select';
+      [['','None'],['weapon','Weapon'],['armor','Armor'],['ammunition','Ammo'],
+       ['shield','Shield'],['wondrous','Wondrous'],['container','Container']
+      ].forEach(([val, lbl]) => {
+        const o = document.createElement('option');
+        o.value = val; o.textContent = lbl;
+        if (val === curCat) o.selected = true;
+        catSel.appendChild(o);
+      });
+      catSel.addEventListener('change', () => {
+        const prevCat = slotData.category || (slotData.isContainer ? 'container' : slotData.isWeapon ? 'weapon' : '');
+        const newCat = catSel.value;
+        if (prevCat === 'container' && slotData.isContainer && slotData.containerId) {
+          const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+          if (linked && containerHasItems(linked)) {
+            if (!confirm(`This will remove the ${slotData.name} container and its contents. Continue?`)) { catSel.value = 'container'; return; }
+          }
+          if (linked) state.containers = state.containers.filter(cnt => cnt !== linked);
+          slotData.containerId = null; slotData.isContainer = false;
+        }
+        slotData.category = newCat; slotData.isWeapon = (newCat === 'weapon');
+        slotData.variables = slotData.variables || {};
+        if (newCat === 'weapon') { if (!slotData.variables.weapon) slotData.variables.weapon = { control: 'select', value: WEAPON_OPTIONS[0], options: WEAPON_OPTIONS }; delete slotData.variables.armor; }
+        else if (newCat === 'armor' || newCat === 'shield') { if (!slotData.variables.armor) slotData.variables.armor = { control: 'select', value: ARMOR_OPTIONS[0], options: ARMOR_OPTIONS }; delete slotData.variables.weapon; }
+        else if (newCat === 'container') { slotData.isContainer = true; slotData.containerRows = slotData.containerRows || 2; if (!slotData.containerId) createLinkedContainer(slotData, container.id, r, c); delete slotData.variables.weapon; delete slotData.variables.armor; }
+        else { delete slotData.variables.weapon; delete slotData.variables.armor; }
+        const silverOk = ['weapon','ammunition'].includes(newCat);
+        const metalOk  = ['weapon','armor','shield','ammunition'].includes(newCat);
+        if (!silverOk) { slotData.silvered = false; if (slotData.material === 'silvered') slotData.material = null; }
+        if (!metalOk && (slotData.material === 'mithral' || slotData.material === 'adamantine')) slotData.material = null;
+        render(); showInspector(slotData, container, r, c);
+      });
+
+      const curBulk = slotData.bulk ? slotData.bulk.id : 'stock';
+      const bulkSel = document.createElement('select'); bulkSel.className = 'insp-select';
+      [['stock','Stock'],['packable','Pack'],['bulky','Bulky']].forEach(([bid, lbl]) => {
+        const o = document.createElement('option');
+        o.value = bid; o.textContent = lbl;
+        if (bid === curBulk) o.selected = true;
+        bulkSel.appendChild(o);
+      });
+      bulkSel.addEventListener('change', () => {
+        const newBulk = Bulk[bulkSel.value.toUpperCase()] || Bulk.STOCK;
+        container.slots[r][c] = null; slotData.bulk = newBulk;
+        placeSlotData(slotData, container, r, c); showInspector(slotData, container, r, c);
+      });
+      // Treasure + Has Uses chips
+      const vars = slotData.variables || {};
+      const isTreasureCustom = !!slotData.treasure;
+      const hasUsesActive = !!(slotData.hasUses || vars.uses || vars.count);
+
+      const makeChip = (label, active, onclick) => {
+        const b = document.createElement('button');
+        b.className = 'prop-chip' + (active ? ' active' : '');
+        b.textContent = label; b.onclick = onclick;
+        return b;
+      };
+
+      const treasureChip = makeChip('Treasure', isTreasureCustom, () => {
+        slotData.treasure = !slotData.treasure;
+        render(); showInspector(slotData, container, r, c);
+      });
+      const usesChip = makeChip('Has Uses', hasUsesActive, () => {
+        if (hasUsesActive) { slotData.hasUses = false; delete (slotData.variables || {}).uses; delete (slotData.variables || {}).count; }
+        else { slotData.hasUses = true; slotData.variables = slotData.variables || {}; if (!slotData.variables.uses && !slotData.variables.count) slotData.variables.uses = { value: 1, control: 'both', min: 0 }; }
+        render(); showInspector(slotData, container, r, c);
+      });
+
+      addRow(makeLabel('Type'), catSel, makeLabel('Bulk'), bulkSel, treasureChip, usesChip);
+
+      // Cost fields
+      if (!slotData.costCoins) slotData.costCoins = { pp: 0, gp: 0, sp: 0, cp: 0 };
+      const costCoins = slotData.costCoins;
+      const costWrap = document.createElement('div');
+      costWrap.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;';
+      [['pp','rgba(190,145,255,0.9)'],['gp','rgba(255,205,60,0.9)'],['sp','rgba(200,200,215,0.85)'],['cp','rgba(205,135,65,0.85)']].forEach(([key, color]) => {
+        const lbl = document.createElement('span');
+        lbl.textContent = key.toUpperCase();
+        lbl.style.cssText = `font-size:10px;font-weight:700;color:${color};`;
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.min = '0'; inp.max = '999999';
+        inp.value = costCoins[key] || 0;
+        inp.className = 'cost-coin-inp';
+        inp.style.cssText = 'width:48px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--text);font-size:13px;font-weight:600;text-align:center;padding:3px 4px;outline:none;';
+        inp.addEventListener('change', () => { costCoins[key] = Math.max(0, parseInt(inp.value) || 0); showInspector(slotData, container, r, c, packIdx); render(); });
+        costWrap.appendChild(lbl); costWrap.appendChild(inp);
+      });
+      addRow(makeLabel('Cost'), costWrap);
+
+      // Description
+      const descTa = document.createElement('textarea');
+      descTa.className = 'custom-edit-desc';
+      descTa.placeholder = 'Description…';
+      descTa.value = slotData.description || '';
+      descTa.oninput = () => { slotData.description = descTa.value; };
+      panel.appendChild(descTa);
+
+      varsEl.parentNode.insertBefore(panel, varsEl);
+    }
+
     inspectorEl.classList.remove('inspector-collapsed');
   }
 
@@ -1241,6 +1368,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     inspectorEl.classList.add('inspector-collapsed');
     document.getElementById('insp-name').textContent = '';
     inspectorItemKey = null;
+    _customEditKey = null; _customEditOpen = false;
   }
 
   function toggleInspectorFor(key, slotData, container, r, c) {
@@ -1455,7 +1583,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     // Sell: dropped on shop tab button
     if (el && (el === _shopTabBtn || _shopTabBtn.contains(el)) && srcContainer) {
       const lib = getLibraryItem(slotData.name);
-      const halfCp = lib && lib.cost ? Math.floor(parseCostCp(lib.cost) / 2) : 0;
+      const isTreasure = !!(lib && lib.treasure) || !!slotData.treasure;
+      const sc = slotData.costCoins;
+      const qty = slotData.variables?.qty?.value || 1;
+      const unitCp = sc
+        ? (sc.pp||0)*1000 + (sc.gp||0)*100 + (sc.sp||0)*10 + (sc.cp||0)
+        : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
+      const fullCp = unitCp * qty;
+      const halfCp = fullCp > 0 ? (isTreasure ? fullCp : Math.floor(fullCp / 2)) : 0;
       if (halfCp > 0) {
         removeFromSource();
         const coins = cpToCoins(halfCp);

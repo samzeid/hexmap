@@ -1149,6 +1149,8 @@ main {
 .slot-info-inline.active { color: rgba(130, 190, 255, 0.95); }
 .slot-label:hover .slot-info-inline { color: rgba(255, 255, 255, 0.55); }
 .slot-label:hover .slot-info-inline.active { color: rgba(130, 190, 255, 0.95); }
+/* Treasure crown: gold at rest, matches info icon on hover/active */
+.slot-info-inline.slot-treasure { color: rgba(255, 205, 60, 0.45); }
 
 /* Slot highlight when linked container is open */
 .slot-container-open { }
@@ -1420,6 +1422,71 @@ main {
 }
 .insp-rename-btn:hover { color: rgba(255,255,255,0.8); background: rgba(255,255,255,0.08); }
 .insp-rename-btn:active { background: rgba(255,255,255,0.12); }
+.insp-rename-btn.active { color: rgba(140,200,255,0.9); background: rgba(100,160,255,0.12); }
+.insp-rename-btn.active:hover { background: rgba(100,160,255,0.2); }
+
+/* ── Custom item edit panel ────────────────────────────────── */
+#insp-custom-edit-panel {
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.custom-edit-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.custom-edit-name-inp {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 5px 8px;
+  outline: none;
+  font-family: inherit;
+}
+.custom-edit-name-inp:focus {
+  border-color: rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.1);
+}
+
+.custom-edit-desc {
+  width: 100%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  line-height: 1.5;
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 64px;
+  outline: none;
+}
+.custom-edit-desc:focus { border-color: rgba(255,255,255,0.25); }
+.custom-edit-desc::placeholder { color: var(--muted); }
 
 /* Inline count/charges stepper next to item name */
 #insp-inline-vars {
@@ -1510,6 +1577,10 @@ main {
 
 .insp-num-sm::-webkit-inner-spin-button,
 .insp-num-sm::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+.cost-coin-inp { -moz-appearance: textfield; }
+.cost-coin-inp::-webkit-inner-spin-button,
+.cost-coin-inp::-webkit-outer-spin-button { -webkit-appearance: none; }
 
 #insp-toggle {
   background: rgba(255,255,255,0.08);
