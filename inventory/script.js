@@ -958,6 +958,30 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
       inlineEl.appendChild(wrap);
     }
+    const refreshCostDisplay = () => {
+      if (slotData.hasUses !== 'coins') return;
+      const costEl = document.getElementById('insp-cost');
+      if (!costEl || costEl.hidden) return;
+      const cv = slotData.variables || {};
+      const mult = Math.max(1, cv.uses?.value ?? cv.count?.value ?? 1);
+      const cc2 = slotData.costCoins;
+      const base2 = cc2
+        ? (cc2.pp||0)*1000 + (cc2.gp||0)*100 + (cc2.sp||0)*10 + (cc2.cp||0)
+        : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
+      const total2 = (base2 + getSlotTypeCostCp(slotData)) * mult;
+      const parts2 = [];
+      let rem2 = total2;
+      const gp2 = Math.floor(rem2 / 100); rem2 %= 100;
+      const sp2 = Math.floor(rem2 / 10);  rem2 %= 10;
+      if (gp2) parts2.push(gp2 + 'gp');
+      if (sp2) parts2.push(sp2 + 'sp');
+      if (rem2) parts2.push(rem2 + 'cp');
+      const str = parts2.join(' ') || '0cp';
+      const textNode = [...costEl.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
+      if (textNode) textNode.textContent = str;
+      else costEl.appendChild(document.createTextNode(str));
+    };
+
     inlineEl.querySelectorAll('.insp-btn-sm').forEach(btn => {
       btn.addEventListener('click', () => {
         const m = slotData.variables[btn.dataset.k];
@@ -967,6 +991,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         m.value = v;
         inlineEl.querySelector(`.insp-num-sm[data-k="${btn.dataset.k}"]`).value = v;
         render();
+        refreshCostDisplay();
       });
     });
     inlineEl.querySelectorAll('.insp-num-sm').forEach(inp => {
@@ -978,6 +1003,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if (typeof m.max === 'number') v = Math.min(m.max, v);
         m.value = v;
         render();
+        refreshCostDisplay();
       });
       inp.addEventListener('blur', () => { inp.value = slotData.variables[inp.dataset.k].value; });
     });
@@ -1018,10 +1044,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const cc = slotData.costCoins;
     const ccTotalCp = cc ? (cc.pp||0)*1000 + (cc.gp||0)*100 + (cc.sp||0)*10 + (cc.cp||0) : 0;
     const typeCostCp = getSlotTypeCostCp(slotData);
+    const coinUsesMult = getSlotCoinUsesMultiplier(slotData);
     let displayCostStr;
-    if (typeCostCp > 0) {
+    if (typeCostCp > 0 || coinUsesMult > 1) {
       const baseCp = ccTotalCp > 0 ? ccTotalCp : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
-      const totalCp = baseCp + typeCostCp;
+      const totalCp = (baseCp + typeCostCp) * coinUsesMult;
       const parts = [];
       let rem = totalCp;
       const gp = Math.floor(rem / 100); rem %= 100;
@@ -1415,7 +1442,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
       const vars = slotData.variables || {};
       const isTreasureCustom = !!slotData.treasure;
-      const hasUsesActive = !!(slotData.hasUses || vars.uses || vars.count);
 
       const makeChip = (label, active, onclick) => {
         const b = document.createElement('button');
@@ -1424,11 +1450,32 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         return b;
       };
 
-      const usesChip = makeChip('Has Uses', hasUsesActive, () => {
-        if (hasUsesActive) { slotData.hasUses = false; delete (slotData.variables || {}).uses; delete (slotData.variables || {}).count; }
-        else { slotData.hasUses = true; slotData.variables = slotData.variables || {}; if (!slotData.variables.uses && !slotData.variables.count) slotData.variables.uses = { value: 1, control: 'both', min: 0 }; }
+      // Three-state uses toggle: 0 = none, 1 = uses, 2 = coin-uses
+      const getUsesState = () =>
+        slotData.hasUses === 'coins' ? 2
+        : (slotData.hasUses || vars.uses || vars.count) ? 1 : 0;
+      const usesChip = document.createElement('button');
+      const refreshUsesChip = () => {
+        const s = getUsesState();
+        usesChip.className = 'prop-chip' + (s === 1 ? ' active' : s === 2 ? ' active-coins' : '');
+        usesChip.innerHTML = s === 2 ? '<i class="fas fa-coins"></i> Uses' : 'Uses';
+      };
+      refreshUsesChip();
+      usesChip.onclick = () => {
+        const next = (getUsesState() + 1) % 3;
+        if (next === 0) {
+          slotData.hasUses = false;
+          delete (slotData.variables || {}).uses;
+          delete (slotData.variables || {}).count;
+        } else {
+          slotData.hasUses = next === 2 ? 'coins' : true;
+          slotData.variables = slotData.variables || {};
+          if (!slotData.variables.uses && !slotData.variables.count)
+            slotData.variables.uses = { value: 1, control: 'both', min: 0 };
+        }
         render(); showInspector(slotData, container, r, c);
-      });
+      };
+
       const treasureChip = makeChip('Treasure', isTreasureCustom, () => {
         slotData.treasure = !slotData.treasure;
         render(); showInspector(slotData, container, r, c);
@@ -1535,6 +1582,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (!typeName) return 0;
     const lib = getLibraryItem(typeName);
     return lib?.cost ? parseCostCp(lib.cost) : 0;
+  }
+
+  function getSlotCoinUsesMultiplier(slotData) {
+    if (slotData.hasUses !== 'coins') return 1;
+    const v = slotData.variables || {};
+    return Math.max(1, v.uses?.value ?? v.count?.value ?? 1);
   }
 
   function parseCostCp(costStr) {
@@ -1710,10 +1763,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const isTreasure = !!(lib && lib.treasure) || !!slotData.treasure;
       const sc = slotData.costCoins;
       const qty = slotData.variables?.qty?.value || 1;
-      const unitCp = (sc
+      const unitCp = ((sc
         ? (sc.pp||0)*1000 + (sc.gp||0)*100 + (sc.sp||0)*10 + (sc.cp||0)
         : (lib && lib.cost ? parseCostCp(lib.cost) : 0))
-        + getSlotTypeCostCp(slotData);
+        + getSlotTypeCostCp(slotData))
+        * getSlotCoinUsesMultiplier(slotData);
       const fullCp = unitCp * qty;
       const halfCp = fullCp > 0 ? (isTreasure ? fullCp : Math.floor(fullCp / 2)) : 0;
       if (halfCp > 0) {
