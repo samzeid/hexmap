@@ -1145,20 +1145,23 @@ main {
 .slot-eye-inline                      { color: rgba(160, 100, 255, 0.35); }
 .slot-container-open .slot-eye-inline { color: rgba(190, 150, 255, 0.9); }
 /* Info: highlighted when inspector is open */
-.slot-info-inline        { color: rgba(255, 255, 255, 0.3); }
-.slot-info-inline.active { color: rgba(130, 190, 255, 0.95); }
-.slot-label:hover .slot-info-inline { color: rgba(255, 255, 255, 0.55); }
+.slot-info-inline                      { color: rgba(255, 255, 255, 0.3); }
+/* Treasure crown and coin purse: tinted at rest — must come before .active so active/hover rules win */
+.slot-info-inline.slot-treasure        { color: rgba(255, 205,  60, 0.45); }
+.slot-info-inline.slot-coin-pp         { color: rgba(190, 145, 255, 0.45); }
+.slot-info-inline.slot-coin-gp         { color: rgba(255, 205,  60, 0.45); }
+.slot-info-inline.slot-coin-sp         { color: rgba(200, 200, 215, 0.45); }
+.slot-info-inline.slot-coin-cp         { color: rgba(205, 135,  65, 0.45); }
+.slot-info-inline.slot-coin-mixed      { color: rgba(255, 255, 255, 0.35); }
+.slot-info-inline.active               { color: rgba(130, 190, 255, 0.95); }
+.slot-label:hover .slot-info-inline    { color: rgba(255, 255, 255, 0.55); }
 .slot-label:hover .slot-info-inline.active { color: rgba(130, 190, 255, 0.95); }
-/* Treasure crown: gold at rest, matches info icon on hover/active */
-.slot-info-inline.slot-treasure { color: rgba(255, 205, 60, 0.45); }
 
 /* Slot highlight when linked container is open */
 .slot-container-open { }
 .slot-container-open .slot-input.slot-filled { border-left-color: rgba(180, 120, 255, 0.85); }
 
-/* Packable item green tint */
-.slot-packable { background: rgba(80, 210, 130, 0.07); }
-.slot-packable .slot-input.slot-filled { border-left-color: rgba(80, 210, 130, 0.5); }
+/* Packable / Bulky — underline only */
 
 
 /* Label overlay — hidden when input is focused */
@@ -1179,10 +1182,29 @@ main {
 }
 
 .slot-label-conflict  { color: #ff6060; right: 72px; }
-.slot-label-container { color: rgba(170, 110, 255, 0.9); }
-.slot-container-open .slot-label-container { color: rgba(212, 183, 255, 1); }
 .slot-label-symbol    { color: rgba(255, 205, 60, 0.9); }
-.slot-packable .slot-label { color: rgba(80, 210, 130, 0.9); }
+.slot-label-treasure  { color: rgba(255, 205, 60, 0.9); }
+.slot-tags {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  pointer-events: none;
+}
+.slot-bulk-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.4;
+}
+.slot-bulk-tag--packable   { background: rgba(80, 210, 130, 0.18); color: #66dd99; }
+.slot-bulk-tag--bulky,
+.slot-bulk-tag--verybulky  { background: rgba(255, 150, 0, 0.18);  color: #ffaa55; }
+.slot-bulk-tag--container  { background: rgba(160, 100, 255, 0.18); color: #c090ff; }
 
 .slot-input:focus ~ .slot-label { display: none; }
 
@@ -1350,9 +1372,10 @@ main {
   flex-shrink: 0;
 }
 
-.ac-tag.bulky     { background: rgba(255,150,0,0.18); color: #ffaa55; }
-.ac-tag.verybulky { background: rgba(255,80,0,0.18);  color: #ff7744; }
+.ac-tag.bulky     { background: rgba(255,150,0,0.18);   color: #ffaa55; }
+.ac-tag.verybulky { background: rgba(255,80,0,0.18);   color: #ff7744; }
 .ac-tag.packable  { background: rgba(80,210,130,0.18); color: #66dd99; }
+.ac-tag.container { background: rgba(160,100,255,0.18); color: #c090ff; }
 
 /* ── INSPECTOR ───────────────────────────────────────────────── */
 #inspector {

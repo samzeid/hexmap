@@ -132,13 +132,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         for (const slot of row) {
           if (!slot || !slot.variables) continue;
           const v = slot.variables;
-          if (v.coins) {
-            const amt = v.coins.value || 0;
-            if      (slot.name === 'Platinum Pieces (PP)') pp += amt;
-            else if (slot.name === 'Gold Pieces (GP)')     gp += amt;
-            else if (slot.name === 'Silver Pieces (SP)')   sp += amt;
-            else if (slot.name === 'Copper Pieces (CP)')   cp += amt;
-          }
           if (v.pp) pp += v.pp.value || 0;
           if (v.gp) gp += v.gp.value || 0;
           if (v.sp) sp += v.sp.value || 0;
@@ -526,6 +519,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const _bulkId = slotData.bulk ? slotData.bulk.id
                     : (getLibraryItem(slotData.name) || { bulk: Bulk.STOCK }).bulk.id;
       const isPackableSlot = _bulkId === 'packable';
+      if (isPackableSlot) wrap.classList.add('slot-packable');
+      else if (_bulkId === 'bulky' || _bulkId === 'verybulky') wrap.classList.add('slot-bulky');
       const _silverPfx = (slotData.silvered || slotData.material === 'silvered') ? 'Silvered ' : '';
       const _metalMat  = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
       const matPfx = _silverPfx + (_metalMat ? _metalMat.charAt(0).toUpperCase() + _metalMat.slice(1) + ' ' : '');
@@ -534,8 +529,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       {
         const libForLabel = getLibraryItem(slotData.name);
         const gridSymbol  = libForLabel && libForLabel.gridSymbol;
+        const cv = slotData.variables || {};
+        const _hasCoinVars = ['pp','gp','sp','cp'].every(k => k in cv);
         if (gridSymbol) {
-          const cv = slotData.variables || {};
           const activeCoins = [['pp',cv.pp],['gp',cv.gp],['sp',cv.sp],['cp',cv.cp]]
             .filter(([,v]) => v && (v.value || 0) > 0);
           const coinParts = activeCoins.map(([k,v]) => `<span class="coin-label-${k}">${v.value}${k}</span>`);
@@ -544,6 +540,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           label.innerHTML = coinParts.length
             ? `${iconHtml}&nbsp;${coinParts.join(' ')}`
             : `${gridSymbol}&nbsp;${libForLabel.name}`;
+          label.classList.add('slot-label-symbol');
+        } else if (_hasCoinVars) {
+          // Coin purse without gridSymbol: show colored coin amounts, no icon
+          const activeCoins = ['pp','gp','sp','cp'].filter(k => (cv[k]?.value || 0) > 0);
+          const coinParts = activeCoins.map(k => `<span class="coin-label-${k}">${cv[k].value}${k}</span>`);
+          label.innerHTML = coinParts.length
+            ? coinParts.join(' ')
+            : `<span class="coin-label-white">${libForLabel ? libForLabel.name : slotData.name}</span>`;
           label.classList.add('slot-label-symbol');
         } else {
           const libForCost = libForLabel;
@@ -561,13 +565,29 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
             const usesSuffix = usesVar !== undefined ? ` (${usesVar.value})` : '';
             label.textContent = `${qtyPrefix}${matPfx}${dispName}${usesSuffix}${costSuffix}`;
           }
+          if (!!(libForLabel && libForLabel.treasure) || !!slotData.treasure) {
+            label.classList.add('slot-label-treasure');
+          }
         }
       }
 
       const _slotLib = getLibraryItem(slotData.name);
       const _isTreasureSlot = !!(_slotLib && _slotLib.treasure) || !!slotData.treasure;
-      const _infoIconClass = _isTreasureSlot ? 'slot-info-inline slot-treasure' : 'slot-info-inline';
-      const _infoIconHtml  = _isTreasureSlot ? '<i class="fas fa-crown"></i>' : '<i class="fas fa-circle-info"></i>';
+      const _sv = slotData.variables || {};
+      const _isCoinPurseSlot = 'pp' in _sv && 'gp' in _sv && 'sp' in _sv && 'cp' in _sv;
+      let _infoIconClass, _infoIconHtml;
+      if (_isCoinPurseSlot) {
+        const _ac = ['pp','gp','sp','cp'].filter(k => (_sv[k]?.value || 0) > 0);
+        const _coinMod = _ac.length === 1 ? `slot-coin-${_ac[0]}` : 'slot-coin-mixed';
+        _infoIconClass = `slot-info-inline ${_coinMod}`;
+        _infoIconHtml  = '<i class="fas fa-coins"></i>';
+      } else if (_isTreasureSlot) {
+        _infoIconClass = 'slot-info-inline slot-treasure';
+        _infoIconHtml  = '<i class="fas fa-crown"></i>';
+      } else {
+        _infoIconClass = 'slot-info-inline';
+        _infoIconHtml  = '<i class="fas fa-circle-info"></i>';
+      }
 
       if (linkedContainer) {
         // Info/treasure icon (left:4px) — clicking the label opens the inspector
@@ -617,6 +637,27 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
 
       wrap.appendChild(label);
+
+      // Corner tags (container left, bulk right)
+      const _isContainerSlot = !!(slotData.isContainer || (getLibraryItem(slotData.name) || {}).containerRows);
+      const _showBulkTag = _bulkId === 'packable' || _bulkId === 'bulky' || _bulkId === 'verybulky';
+      if (_isContainerSlot || _showBulkTag) {
+        const tagsWrap = document.createElement('div');
+        tagsWrap.className = 'slot-tags';
+        if (_isContainerSlot) {
+          const t = document.createElement('span');
+          t.className = 'slot-bulk-tag slot-bulk-tag--container';
+          t.textContent = 'Container';
+          tagsWrap.appendChild(t);
+        }
+        if (_showBulkTag) {
+          const t = document.createElement('span');
+          t.className = `slot-bulk-tag slot-bulk-tag--${_bulkId}`;
+          t.textContent = _bulkId === 'packable' ? 'Packable' : 'Bulky';
+          tagsWrap.appendChild(t);
+        }
+        wrap.appendChild(tagsWrap);
+      }
     }
 
     if (conflict) {
@@ -857,8 +898,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (isCoinItem) inlineEl.classList.add('coin-vars-layout');
     else            inlineEl.classList.remove('coin-vars-layout');
 
-    // Always show qty stepper for inventory items (not coin purses, not shop-only)
-    if (container && !isCoinItem) {
+    // Always show qty stepper — except containers (always qty 1) and coin purses
+    const _isContainerItem = !!(slotData.isContainer || (lib && lib.containerRows));
+    if (container && !isCoinItem && !_isContainerItem) {
       const qtyVal = slotData.variables?.qty?.value ?? 1;
       const qtyWrap = document.createElement('div');
       qtyWrap.className = 'insp-inline-var';
@@ -1009,6 +1051,24 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     // ── Compact props row ──
     const propsEl = document.getElementById('insp-props');
     propsEl.innerHTML = '';
+
+    // Bulk tag — leftmost chip, shown for packable and bulky items
+    const _inspBulkId = slotData.bulk ? slotData.bulk.id
+      : (lib || { bulk: Bulk.STOCK }).bulk.id;
+    if (_inspBulkId === 'packable' || _inspBulkId === 'bulky' || _inspBulkId === 'verybulky') {
+      const bulkTag = document.createElement('span');
+      bulkTag.className = `ac-tag ${_inspBulkId}`;
+      bulkTag.textContent = _inspBulkId === 'packable' ? 'Packable' : 'Bulky';
+      propsEl.appendChild(bulkTag);
+    }
+
+    // Container tag — immediately after bulk tag
+    if (slotData.isContainer || (lib && lib.containerRows)) {
+      const containerTag = document.createElement('span');
+      containerTag.className = 'ac-tag container';
+      containerTag.textContent = 'Container';
+      propsEl.appendChild(containerTag);
+    }
 
     // Editable cost fields — non-custom treasure items with variable cost (DM only)
     const showCostInput = window._isDM && !itemHidden && container
@@ -1166,7 +1226,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     // Container rows input (only when container chip is active)
     const rowsRowEl = document.getElementById('insp-container-rows-row');
     const rowsInput = document.getElementById('insp-container-rows');
-    rowsRowEl.hidden = !slotData.isContainer;
+    rowsRowEl.hidden = !slotData.isContainer || slotData.custom;
     if (slotData.isContainer) {
       rowsInput.value = slotData.containerRows || 2;
       rowsInput.onchange = () => {
@@ -1347,7 +1407,32 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         inp.addEventListener('change', () => { costCoins[key] = Math.max(0, parseInt(inp.value) || 0); showInspector(slotData, container, r, c, packIdx); render(); });
         costWrap.appendChild(lbl); costWrap.appendChild(inp);
       });
-      addRow(makeLabel('Cost'), costWrap);
+      if (slotData.isContainer) {
+        const rowsInp = document.createElement('input');
+        rowsInp.type = 'number'; rowsInp.min = '1'; rowsInp.max = '20';
+        rowsInp.value = slotData.containerRows || 2;
+        rowsInp.className = 'cost-coin-inp';
+        rowsInp.style.cssText = 'width:48px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--text);font-size:13px;font-weight:600;text-align:center;padding:3px 4px;outline:none;';
+        rowsInp.addEventListener('change', () => {
+          slotData.containerRows = Math.max(1, Math.min(20, parseInt(rowsInp.value) || 2));
+          const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+          if (linked) {
+            const target = slotData.containerRows;
+            while (linked.slots.length < target) linked.slots.push([null, null]);
+            while (linked.slots.length > target) {
+              const last = linked.slots[linked.slots.length - 1];
+              if (last[0] === null && last[1] === null) linked.slots.pop();
+              else break;
+            }
+            linked.rows = linked.slots.length;
+            linked.maxRows = target;
+            render();
+          }
+        });
+        addRow(makeLabel('Cost'), costWrap, makeLabel('Rows'), rowsInp);
+      } else {
+        addRow(makeLabel('Cost'), costWrap);
+      }
 
       // Description
       const descTa = document.createElement('textarea');
@@ -1582,6 +1667,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     // Sell: dropped on shop tab button
     if (el && (el === _shopTabBtn || _shopTabBtn.contains(el)) && srcContainer) {
+      // Block selling a container that still has items
+      if (slotData.containerId) {
+        const linked = state.containers.find(c => c.id === slotData.containerId);
+        if (linked && containerHasItems(linked)) { render(); return; }
+      }
+
       const lib = getLibraryItem(slotData.name);
       const isTreasure = !!(lib && lib.treasure) || !!slotData.treasure;
       const sc = slotData.costCoins;
@@ -1592,6 +1683,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const fullCp = unitCp * qty;
       const halfCp = fullCp > 0 ? (isTreasure ? fullCp : Math.floor(fullCp / 2)) : 0;
       if (halfCp > 0) {
+        if (slotData.containerId)
+          state.containers = state.containers.filter(c => c.id !== slotData.containerId);
         removeFromSource();
         const coins = cpToCoins(halfCp);
         const purseLib = getLibraryItem('Coin Purse');
@@ -2889,13 +2982,6 @@ document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
         for (const slot of row) {
           if (!slot || !slot.variables) continue;
           const v = slot.variables;
-          if (v.coins) {
-            const amt = v.coins.value || 0;
-            if      (slot.name === 'Platinum Pieces (PP)') pp += amt;
-            else if (slot.name === 'Gold Pieces (GP)')     gp += amt;
-            else if (slot.name === 'Silver Pieces (SP)')   sp += amt;
-            else if (slot.name === 'Copper Pieces (CP)')   cp += amt;
-          }
           if (v.pp) pp += v.pp.value || 0;
           if (v.gp) gp += v.gp.value || 0;
           if (v.sp) sp += v.sp.value || 0;

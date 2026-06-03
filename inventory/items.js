@@ -127,23 +127,17 @@ window.ITEM_LIBRARY = [
   { name: "Full Plate",            bulk: Bulk.BULKY,  cost: "1500 gp", description: `<i>Heavy Armor (10 min to don, 5 min to doff)</i><br>AC 18. Str 15 required. Stealth Disadvantage.` },
 
   { _section: "Currency" },
-  // ── CURRENCY ─────────────────────────────────────────────────────────────
-  // Stacks up to 50 per packable slot. Use the counter to track quantity.
-  { name: "Copper Pieces (CP)",   shopHidden: true, bulk: Bulk.PACKABLE, description: `1 cp = 1/10 sp = 1/100 gp`, variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
-  { name: "Silver Pieces (SP)",   shopHidden: true, bulk: Bulk.PACKABLE, description: `1 sp = 10 cp = 1/10 gp`,    variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
-  { name: "Gold Pieces (GP)",     shopHidden: true, bulk: Bulk.PACKABLE, description: `1 gp = 10 sp = 100 cp`,     variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
-  { name: "Platinum Pieces (PP)", shopHidden: true, bulk: Bulk.PACKABLE, description: `1 pp = 10 gp = 100 sp`,     variables: { coins: { value: 50, control: "both", min: 0, max: 50 } } },
-  { name: "Coin Purse", aliases: ["🪙"], gridSymbol: `<i class="fas fa-coins"></i>`, bulk: Bulk.STOCK, warnOnRemove: "Remove Coin Purse? Any tracked coin counts will be lost.", description: `Tracks all coin types freely with no slot limit. Each denomination is counted in the coin total.`, variables: { pp: { value: 0, control: "both", min: 0, max: 999999 }, gp: { value: 0, control: "both", min: 0, max: 999999 }, sp: { value: 0, control: "both", min: 0, max: 999999 }, cp: { value: 0, control: "both", min: 0, max: 999999 } } },
+  { name: "Coin Purse", aliases: ["🪙"], bulk: Bulk.STOCK, warnOnRemove: "Remove Coin Purse? Any tracked coin counts will be lost.", description: `Tracks all coin types freely with no slot limit. Each denomination is counted in the coin total.`, variables: { pp: { value: 0, control: "both", min: 0, max: 999999 }, gp: { value: 0, control: "both", min: 0, max: 999999 }, sp: { value: 0, control: "both", min: 0, max: 999999 }, cp: { value: 0, control: "both", min: 0, max: 999999 } } },
 
   { _section: "Adventuring Gear" },
   // ── ADVENTURING GEAR ─────────────────────────────────────────────────────
-  { name: "Rations (1 day)",     bulk: Bulk.PACKABLE, cost: "1 gp",  description: `Travel-ready food — jerky, dried fruit, hardtack, and nuts.` },
+  { name: "Rations",             bulk: Bulk.PACKABLE, cost: "1 gp",  description: `1 day worth of travel-ready food — jerky, dried fruit, hardtack, and nuts.` },
   { name: "Waterskin",           bulk: Bulk.PACKABLE,    cost: "1 gp",  description: `Holds up to 4 pints. If you don't drink sufficient water, you risk dehydration.` },
   { name: "Tinderbox",           bulk: Bulk.PACKABLE, cost: "5 sp",  description: `Contains flint, fire steel, and tinder. Bonus action to light a candle, lamp, lantern, or torch. Lighting any other fire takes 1 minute.` },
   { name: "Mirror",              bulk: Bulk.PACKABLE, cost: "5 sp",  description: `A handheld steel mirror — useful for personal cosmetics, peeking around corners, or reflecting light as a signal.` },
   { name: "Bell",                bulk: Bulk.PACKABLE, cost: "5 sp",  description: `When rung as a Utilize action, produces a sound heard up to 60 feet away.` },
-  { name: "Chalk (5 pieces)",    bulk: Bulk.PACKABLE, cost: "5 sp",  description: `Used to mark surfaces. Expend a piece to leave a visible mark.`, hasUses: true, variables: { uses: { value: 5, control: "both", min: 0, max: 5 } } },
-  { name: "Parchment (5 sheets)",bulk: Bulk.PACKABLE, cost: "5 sp",  description: `Each sheet holds about 250 handwritten words.`, hasUses: true, variables: { uses: { value: 5, control: "both", min: 0, max: 5 } } },
+  { name: "Chalk",               bulk: Bulk.PACKABLE, cost: "5 sp",  description: `Used to mark surfaces. Expend a piece to leave a visible mark.`, hasUses: true, variables: { uses: { value: 5, control: "both", min: 0, max: 5 } } },
+  { name: "Parchment",           bulk: Bulk.PACKABLE, cost: "5 sp",  description: `Each sheet holds about 250 handwritten words.`, hasUses: true, variables: { uses: { value: 5, control: "both", min: 0, max: 5 } } },
   { name: "Ink and Pen",         bulk: Bulk.PACKABLE, cost: "5 sp",  description: `An ink pen and a 1-ounce bottle of ink — enough to write about 500 pages.` },
   { name: "Torch",               bulk: Bulk.PACKABLE, cost: "5 sp",  description: `Burns for 1 hour, casting Bright Light in a 20-foot radius and Dim Light for an additional 20 feet. Can be used as a simple melee weapon (1 Fire damage on a hit).`, hasUses: true, variables: { uses: { value: 6, control: "both", min: 0, max: 6 } } },
   { name: "Whistle / Horn",      bulk: Bulk.PACKABLE, cost: "1 gp",  description: `Produces a sound that can be heard up to 600 feet away (whistle) or across great distances (horn). Utilize action to blow.` },
@@ -348,7 +342,7 @@ window.ITEM_LIBRARY = [
   { name: "Ever-Fanged Blade",       bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>This weapon is immune to effects that corrode items. Also, a poison coating it doesn't lose potency over time. As a bonus action, you can have a poison you coated this weapon with in the past bleed from the ouroboros symbol etched in its blade, magically coating it. This property can't be used again until you finish a long rest.`, hasUses: true, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS }, uses: { value: 1, control: "both", min: 0, max: 1 } } },
   { name: "Blink Weapon",            bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>While holding this weapon, you can cast <i>misty step</i>. Once used, this property can't be used again until you finish a long rest. Immediately after you teleport no more than 30ft and make an attack with this weapon, you can teleport back to your previous space if it is unoccupied.`, hasUses: true, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS }, uses: { value: 1, control: "both", min: 0, max: 1 } } },
   { name: "Elemental Sword",         bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>When found, this hilt is one of the below types. As a bonus action, while holding the hilt, you can form a longsword from elemental energy of that type. While formed, it deals that damage type, sheds bright light in a 15-foot radius and dim light for an additional 15 feet, and has the <i>finesse</i> property. It remains formed until you dismiss it as a bonus action, or you drop or stow it.<br><b>D6 Damage Type:</b> 1 Acid &bull; 2 Thunder &bull; 3 Lightning &bull; 4 Cold &bull; 5 Fire &bull; 6 Radiant`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
-  { name: "Weapon of Slots (2 Gems)",bulk: Bulk.STOCK, cost: "800 gp",  description: `The total attunement cost of gems attached to this weapon is reduced by 1 (to a minimum of 1). You can remove a gem attached from this weapon for no cost.`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
+  { name: "Weapon of Slots",         bulk: Bulk.STOCK, cost: "800 gp",  description: `The total attunement cost of gems attached to this weapon is reduced by 1 (to a minimum of 1). You can remove a gem attached from this weapon for no cost.`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
 
   { _rarity: "Very Rare" },
   { name: "Sword of Life Stealing",  bulk: Bulk.STOCK, cost: "1800 gp", description: `<i>(requires attunement)</i><br>When you attack a creature with this weapon and roll a 20 on the d20 for the attack roll, that target takes an extra 15 Necrotic damage if it isn't a Construct or an Undead, and you gain temporary hit points equal to the amount of Necrotic damage taken.`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
@@ -398,9 +392,9 @@ window.ITEM_LIBRARY = [
 
   { _section: "Vehicles" },
   // ── CARRIAGES ────────────────────────────────────────────────────────────
-  { name: "Sled",           bulk: Bulk.BULKY, cost: "20 gp",  description: `24 item slots. Requires 4 sled dogs to pilot. Encumbrance limit is 10× the mounts' carry capacity.` },
-  { name: "Wagon (Small)",  bulk: Bulk.BULKY, cost: "75 gp",  description: `200 item slots. Requires 1 large mount to pilot. Encumbrance limit is 10× the mount's carry capacity.` },
-  { name: "Wagon (Large)",  bulk: Bulk.BULKY, cost: "100 gp", description: `400 item slots. Requires 2 large mounts to pilot. Encumbrance limit is 10× the mounts' carry capacity.` },
+  { name: "Sled",         bulk: Bulk.BULKY, cost: "20 gp",  noCarry: true, containerRows: 12,  description: `24 item slots. Requires 4 sled dogs to pilot. Encumbrance limit is 10× the mounts' carry capacity.` },
+  { name: "Small Wagon", bulk: Bulk.BULKY, cost: "75 gp",  noCarry: true, containerRows: 100, description: `200 item slots. Requires 1 large mount to pilot. Encumbrance limit is 10× the mount's carry capacity.` },
+  { name: "Large Wagon", bulk: Bulk.BULKY, cost: "100 gp", noCarry: true, containerRows: 200, description: `400 item slots. Requires 2 large mounts to pilot. Encumbrance limit is 10× the mounts' carry capacity.` },
 
   { _section: "Valuables" },
   // Gems and Jewelry: use the value counter to track worth in gp
