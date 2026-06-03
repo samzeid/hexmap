@@ -675,6 +675,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
 
     closeDropdown();
+    if (onSound) onSound('place');
     render();
   }
 
