@@ -177,8 +177,6 @@ body.inv-open    #hex-insp-section  { display: none !important; }
 body             #item-insp-section { display: none !important; }
 
 /* Hex section */
-#hex-insp-section:not([hidden]) + #item-insp-header,
-#hex-insp-section:not([hidden]) { border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 12px; }
 
 #hex-insp-header {
   display: flex;

@@ -638,11 +638,11 @@ canvas.addEventListener("mouseup", (event) => {
     if (!hasDragged && !_pingFired && startCol >= 0 && startRow >= 0) {
         if (activeTool === 'select') {
             const _sk = `${startCol},${startRow}`;
-            setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
-            revealHexInfo(startCol, startRow);
-        } else if (activeTool === 'erase') {
-            setHexSelected(`${startCol},${startRow}`, false);
-            revealHexInfo(startCol, startRow);
+            if (eraseMode) {
+                setHexSelected(_sk, false);
+            } else {
+                setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
+            }
         } else {
             if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
                 clearLocalFocus();
@@ -669,7 +669,8 @@ canvas.addEventListener("mouseleave", () => {
 });
 
 function revealHexInfo(col, row) {
-    setLocalFocus(col, row);
+    latestInspectorHex = { col, row };
+    drawGrid({ col, row });
 }
 
 function setHexSelected(key, color) {
@@ -950,11 +951,11 @@ canvas.addEventListener("touchend", (e) => {
     if (!hasDragged && !_pingFired && startCol >= 0 && startRow >= 0) {
         if (activeTool === 'select') {
             const _sk = `${startCol},${startRow}`;
-            setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
-            revealHexInfo(startCol, startRow);
-        } else if (activeTool === 'erase') {
-            setHexSelected(`${startCol},${startRow}`, false);
-            revealHexInfo(startCol, startRow);
+            if (eraseMode) {
+                setHexSelected(_sk, false);
+            } else {
+                setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
+            }
         } else {
             if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
                 clearLocalFocus();
@@ -970,15 +971,15 @@ canvas.addEventListener("touchend", (e) => {
     lastHex = null;
 });
 
-// Tool cycle: pan → select → erase → pan
-const toolStates = ['pan', 'select', 'erase'];
+// Tool cycle: pan ↔ select (erase is a swatch button inside select mode)
+const toolStates = ['pan', 'select'];
 const toolIcons = {
     pan:    'fa-arrows-up-down-left-right',
     select: 'fa-paintbrush',
-    erase:  'fa-eraser'
 };
 
 let activeTool = 'pan';
+let eraseMode   = false;
 
 function setActiveTool(toolName) {
     activeTool = toolName;
@@ -999,6 +1000,7 @@ function sendHexState() {
         showColors:  activeTool === 'select',
         signedIn:    !!auth.currentUser,
         activeColor: activeDrawColor,
+        eraseMode:   eraseMode,
     });
 }
 
@@ -1047,8 +1049,13 @@ window.addEventListener("message", (e) => {
             case 'colorSelect':
                 if (DRAW_COLORS.includes(e.data.color)) {
                     activeDrawColor = e.data.color;
+                    eraseMode = false;
                     sendHexState();
                 }
+                break;
+            case 'eraseToggle':
+                eraseMode = !eraseMode;
+                sendHexState();
                 break;
             case 'clearHexes':
                 clearHexSelected();

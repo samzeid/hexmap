@@ -2418,7 +2418,7 @@ window.CharacterManager = ({ auth, database }) => {
     window.parent.postMessage({ type: 'toggleView' }, '*');
     requestAnimationFrame(_postHeaderHeight);
     if (!_hexmapMode) ensureCharSelected();
-    else { if (currentCharId) saveChar(currentCharId, true); dirty = false; }
+    else deselectChar();
   });
 
   // ── HEXMAP TOOLBAR ──────────────────────────────────────────────────────
@@ -2431,7 +2431,10 @@ window.CharacterManager = ({ auth, database }) => {
   _hexOverlayBtn.addEventListener('click', () => window.parent.postMessage({ type: 'hexAction', action: 'overlayToggle' }, '*'));
   _hexClearBtn.addEventListener('click',   () => window.parent.postMessage({ type: 'hexAction', action: 'clearHexes' }, '*'));
 
-  document.querySelectorAll('.hex-color-btn').forEach(btn => {
+  document.getElementById('hex-erase-btn').addEventListener('click', () => {
+    window.parent.postMessage({ type: 'hexAction', action: 'eraseToggle' }, '*');
+  });
+  document.querySelectorAll('.hex-color-btn[data-color]').forEach(btn => {
     btn.addEventListener('click', () => {
       window.parent.postMessage({ type: 'hexAction', action: 'colorSelect', color: btn.dataset.color }, '*');
     });
@@ -2466,9 +2469,11 @@ window.CharacterManager = ({ auth, database }) => {
       _hexToolBtn.classList.toggle('active', !!e.data.toolActive);
       document.getElementById('hexmap-toolbar').classList.toggle('tool-active', !!e.data.toolActive);
       document.getElementById('hexmap-toolbar').classList.toggle('show-colors', !!e.data.showColors);
-      if (e.data.activeColor) {
-        document.querySelectorAll('.hex-color-btn').forEach(btn => {
-          btn.classList.toggle('active-color', btn.dataset.color === e.data.activeColor);
+      const eraseActive = !!e.data.eraseMode;
+      document.getElementById('hex-erase-btn').classList.toggle('active-color', eraseActive);
+      if (e.data.activeColor !== undefined || e.data.eraseMode !== undefined) {
+        document.querySelectorAll('.hex-color-btn[data-color]').forEach(btn => {
+          btn.classList.toggle('active-color', !eraseActive && btn.dataset.color === e.data.activeColor);
         });
       }
       if (e.data.signedIn !== undefined) {
@@ -3056,7 +3061,7 @@ window.CharacterManager = ({ auth, database }) => {
     invScrollEl.hidden = false;
     if (_shopFromHexmap) {
       _shopFromHexmap = false;
-      if (currentCharId) saveChar(currentCharId, true); dirty = false;
+      deselectChar();
       _hexmapMode = true;
       _applyViewMode();
       window.parent.postMessage({ type: 'toggleView' }, '*');
@@ -3132,6 +3137,7 @@ window.CharacterManager = ({ auth, database }) => {
     roleBtn.hidden       = !userCanBeDM;
     charAssignBtn.hidden = !isDM;
     charHideBtn.hidden   = !isDM;
+    _hexClearBtn.hidden  = !isDM;
     roleBtn.textContent  = 'DM';
     roleBtn.title        = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
     roleBtn.dataset.role = isDM ? 'dm' : 'player';
@@ -3674,7 +3680,7 @@ window.CharacterManager = ({ auth, database }) => {
             if (shopOpen) {
               closeShop();
             } else if (!_hexmapMode) {
-              if (currentCharId) saveChar(currentCharId, true); dirty = false;
+              deselectChar();
               _hexmapMode = true;
               _applyViewMode();
               window.parent.postMessage({ type: 'toggleView' }, '*');
