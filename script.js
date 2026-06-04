@@ -14,6 +14,7 @@ const database = app.database();
 
 const hexPingRef     = database.ref('hexPing');
 const hexSelectedRef = database.ref('hexSelected');
+const hexFocusRef    = database.ref('hexFocus');
 
 // Get elements
 const image = new Image();
@@ -34,9 +35,7 @@ new ResizeObserver(() => {
 }).observe(canvas);
 
 document.getElementById('hex-insp-toggle').addEventListener('click', () => {
-    hexInspector.classList.add('hex-insp-collapsed');
-    latestInspectorHex = null;
-    attachHexNotes(null);
+    hexFocusRef.remove();
 });
 
 let _hexNotesRef = null;
@@ -252,8 +251,10 @@ let _pingFired  = false;
 let _flashHex   = null;
 let _flashStart = null;
 let _panAnimId  = null;
-const PING_HOLD_MS   = 600;
-const FLASH_DURATION = 1400;
+let _focusHex   = null;
+const PING_HOLD_MS      = 600;
+const FLASH_DURATION    = 1400;
+const PING_PANEL_OFFSET = 80;
 let _lastSeenPingTime = Date.now();
 
 new ResizeObserver(() => resizeCanvas()).observe(canvasContainer);
@@ -275,7 +276,8 @@ function drawGrid(hoveredHex = null) {
             const y = row * hexVertSpacing + (col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
 
             const key = `${col},${row}`;
-            const isHovered = hoveredHex && hoveredHex.col === col && hoveredHex.row === row;
+            const isHovered  = hoveredHex && hoveredHex.col === col && hoveredHex.row === row;
+            const isFocused  = _focusHex  && _focusHex.col  === col && _focusHex.row  === row;
             const isSelected = selectedHexes.has(key);
 
             const hexInfo = hexData.get(key);
@@ -299,6 +301,13 @@ function drawGrid(hoveredHex = null) {
 
             // Draw hovered hex.
             if (isHovered) {
+                drawHex(x, y, {
+                    strokeColor: "rgba(255,255,255,1)",
+                    fillColor: "rgba(255,255,255,0.3)",
+                    lineWidth: 2,
+                    opacity: 1
+                });
+            } else if (isFocused) {
                 drawHex(x, y, {
                     strokeColor: "rgba(255,255,255,1)",
                     fillColor: "rgba(255,255,255,0.3)",
@@ -486,8 +495,11 @@ canvas.addEventListener("mouseup", (event) => {
         } else if (activeTool === 'erase') {
             setHexSelected(`${startCol},${startRow}`, false);
         } else {
-            latestInspectorHex = { col: startCol, row: startRow };
-            drawGrid({ col: startCol, row: startRow });
+            if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
+                hexFocusRef.remove();
+            } else {
+                hexFocusRef.set({ col: startCol, row: startRow });
+            }
         }
     }
     isPanning = false;
@@ -524,6 +536,7 @@ function startPingTimer(col, row) {
         _pingTimer = null;
         _pingFired = true;
         hexPingRef.set({ col, row, t: Date.now() });
+        hexFocusRef.set({ col, row });
     }, PING_HOLD_MS);
 }
 
@@ -534,9 +547,10 @@ function cancelPingTimer() {
 function centerOnHex(col, row) {
     const wx = col * hexHorizSpacing + hexSize + offsetX;
     const wy = row * hexVertSpacing + (col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
+    const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inv-header-h')) || 0;
     const targetZoom = Math.min(maxZoom, Math.max(zoom, minZoom * 2.5));
     const targetX = canvas.width  / 2 - wx * targetZoom;
-    const targetY = canvas.height / 2 - wy * targetZoom;
+    const targetY = canvas.height / 2 - headerH / 2 - PING_PANEL_OFFSET - wy * targetZoom;
     const startX = panX, startY = panY, startZoom = zoom, t0 = performance.now();
     if (_panAnimId) cancelAnimationFrame(_panAnimId);
     function step(now) {
@@ -575,6 +589,18 @@ hexSelectedRef.on('value', snap => {
     selectedHexes.clear();
     const val = snap.val();
     if (val) Object.keys(val).forEach(k => selectedHexes.add(k));
+    drawGridLatestActive();
+});
+
+hexFocusRef.on('value', snap => {
+    _focusHex = snap.val();
+    if (_focusHex) {
+        latestInspectorHex = { col: _focusHex.col, row: _focusHex.row };
+    } else {
+        latestInspectorHex = null;
+        hexInspector.classList.add('hex-insp-collapsed');
+        attachHexNotes(null);
+    }
     drawGridLatestActive();
 });
 
@@ -696,6 +722,7 @@ canvas.addEventListener("touchstart", (e) => {
     } else if (e.touches.length === 2) {
         isDragging = false;
         isPanning = false;
+        hasDragged = true;
         cancelPingTimer();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -765,8 +792,11 @@ canvas.addEventListener("touchend", (e) => {
         } else if (activeTool === 'erase') {
             setHexSelected(`${startCol},${startRow}`, false);
         } else {
-            latestInspectorHex = { col: startCol, row: startRow };
-            drawGrid({ col: startCol, row: startRow });
+            if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
+                hexFocusRef.remove();
+            } else {
+                hexFocusRef.set({ col: startCol, row: startRow });
+            }
         }
     }
     isDragging = false;
