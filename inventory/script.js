@@ -345,7 +345,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     updateCurrencyDisplay();
     updateCarryDisplay();
 
-    // Refresh inspector if panel is open for an inventory slot
+    // Refresh inspector name if panel is open for an inventory slot
     if (inspectorItemKey && !inspectorItemKey.startsWith('shop-')
         && !inspectorEl.classList.contains('inspector-collapsed')) {
       const lastH = inspectorItemKey.lastIndexOf('-');
@@ -355,8 +355,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const ic  = parseInt(inspectorItemKey.substring(lastH + 1));
       const cnt = state.containers.find(c => c.id === cid);
       const sd  = cnt && cnt.slots[ir] && cnt.slots[ir][ic];
-      if (sd) showInspector(sd, cnt, ir, ic);
-      else hideInspector();
+      if (sd) {
+        const _sdLib = getLibraryItem(sd.name);
+        const _sdEl  = document.getElementById('insp-name');
+        if (_sdLib && _sdLib.gridSymbol) _sdEl.innerHTML = `${_sdLib.gridSymbol}&nbsp;${_sdLib.name}`;
+        else _sdEl.textContent = sd.name || '';
+      }
     }
 
     if (onChange) onChange();
@@ -2270,24 +2274,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     },
     flattenGroups(containers) { flattenPackableGroups(containers); },
 
-    getInspectorKey() {
-      if (inspectorEl.classList.contains('inspector-collapsed')) return null;
-      return inspectorItemKey;
-    },
-    restoreInspector(key) {
-      if (!key || key.startsWith('shop-')) return;
-      const lastDash = key.lastIndexOf('-');
-      const prevDash = key.lastIndexOf('-', lastDash - 1);
-      const containerId = key.substring(0, prevDash);
-      const r = parseInt(key.substring(prevDash + 1, lastDash));
-      const c = parseInt(key.substring(lastDash + 1));
-      const container = state.containers.find(ct => ct.id === containerId);
-      if (!container || !container.slots[r]) return;
-      if (!container.slots[r][c]) return;
-      inspectorItemKey = key;
-      inspectorEl.classList.remove('inspector-collapsed');
-      render();
-    },
 
     // ── SHOP API ────────────────────────────────────────────────
     toggleShopItem(slotData, key) {
@@ -2363,7 +2349,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 window.CharacterManager = ({ auth, database }) => {
   let currentUser  = null;
   let currentCharId = null;
-  const lastInspectorKey = new Map(); // charId → inspectorItemKey
   let allChars     = {};   // id → { ownerUid, ownerName, state, createdAt, sortOrder }
   let suppressSave       = false;
   let dirty              = false;   // true while local edits haven't been flushed to Firebase yet
@@ -3396,12 +3381,7 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   function deselectChar() {
-    if (currentCharId) {
-      saveChar(currentCharId, true);
-      const key = inv.getInspectorKey();
-      if (key) lastInspectorKey.set(currentCharId, key);
-      else lastInspectorKey.delete(currentCharId);
-    }
+    if (currentCharId) saveChar(currentCharId, true);
     dirty = false;
     currentCharId = null;
     suppressSave = true;
@@ -3414,18 +3394,12 @@ window.CharacterManager = ({ auth, database }) => {
 
   function switchToChar(charId, skipSave) {
     inv.cancelDrag();
-    if (currentCharId) {
-      if (!skipSave) saveChar(currentCharId, true);
-      const key = inv.getInspectorKey();
-      if (key) lastInspectorKey.set(currentCharId, key);
-      else lastInspectorKey.delete(currentCharId);
-    }
+    if (!skipSave && currentCharId) saveChar(currentCharId, true);
     dirty = false;
     currentCharId = charId;
     suppressSave = true;
     try { inv.loadState(allChars[charId].state); } catch (e) { console.warn('loadState error:', e); }
     suppressSave = false;
-    inv.restoreInspector(lastInspectorKey.get(charId) || null);
     setFieldsOpen(false);
     updateCharHideBtn();
     renderTabs();
