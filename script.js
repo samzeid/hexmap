@@ -15,6 +15,7 @@ const database = app.database();
 const hexPingRef     = database.ref('hexPing');
 const hexSelectedRef = database.ref('hexSelected');
 const hexFocusRef    = database.ref('hexFocus');
+const hexFlagsRef    = database.ref('hexFlags');
 const pingSound      = new Audio('sounds/ping.ogg');
 
 // Get elements
@@ -60,7 +61,53 @@ function showHexInfo(name, coords, desc, hasLocation) {
 
 function hideHexInfo() {
     hexInspSect.hidden = true;
+    document.getElementById('hex-flag-row').innerHTML = '';
     refreshDetailPanel();
+}
+
+const hexFlagRow = document.getElementById('hex-flag-row');
+
+function updateFlagRow(col, row) {
+    const key = `${col}_${row}`;
+    const current = hexFlags.get(key) || null;
+    hexFlagRow.innerHTML = '';
+
+    const offBtn = document.createElement('button');
+    offBtn.className = 'hex-flag-btn' + (current === null ? ' active' : '');
+    offBtn.title = 'No flag';
+    offBtn.innerHTML = '<i class="fas fa-xmark" style="font-size:10px"></i>';
+    offBtn.addEventListener('click', () => hexFlagsRef.child(key).remove());
+    hexFlagRow.appendChild(offBtn);
+
+    DRAW_COLORS.forEach(color => {
+        const btn = document.createElement('button');
+        btn.className = 'hex-flag-btn hex-flag-color-btn' + (current === color ? ' active' : '');
+        btn.title = 'Set flag';
+        btn.style.setProperty('--fc', color);
+        btn.addEventListener('click', () => hexFlagsRef.child(key).set(color));
+        hexFlagRow.appendChild(btn);
+    });
+}
+
+function drawFlag(x, y, color) {
+    const px = x + 1.5;
+    const poleTop = y - hexSize * 0.68;
+    const poleBot = y - hexSize * 0.38;
+    canvasContext.save();
+    canvasContext.beginPath();
+    canvasContext.moveTo(px, poleTop);
+    canvasContext.lineTo(px, poleBot);
+    canvasContext.strokeStyle = color;
+    canvasContext.lineWidth = 1.3;
+    canvasContext.stroke();
+    canvasContext.beginPath();
+    canvasContext.moveTo(px, poleTop);
+    canvasContext.lineTo(px + 4.5, poleTop + 1.75);
+    canvasContext.lineTo(px, poleTop + 3.5);
+    canvasContext.closePath();
+    canvasContext.fillStyle = color;
+    canvasContext.fill();
+    canvasContext.restore();
 }
 
 function setLocalFocus(col, row) {
@@ -99,11 +146,20 @@ let _hexCustomNameKey = null;
 let _hexCustomNameSaveTimer = null;
 
 const hexNotesCache = new Map(); // col_row → true, for dot rendering
+const hexFlags      = new Map(); // col_row → color string
+let   isDMView      = false;
 
 database.ref('/hexNotes').on('value', snap => {
     hexNotesCache.clear();
     const val = snap.val();
     if (val) Object.keys(val).forEach(k => hexNotesCache.set(k, true));
+    drawGridLatestActive();
+});
+
+hexFlagsRef.on('value', snap => {
+    hexFlags.clear();
+    const val = snap.val();
+    if (val) Object.entries(val).forEach(([k, c]) => hexFlags.set(k, c));
     drawGridLatestActive();
 });
 
@@ -463,6 +519,15 @@ function drawGrid(hoveredHex = null) {
                 canvasContext.fill();
                 canvasContext.restore();
             }
+
+            // Flag marker
+            const _flagKey = `${col}_${row}`;
+            const _flagColor = hexFlags.get(_flagKey);
+            if (_flagColor) {
+                drawFlag(x, y, _flagColor);
+            } else if (isDMView && hexNotesCache.has(_flagKey)) {
+                drawFlag(x, y, 'rgba(200,200,200,0.3)');
+            }
         }
     }
 
@@ -520,6 +585,7 @@ function drawGrid(hoveredHex = null) {
         showHexInfo(name, `${hoveredHex.col}, ${hoveredHex.row}`, desc, hasLocation);
         attachHexNotes(notesKey);
         attachHexCustomName(hasLocation ? null : notesKey);
+        updateFlagRow(hoveredHex.col, hoveredHex.row);
     } else {
         hideHexInfo();
         attachHexNotes(null);
@@ -1029,6 +1095,10 @@ window.addEventListener("message", (e) => {
         }
         // Switching back to hexview: drawGridLatestActive() restores the panel
         // automatically from latestInspectorHex, which we kept intact.
+    }
+    if (e.data.type === "dmStatus") {
+        isDMView = !!e.data.isDM;
+        drawGridLatestActive();
     }
     if (e.data.type === "headerHeight") {
         document.documentElement.style.setProperty('--inv-header-h', e.data.height + 'px');

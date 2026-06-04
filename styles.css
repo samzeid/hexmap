@@ -265,6 +265,47 @@ body             #item-insp-section { display: none !important; }
 
 #hex-insp-section { padding-bottom: 10px; }
 
+#hex-flag-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 6px 0 4px;
+}
+
+.hex-flag-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1.5px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: rgba(255,255,255,0.4);
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, background 0.15s;
+}
+.hex-flag-btn:active { background: rgba(255,255,255,0.12); }
+.hex-flag-btn.active {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.5);
+  color: #e8e8f0;
+}
+.hex-flag-color-btn::after {
+  content: '';
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--fc);
+}
+.hex-flag-color-btn.active::after {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.7);
+}
+
 /* Item section */
 #item-insp-header {
   display: flex;

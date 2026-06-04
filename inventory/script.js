@@ -3139,6 +3139,7 @@ window.CharacterManager = ({ auth, database }) => {
     charAssignBtn.hidden = !isDM;
     charHideBtn.hidden   = !isDM;
     _hexClearBtn.hidden  = !isDM;
+    window.parent.postMessage({ type: 'dmStatus', isDM }, '*');
     roleBtn.textContent  = 'DM';
     roleBtn.title        = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
     roleBtn.dataset.role = isDM ? 'dm' : 'player';
