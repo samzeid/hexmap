@@ -283,28 +283,19 @@ body             #item-insp-section { display: none !important; }
   align-items: center;
   justify-content: center;
   padding: 0;
-  color: rgba(255,255,255,0.4);
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
 }
 .hex-flag-btn:active { background: rgba(255,255,255,0.12); }
-.hex-flag-btn.active {
-  background: rgba(255,255,255,0.12);
-  border-color: rgba(255,255,255,0.5);
-  color: #e8e8f0;
-}
-.hex-flag-color-btn::after {
-  content: '';
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--fc);
-}
-.hex-flag-color-btn.active::after {
-  box-shadow: 0 0 0 2px rgba(255,255,255,0.7);
-}
+
+.hex-flag-off-btn i { font-size: 13px; color: rgba(255,255,255,0.22); }
+.hex-flag-off-btn.active { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.4); }
+.hex-flag-off-btn.active i { color: rgba(255,255,255,0.55); }
+
+.hex-flag-color-btn i { font-size: 13px; color: var(--fc); opacity: 0.45; }
+.hex-flag-color-btn.active { border-color: var(--fc); background: rgba(255,255,255,0.06); }
+.hex-flag-color-btn.active i { opacity: 1; }
 
 /* Item section */
 #item-insp-header {

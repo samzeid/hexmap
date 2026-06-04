@@ -73,9 +73,9 @@ function updateFlagRow(col, row) {
     hexFlagRow.innerHTML = '';
 
     const offBtn = document.createElement('button');
-    offBtn.className = 'hex-flag-btn' + (current === null ? ' active' : '');
+    offBtn.className = 'hex-flag-btn hex-flag-off-btn' + (current === null ? ' active' : '');
     offBtn.title = 'No flag';
-    offBtn.innerHTML = '<i class="fas fa-xmark" style="font-size:10px"></i>';
+    offBtn.innerHTML = '<i class="fas fa-flag"></i>';
     offBtn.addEventListener('click', () => hexFlagsRef.child(key).remove());
     hexFlagRow.appendChild(offBtn);
 
@@ -84,26 +84,29 @@ function updateFlagRow(col, row) {
         btn.className = 'hex-flag-btn hex-flag-color-btn' + (current === color ? ' active' : '');
         btn.title = 'Set flag';
         btn.style.setProperty('--fc', color);
+        btn.innerHTML = '<i class="fas fa-flag"></i>';
         btn.addEventListener('click', () => hexFlagsRef.child(key).set(color));
         hexFlagRow.appendChild(btn);
     });
 }
 
 function drawFlag(x, y, color) {
-    const px = x + 1.5;
-    const poleTop = y - hexSize * 0.68;
-    const poleBot = y - hexSize * 0.38;
+    const poleH = hexSize * 0.9;
+    const poleTop = y - poleH / 2;
+    const poleBot = y + poleH / 2;
+    const penW = hexSize * 0.55;
+    const penH = hexSize * 0.45;
     canvasContext.save();
     canvasContext.beginPath();
-    canvasContext.moveTo(px, poleTop);
-    canvasContext.lineTo(px, poleBot);
+    canvasContext.moveTo(x, poleTop);
+    canvasContext.lineTo(x, poleBot);
     canvasContext.strokeStyle = color;
-    canvasContext.lineWidth = 1.3;
+    canvasContext.lineWidth = 1.5;
     canvasContext.stroke();
     canvasContext.beginPath();
-    canvasContext.moveTo(px, poleTop);
-    canvasContext.lineTo(px + 4.5, poleTop + 1.75);
-    canvasContext.lineTo(px, poleTop + 3.5);
+    canvasContext.moveTo(x, poleTop);
+    canvasContext.lineTo(x + penW, poleTop + penH / 2);
+    canvasContext.lineTo(x, poleTop + penH);
     canvasContext.closePath();
     canvasContext.fillStyle = color;
     canvasContext.fill();
