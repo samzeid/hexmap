@@ -1637,11 +1637,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
 
     inspectorEl.classList.remove('inspector-collapsed');
-    window.parent.postMessage({
-      type: 'itemInfo',
-      name: document.getElementById('insp-name')?.textContent || '',
-      desc: document.getElementById('insp-desc')?.innerHTML   || ''
-    }, '*');
   }
 
   function refreshInspectorCollapsed() {
@@ -1656,7 +1651,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     inspectorItemKey = null;
     _customEditKey = null; _customEditOpen = false;
     refreshInspectorCollapsed();
-    window.parent.postMessage({ type: 'itemInfo', name: '', desc: '' }, '*');
   }
 
   function toggleInspectorFor(key, slotData, container, r, c) {
@@ -2480,10 +2474,6 @@ window.CharacterManager = ({ auth, database }) => {
       if (e.data.signedIn !== undefined) {
         _hexSignOutBtn.hidden = !e.data.signedIn;
       }
-    }
-    if (e.data.type === 'closeItemInspector') {
-      hideInspector();
-      render();
     }
     if (e.data.type === 'signOut') {
       auth.signOut().catch(() => {});

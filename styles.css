@@ -172,9 +172,9 @@ body.inv-open #inv-separator { display: none; }
   overflow: hidden;
 }
 
-/* Hide each section when not in the appropriate mode */
-body:not(.inv-open) #item-insp-section  { display: none !important; }
-body.inv-open       #hex-insp-section   { display: none !important; }
+/* Hex section only in hexmap mode; item section reserved for future cross-page use */
+body.inv-open    #hex-insp-section  { display: none !important; }
+body             #item-insp-section { display: none !important; }
 
 /* Hex section */
 #hex-insp-section:not([hidden]) + #item-insp-header,

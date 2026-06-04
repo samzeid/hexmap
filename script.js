@@ -67,11 +67,6 @@ document.getElementById('hex-insp-toggle').addEventListener('click', () => {
     hexFocusRef.remove();
 });
 
-document.getElementById('item-insp-toggle').addEventListener('click', () => {
-    document.getElementById('item-insp-section').hidden = true;
-    refreshDetailPanel();
-    sendToFrame({ type: 'closeItemInspector' });
-});
 
 new ResizeObserver(() => {
     setPan(panX, panY);
@@ -1014,21 +1009,6 @@ window.addEventListener("message", (e) => {
             attachHexNotes(null);
             attachHexCustomName(null);
         }
-    }
-    if (e.data.type === 'itemInfo') {
-        const sect = document.getElementById('item-insp-section');
-        if (e.data.name) {
-            document.getElementById('item-insp-name').textContent = e.data.name;
-            document.getElementById('item-insp-desc').innerHTML   = e.data.desc || '';
-            sect.hidden = false;
-            detailPanel.classList.remove('detail-collapsed');
-        } else {
-            sect.hidden = true;
-            refreshDetailPanel();
-        }
-    }
-    if (e.data.type === 'closeItemInspector') {
-        sendToFrame({ type: 'closeItemInspector' });
     }
     if (e.data.type === "headerHeight") {
         document.documentElement.style.setProperty('--inv-header-h', e.data.height + 'px');
