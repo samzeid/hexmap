@@ -15,7 +15,7 @@ const database = app.database();
 const hexPingRef     = database.ref('hexPing');
 const hexSelectedRef = database.ref('hexSelected');
 const hexFocusRef    = database.ref('hexFocus');
-const pingSound      = new Audio('ping.ogg');
+const pingSound      = new Audio('sounds/ping.ogg');
 
 // Get elements
 const image = new Image();
@@ -39,6 +39,19 @@ let _hexNotesRef = null;
 let _hexNotesKey = null;
 let _hexNotesSaveTimer = null;
 
+let _hexCustomNameRef = null;
+let _hexCustomNameKey = null;
+let _hexCustomNameSaveTimer = null;
+
+const hexNotesCache = new Map(); // col_row → true, for dot rendering
+
+database.ref('/hexNotes').on('value', snap => {
+    hexNotesCache.clear();
+    const val = snap.val();
+    if (val) Object.keys(val).forEach(k => hexNotesCache.set(k, true));
+    drawGridLatestActive();
+});
+
 function attachHexNotes(key) {
     if (_hexNotesKey === key) return;
     if (_hexNotesRef) { _hexNotesRef.off('value', _onHexNote); _hexNotesRef = null; }
@@ -51,6 +64,20 @@ function attachHexNotes(key) {
 
 function _onHexNote(snap) {
     sendToFrame({ type: 'hexNotes', value: snap.val() || '' });
+}
+
+function attachHexCustomName(key) {
+    if (_hexCustomNameKey === key) return;
+    if (_hexCustomNameRef) { _hexCustomNameRef.off('value', _onHexCustomName); _hexCustomNameRef = null; }
+    _hexCustomNameKey = key;
+    sendToFrame({ type: 'hexCustomName', value: '' });
+    if (!key) return;
+    _hexCustomNameRef = database.ref(`/hexCustomNames/${key}`);
+    _hexCustomNameRef.on('value', _onHexCustomName);
+}
+
+function _onHexCustomName(snap) {
+    sendToFrame({ type: 'hexCustomName', value: snap.val() || '' });
 }
 
 const selectedHexes = new Map(); // key → color string
@@ -350,7 +377,17 @@ function drawGrid(hoveredHex = null) {
                     lineWidth: 2,
                     opacity: 1
                 });
-            } 
+            }
+
+            // Small dot for hexes with notes
+            if (hexNotesCache.has(`${col}_${row}`)) {
+                canvasContext.save();
+                canvasContext.fillStyle = 'rgba(255,255,255,0.8)';
+                canvasContext.beginPath();
+                canvasContext.arc(x, y, 1.8, 0, Math.PI * 2);
+                canvasContext.fill();
+                canvasContext.restore();
+            }
         }
     }
 
@@ -388,34 +425,30 @@ function drawGrid(hoveredHex = null) {
     if (hoveredHex) {
         const key = `${hoveredHex.col},${hoveredHex.row}`;
         const hexInfo = hexData.get(key);
+        const notesKey = `${hoveredHex.col}_${hoveredHex.row}`;
 
+        let name = '', desc = '', hasLocation = false;
         if (hexInfo) {
             const { politicalRegion, environmentalRegion, location } = hexInfo;
             const region = politicalRegion ?? environmentalRegion;
-
-            let name = '', desc = '';
-            if (location) {
+            if (location && location.name) {
                 name = location.name;
                 desc = location.description || '';
-            } else if (region) {
+                hasLocation = true;
+            } else if (region && region.name) {
                 name = region.name;
                 desc = region.description || '';
+                hasLocation = true;
             }
-
-            if (name) {
-                sendToFrame({ type: 'hexInfo', name, coords: `${hoveredHex.col}, ${hoveredHex.row}${region && location ? ' · ' + region.name : ''}`, desc });
-                attachHexNotes(`${hoveredHex.col}_${hoveredHex.row}`);
-            } else {
-                sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
-                attachHexNotes(null);
-            }
-        } else {
-            sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
-            attachHexNotes(null);
         }
+
+        sendToFrame({ type: 'hexInfo', name, coords: `${hoveredHex.col}, ${hoveredHex.row}`, desc, hasLocation });
+        attachHexNotes(notesKey);
+        attachHexCustomName(hasLocation ? null : notesKey);
     } else {
         sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
         attachHexNotes(null);
+        attachHexCustomName(null);
     }
 }
 
@@ -531,8 +564,10 @@ canvas.addEventListener("mouseup", (event) => {
         if (activeTool === 'select') {
             const _sk = `${startCol},${startRow}`;
             setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
+            revealHexInfo(startCol, startRow);
         } else if (activeTool === 'erase') {
             setHexSelected(`${startCol},${startRow}`, false);
+            revealHexInfo(startCol, startRow);
         } else {
             if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
                 hexFocusRef.remove();
@@ -558,6 +593,11 @@ canvas.addEventListener("mouseleave", () => {
     event.preventDefault();
 });
 
+function revealHexInfo(col, row) {
+    latestInspectorHex = { col, row };
+    drawGrid({ col, row });
+}
+
 function setHexSelected(key, color) {
     if (color) hexSelectedRef.child(key).set(color);
     else hexSelectedRef.child(key).remove();
@@ -574,7 +614,11 @@ function startPingTimer(col, row) {
     _pingTimer = setTimeout(() => {
         _pingTimer = null;
         _pingFired = true;
-        hexPingRef.set({ col, row, t: Date.now() });
+        const t = Date.now();
+        _lastSeenPingTime = t;
+        pingSound.currentTime = 0;
+        pingSound.play().catch(() => {});
+        hexPingRef.set({ col, row, t });
         hexFocusRef.set({ col, row });
     }, PING_HOLD_MS);
 }
@@ -641,6 +685,7 @@ hexFocusRef.on('value', snap => {
         latestInspectorHex = null;
         sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
         attachHexNotes(null);
+        attachHexCustomName(null);
     }
     drawGridLatestActive();
 });
@@ -830,8 +875,10 @@ canvas.addEventListener("touchend", (e) => {
         if (activeTool === 'select') {
             const _sk = `${startCol},${startRow}`;
             setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
+            revealHexInfo(startCol, startRow);
         } else if (activeTool === 'erase') {
             setHexSelected(`${startCol},${startRow}`, false);
+            revealHexInfo(startCol, startRow);
         } else {
             if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
                 hexFocusRef.remove();
@@ -899,7 +946,17 @@ window.addEventListener("message", (e) => {
         if (document.body.classList.contains('inv-open')) {
             sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
             attachHexNotes(null);
+            attachHexCustomName(null);
         }
+    }
+    if (e.data.type === 'hexCustomNameInput') {
+        clearTimeout(_hexCustomNameSaveTimer);
+        _hexCustomNameSaveTimer = setTimeout(() => {
+            if (!_hexCustomNameKey) return;
+            const val = e.data.value;
+            if (val) database.ref(`/hexCustomNames/${_hexCustomNameKey}`).set(val);
+            else     database.ref(`/hexCustomNames/${_hexCustomNameKey}`).remove();
+        }, 600);
     }
     if (e.data.type === 'hexNotesInput') {
         clearTimeout(_hexNotesSaveTimer);

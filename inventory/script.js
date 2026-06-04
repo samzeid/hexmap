@@ -1680,6 +1680,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     window.parent.postMessage({ type: 'hexNotesInput', value: e.target.value }, '*');
   });
 
+  document.getElementById('hex-insp-name-input').addEventListener('input', e => {
+    window.parent.postMessage({ type: 'hexCustomNameInput', value: e.target.value }, '*');
+  });
+
   document.addEventListener('pointerdown', e => {
     if (inspectorItemKey !== null
         && !inspectorEl.classList.contains('inspector-collapsed')
@@ -2487,11 +2491,23 @@ window.CharacterManager = ({ auth, database }) => {
       }
     }
     if (e.data.type === 'hexInfo') {
-      const hexSect = document.getElementById('hex-insp-section');
-      if (e.data.name) {
-        document.getElementById('hex-insp-name').textContent   = e.data.name;
+      const hexSect   = document.getElementById('hex-insp-section');
+      const nameEl    = document.getElementById('hex-insp-name');
+      const nameInput = document.getElementById('hex-insp-name-input');
+      const descEl    = document.getElementById('hex-insp-desc');
+      if (e.data.coords) {
         document.getElementById('hex-insp-coords').textContent = e.data.coords;
-        document.getElementById('hex-insp-desc').textContent   = e.data.desc;
+        if (e.data.hasLocation) {
+          nameEl.textContent = e.data.name;
+          nameEl.hidden      = false;
+          nameInput.hidden   = true;
+          descEl.textContent = e.data.desc;
+          descEl.hidden      = !e.data.desc;
+        } else {
+          nameEl.hidden      = true;
+          nameInput.hidden   = false;
+          descEl.hidden      = true;
+        }
         hexSect.hidden = false;
         inspectorEl.classList.add('has-hex-info');
         inspectorEl.classList.remove('inspector-collapsed');
@@ -2504,6 +2520,10 @@ window.CharacterManager = ({ auth, database }) => {
     if (e.data.type === 'hexNotes') {
       const ta = document.getElementById('hex-insp-notes');
       if (document.activeElement !== ta) ta.value = e.data.value;
+    }
+    if (e.data.type === 'hexCustomName') {
+      const input = document.getElementById('hex-insp-name-input');
+      if (document.activeElement !== input) input.value = e.data.value;
     }
     if (e.data.type === 'signOut') {
       auth.signOut().catch(() => {});

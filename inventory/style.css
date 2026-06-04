@@ -2208,6 +2208,23 @@ body.is-dragging #inv-scroll {
 
 #hex-insp-toggle:active { background: rgba(255,255,255,0.15); color: #e8e8f0; }
 
+#hex-insp-name-input {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 6px;
+  color: #e8e8f0;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 4px 8px;
+  outline: none;
+  min-width: 0;
+  flex: 1;
+}
+
+#hex-insp-name-input::placeholder { color: rgba(255,255,255,0.3); font-weight: 400; }
+#hex-insp-name-input:focus { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.1); }
+
 #hex-insp-desc {
   font-size: 13px;
   line-height: 1.5;
