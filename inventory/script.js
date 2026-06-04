@@ -2274,6 +2274,26 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     },
     flattenGroups(containers) { flattenPackableGroups(containers); },
 
+    getInspectorKey() {
+      if (inspectorEl.classList.contains('inspector-collapsed')) return null;
+      return inspectorItemKey;
+    },
+    restoreInspector(key) {
+      if (!key || key.startsWith('shop-')) return;
+      const lastDash = key.lastIndexOf('-');
+      const prevDash = key.lastIndexOf('-', lastDash - 1);
+      const containerId = key.substring(0, prevDash);
+      const r = parseInt(key.substring(prevDash + 1, lastDash));
+      const c = parseInt(key.substring(lastDash + 1));
+      const container = state.containers.find(ct => ct.id === containerId);
+      if (!container || !container.slots[r]) return;
+      const slotData = container.slots[r][c];
+      if (!slotData) return;
+      showInspector(slotData, container, r, c);
+      inspectorItemKey = key;
+      render();
+    },
+
     // ── SHOP API ────────────────────────────────────────────────
     toggleShopItem(slotData, key) {
       toggleInspectorFor(key, slotData, null, -1, -1);
@@ -2348,6 +2368,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 window.CharacterManager = ({ auth, database }) => {
   let currentUser  = null;
   let currentCharId = null;
+  const lastInspectorKey = new Map(); // charId → inspectorItemKey
   let allChars     = {};   // id → { ownerUid, ownerName, state, createdAt, sortOrder }
   let suppressSave       = false;
   let dirty              = false;   // true while local edits haven't been flushed to Firebase yet
@@ -3380,7 +3401,12 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   function deselectChar() {
-    if (currentCharId) saveChar(currentCharId, true);
+    if (currentCharId) {
+      saveChar(currentCharId, true);
+      const key = inv.getInspectorKey();
+      if (key) lastInspectorKey.set(currentCharId, key);
+      else lastInspectorKey.delete(currentCharId);
+    }
     dirty = false;
     currentCharId = null;
     suppressSave = true;
@@ -3393,13 +3419,18 @@ window.CharacterManager = ({ auth, database }) => {
 
   function switchToChar(charId, skipSave) {
     inv.cancelDrag();
-    if (!skipSave && currentCharId) saveChar(currentCharId, true);
+    if (currentCharId) {
+      if (!skipSave) saveChar(currentCharId, true);
+      const key = inv.getInspectorKey();
+      if (key) lastInspectorKey.set(currentCharId, key);
+      else lastInspectorKey.delete(currentCharId);
+    }
     dirty = false;
     currentCharId = charId;
     suppressSave = true;
     try { inv.loadState(allChars[charId].state); } catch (e) { console.warn('loadState error:', e); }
     suppressSave = false;
-    const s = inv.getState();
+    inv.restoreInspector(lastInspectorKey.get(charId) || null);
     setFieldsOpen(false);
     updateCharHideBtn();
     renderTabs();
