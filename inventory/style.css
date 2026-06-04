@@ -2114,9 +2114,9 @@ body.is-dragging #inv-scroll {
   border-radius: 50%;
 }
 
-.hex-color-btn[data-color="#f0256a"]::after { background: #f0256a; }
-.hex-color-btn[data-color="#ffdc26"]::after { background: #ffdc26; }
-.hex-color-btn[data-color="#3ef5aa"]::after { background: #3ef5aa; }
+.hex-color-btn[data-color="#E6194B"]::after { background: #E6194B; }
+.hex-color-btn[data-color="#438DE0"]::after { background: #438DE0; }
+.hex-color-btn[data-color="#FFDC26"]::after { background: #FFDC26; }
 
 .hex-color-btn.active-color::after {
   box-shadow: 0 0 0 2px rgba(255,255,255,0.6);

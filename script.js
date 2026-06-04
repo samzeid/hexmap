@@ -71,11 +71,11 @@ hexInspNotes.addEventListener('input', () => {
 
 const selectedHexes = new Map(); // key → color string
 
-const DRAW_COLORS = ['#f0256a', '#ffdc26', '#3ef5aa'];
+const DRAW_COLORS = ['#E6194B', '#438DE0', '#FFDC26'];
 const DRAW_FILL   = {
-    '#f0256a': 'rgba(240,37,106,0.28)',
-    '#ffdc26': 'rgba(255,220,38,0.28)',
-    '#3ef5aa': 'rgba(62,245,170,0.28)',
+    '#E6194B': 'rgba(230,25,75,0.28)',
+    '#438DE0': 'rgba(67,141,224,0.28)',
+    '#FFDC26': 'rgba(255,220,38,0.28)',
 };
 let activeDrawColor = DRAW_COLORS[0];
 
