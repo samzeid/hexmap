@@ -91,7 +91,7 @@ function updateFlagRow(col, row) {
 }
 
 function drawFlag(x, y, color) {
-    const size = Math.round(hexSize * 1.1);
+    const size = Math.round(hexSize * 0.55);
     canvasContext.save();
     canvasContext.font = `900 ${size}px "Font Awesome 6 Free"`;
     canvasContext.fillStyle = color;

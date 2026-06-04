@@ -276,8 +276,8 @@ body             #item-insp-section { display: none !important; }
 }
 
 .hex-flag-btn {
-  background: rgba(255,255,255,0.06);
-  border: 1.5px solid rgba(255,255,255,0.14);
+  background: rgba(210,210,230,0.12);
+  border: 1.5px solid rgba(210,210,230,0.35);
   border-radius: 6px;
   width: 28px;
   height: 28px;
@@ -288,11 +288,11 @@ body             #item-insp-section { display: none !important; }
   padding: 0;
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
-  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
+  transition: border-color 0.15s, background 0.15s;
 }
-.hex-flag-btn:active { background: rgba(255,255,255,0.12); }
+.hex-flag-btn:active { background: rgba(210,210,230,0.22); }
 
-.hex-flag-off-btn i { font-size: 13px; color: rgba(255,255,255,0.22); }
+.hex-flag-off-btn i { font-size: 13px; color: #c8c8e0; opacity: 0.45; }
 
 .hex-flag-color-btn i { font-size: 13px; color: var(--fc); }
 .hex-flag-color-btn.active { border-color: var(--fc); }
