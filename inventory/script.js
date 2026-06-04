@@ -1722,6 +1722,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     return 0;
   }
 
+
   function getSlotMaterialCostCp(slotData, isAmmo) {
     const silverCp = isAmmo ? 1000  : 10000;
     const metalCp  = isAmmo ? 5000  : 50000;
@@ -3166,12 +3167,93 @@ window.CharacterManager = ({ auth, database }) => {
     });
   }
 
+  // ── COMPACT / RESOLVE (Firebase boundary) ───────────────────────────────
+
+  const SLOT_OVERRIDE_KEYS = [
+    'silvered','material','notes','costCoins','containerId','isContainer',
+    'containerRows','treasure','category','isWeapon','bulk','hasUses',
+    'conflict','conflictMsg',
+  ];
+
+  const resolveSlotData = raw => {
+    if (!raw || raw.custom || raw._ref == null) return raw;
+    const lib = (window.ITEM_LIBRARY || []).find(i => i.id === raw._ref);
+    if (!lib) return raw;
+    const resolved = JSON.parse(JSON.stringify(lib));
+
+    // Apply scalar overrides (except material — validated below)
+    for (const k of SLOT_OVERRIDE_KEYS) {
+      if (k === 'silvered' || k === 'material') continue;
+      if (raw[k] !== undefined) resolved[k] = raw[k];
+    }
+
+    // Determine effective category after any category override
+    const effCat = resolved.category
+      || (resolved.variables?.weapon ? 'weapon' : resolved.variables?.armor ? 'armor' : null);
+    const canSilver = ['weapon','ammunition'].includes(effCat);
+    const canMetal  = ['weapon','armor','shield','ammunition'].includes(effCat);
+
+    // Only keep material overrides if the item still supports them
+    if (raw.silvered && canSilver) resolved.silvered = raw.silvered;
+    if (raw.material && canMetal)  resolved.material = raw.material;
+
+    // Apply variable overrides — only for keys still in schema, clamped to new limits
+    if (raw._vars) {
+      resolved.variables = resolved.variables || {};
+      for (const [k, v] of Object.entries(raw._vars)) {
+        const schema = resolved.variables[k];
+        if (!schema) continue; // key no longer in schema — discard
+        let val = v;
+        if (typeof schema.min === 'number') val = Math.max(schema.min, val);
+        if (typeof schema.max === 'number') val = Math.min(schema.max, val);
+        schema.value = val;
+      }
+    }
+
+    return resolved;
+  };
+
+  const compactSlotData = slotData => {
+    if (!slotData || slotData.custom) return slotData;
+    const lib = (window.ITEM_LIBRARY || []).find(i =>
+      slotData._ref != null ? i.id === slotData._ref : i.name === slotData.name
+    );
+    if (!lib) return slotData;
+    const compact = { _ref: lib.id };
+    for (const k of SLOT_OVERRIDE_KEYS)
+      if (slotData[k] !== undefined) compact[k] = slotData[k];
+    if (slotData.variables) {
+      const vars = {};
+      for (const [k, v] of Object.entries(slotData.variables)) {
+        const libVal = lib.variables?.[k]?.value;
+        if (libVal === undefined || v.value !== libVal) vars[k] = v.value;
+      }
+      if (Object.keys(vars).length) compact._vars = vars;
+    }
+    return compact;
+  };
+
+  const resolveContainerSlots = containers => {
+    for (const container of containers || [])
+      for (const row of container.slots || [])
+        for (let c = 0; c < row.length; c++)
+          if (row[c]) row[c] = resolveSlotData(row[c]);
+  };
+
+  const compactContainerSlots = containers => {
+    for (const container of containers || [])
+      for (const row of container.slots || [])
+        for (let c = 0; c < row.length; c++)
+          if (row[c]) row[c] = compactSlotData(row[c]);
+  };
+
   function parseState(str) {
     try {
       const s = JSON.parse(str || 'null');
       if (!s) return blankState();
       if (!s.containers || !s.containers.length) s.containers = defaultContainers();
       inv.flattenGroups(s.containers);
+      resolveContainerSlots(s.containers);
       return s;
     } catch { return blankState(); }
   }
@@ -3271,8 +3353,10 @@ window.CharacterManager = ({ auth, database }) => {
     localWriteInFlight = true;
     const state = inv.getState();
     if (allChars[charId]) allChars[charId].state = state;
+    const saveState = JSON.parse(JSON.stringify(state));
+    compactContainerSlots(saveState.containers);
     database.ref(`/inventory_characters/${charId}`).update({
-      state: JSON.stringify(state),
+      state: JSON.stringify(saveState),
     }).then(() => {
       setTimeout(() => { localWriteInFlight = false; }, 200);
     });
