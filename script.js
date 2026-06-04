@@ -70,46 +70,34 @@ const hexFlagRow = document.getElementById('hex-flag-row');
 function updateFlagRow(col, row) {
     const key = `${col}_${row}`;
     const current = hexFlags.get(key) || null;
+    const states = [null, ...DRAW_COLORS];
     hexFlagRow.innerHTML = '';
 
-    const offBtn = document.createElement('button');
-    offBtn.className = 'hex-flag-btn hex-flag-off-btn' + (current === null ? ' active' : '');
-    offBtn.title = 'No flag';
-    offBtn.innerHTML = '<i class="fas fa-flag"></i>';
-    offBtn.addEventListener('click', () => hexFlagsRef.child(key).remove());
-    hexFlagRow.appendChild(offBtn);
-
-    DRAW_COLORS.forEach(color => {
-        const btn = document.createElement('button');
-        btn.className = 'hex-flag-btn hex-flag-color-btn' + (current === color ? ' active' : '');
-        btn.title = 'Set flag';
-        btn.style.setProperty('--fc', color);
-        btn.innerHTML = '<i class="fas fa-flag"></i>';
-        btn.addEventListener('click', () => hexFlagsRef.child(key).set(color));
-        hexFlagRow.appendChild(btn);
+    const btn = document.createElement('button');
+    btn.title = 'Toggle flag';
+    btn.innerHTML = '<i class="fas fa-flag"></i>';
+    if (current) {
+        btn.className = 'hex-flag-btn hex-flag-color-btn active';
+        btn.style.setProperty('--fc', current);
+    } else {
+        btn.className = 'hex-flag-btn hex-flag-off-btn';
+    }
+    btn.addEventListener('click', () => {
+        const next = states[(states.indexOf(current) + 1) % states.length];
+        if (next) hexFlagsRef.child(key).set(next);
+        else hexFlagsRef.child(key).remove();
     });
+    hexFlagRow.appendChild(btn);
 }
 
 function drawFlag(x, y, color) {
-    const poleH = hexSize * 0.9;
-    const poleTop = y - poleH / 2;
-    const poleBot = y + poleH / 2;
-    const penW = hexSize * 0.55;
-    const penH = hexSize * 0.45;
+    const size = Math.round(hexSize * 1.1);
     canvasContext.save();
-    canvasContext.beginPath();
-    canvasContext.moveTo(x, poleTop);
-    canvasContext.lineTo(x, poleBot);
-    canvasContext.strokeStyle = color;
-    canvasContext.lineWidth = 1.5;
-    canvasContext.stroke();
-    canvasContext.beginPath();
-    canvasContext.moveTo(x, poleTop);
-    canvasContext.lineTo(x + penW, poleTop + penH / 2);
-    canvasContext.lineTo(x, poleTop + penH);
-    canvasContext.closePath();
+    canvasContext.font = `900 ${size}px "Font Awesome 6 Free"`;
     canvasContext.fillStyle = color;
-    canvasContext.fill();
+    canvasContext.textAlign = 'center';
+    canvasContext.textBaseline = 'middle';
+    canvasContext.fillText('\uf024', x, y);
     canvasContext.restore();
 }
 
