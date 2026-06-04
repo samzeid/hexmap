@@ -173,6 +173,7 @@ body.inv-open #inv-separator { display: none; }
 }
 
 /* Hex section only in hexmap mode; item section reserved for future cross-page use */
+body.inv-open    #detail-panel      { display: none !important; }
 body.inv-open    #hex-insp-section  { display: none !important; }
 body             #item-insp-section { display: none !important; }
 
@@ -261,6 +262,8 @@ body             #item-insp-section { display: none !important; }
 }
 #hex-insp-notes::placeholder { color: rgba(255,255,255,0.25); }
 #hex-insp-notes:focus { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.07); }
+
+#hex-insp-section { padding-bottom: 10px; }
 
 /* Item section */
 #item-insp-header {
