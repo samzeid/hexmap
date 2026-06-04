@@ -1140,7 +1140,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     // ── Remove ──
     const removeBtnEl = document.getElementById('insp-remove');
-    removeBtnEl.hidden = !container;
+    removeBtnEl.hidden = !container || !window._isDM;
     if (container) removeBtnEl.onclick = () => {
       const lib = getLibraryItem(slotData.name);
       if (lib && lib.warnOnRemove) {
@@ -2350,28 +2350,18 @@ window.CharacterManager = ({ auth, database }) => {
 
   // ── SOUND ────────────────────────────────────────────────────────────────
   const playSound = (() => {
-    let ctx = null;
-    const buffers = {};
-    const getCtx = () => {
-      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-      return ctx;
-    };
-    ['bin', 'coin', 'place'].forEach(async name => {
-      try {
-        const res = await fetch(`../sounds/${name}.ogg`);
-        buffers[name] = await getCtx().decodeAudioData(await res.arrayBuffer());
-      } catch (e) {}
+    const audios = {};
+    ['bin', 'coin', 'place'].forEach(name => {
+      const a = new Audio(`../sounds/${name}.ogg`);
+      a.preload = 'auto';
+      audios[name] = a;
     });
     return name => {
       try {
-        const c = getCtx();
-        if (c.state === 'suspended') c.resume();
-        const b = buffers[name];
-        if (!b) return;
-        const src = c.createBufferSource();
-        src.buffer = b;
-        src.connect(c.destination);
-        src.start(0);
+        const a = audios[name];
+        if (!a) return;
+        a.currentTime = 0;
+        a.play().catch(() => {});
       } catch (e) {}
     };
   })();
@@ -3201,6 +3191,10 @@ window.CharacterManager = ({ auth, database }) => {
     if (raw._vars) {
       resolved.variables = resolved.variables || {};
       for (const [k, v] of Object.entries(raw._vars)) {
+        if (k === 'qty') {
+          resolved.variables.qty = { value: Math.max(1, Math.min(99, v)), control: 'both', min: 1, max: 99 };
+          continue;
+        }
         const schema = resolved.variables[k];
         if (!schema) continue; // key no longer in schema — discard
         let val = v;
