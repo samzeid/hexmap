@@ -1663,10 +1663,10 @@ main {
 }
 .insp-inline-var--compact .insp-inline-label { font-size: 11px; }
 
-/* Uses/charges — mid cyan tint */
-.insp-inline-var--uses .insp-inline-label  { color: rgba(100, 225, 235, 0.9); }
-.insp-inline-var--uses .insp-num-sm        { color: rgba(120, 230, 238, 0.95); border-color: rgba(100, 220, 230, 0.25); }
-.insp-inline-var--uses .insp-btn-sm        { color: rgba(110, 228, 236, 0.85); }
+/* Uses/charges — green tint */
+.insp-inline-var--uses .insp-inline-label  { color: rgba(80, 210, 130, 0.9); }
+.insp-inline-var--uses .insp-num-sm        { color: rgba(80, 210, 130, 0.95); border-color: rgba(80, 210, 130, 0.25); }
+.insp-inline-var--uses .insp-btn-sm        { color: rgba(80, 210, 130, 0.85); }
 
 .insp-num-sm {
   width: 52px;

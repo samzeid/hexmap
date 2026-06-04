@@ -2852,7 +2852,7 @@ window.CharacterManager = ({ auth, database }) => {
     const categorySelect = document.getElementById('shop-category');
     const prevVal = categorySelect.value;
     categorySelect.innerHTML = '<option value="">All categories</option>';
-    visibleSections.forEach(section => {
+    [...visibleSections].sort((a, b) => a.localeCompare(b)).forEach(section => {
       const opt = document.createElement('option');
       opt.value = section;
       opt.textContent = section;
