@@ -1004,11 +1004,14 @@ window.addEventListener("message", (e) => {
     if (!e.data) return;
     if (e.data.type === "toggleView") {
         document.body.classList.toggle('inv-open');
-        latestInspectorHex = null;
-        hideHexInfo();
-        attachHexNotes(null);
-        attachHexCustomName(null);
-        hexFocusRef.remove();
+        if (document.body.classList.contains('inv-open')) {
+            // Switching to inventory: hide panel but preserve hex focus for return
+            hideHexInfo();
+            attachHexNotes(null);
+            attachHexCustomName(null);
+        }
+        // Switching back to hexview: drawGridLatestActive() restores the panel
+        // automatically from latestInspectorHex, which we kept intact.
     }
     if (e.data.type === "headerHeight") {
         document.documentElement.style.setProperty('--inv-header-h', e.data.height + 'px');
