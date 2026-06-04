@@ -71,11 +71,11 @@ hexInspNotes.addEventListener('input', () => {
 
 const selectedHexes = new Map(); // key → color string
 
-const DRAW_COLORS = ['#ffcd3c', '#ff6060', '#55aaff'];
+const DRAW_COLORS = ['#f0256a', '#ffdc26', '#3ef5aa'];
 const DRAW_FILL   = {
-    '#ffcd3c': 'rgba(255,205,60,0.28)',
-    '#ff6060': 'rgba(255,96,96,0.28)',
-    '#55aaff': 'rgba(85,170,255,0.28)',
+    '#f0256a': 'rgba(240,37,106,0.28)',
+    '#ffdc26': 'rgba(255,220,38,0.28)',
+    '#3ef5aa': 'rgba(62,245,170,0.28)',
 };
 let activeDrawColor = DRAW_COLORS[0];
 
@@ -311,25 +311,19 @@ function drawGrid(hoveredHex = null) {
                 });
             }
 
-            // Draw hovered hex.
-            if (isHovered) {
-                drawHex(x, y, {
-                    strokeColor: "rgba(255,255,255,1)",
-                    fillColor: "rgba(255,255,255,0.3)",
-                    lineWidth: 2,
-                    opacity: 1
-                });
-            } else if (isFocused) {
-                drawHex(x, y, {
-                    strokeColor: "rgba(255,255,255,1)",
-                    fillColor: "rgba(255,255,255,0.3)",
-                    lineWidth: 2,
-                    opacity: 1
-                });
-            } else if (selColor) {
+            // Draw selected colour first so focus/hover overlays blend on top.
+            if (selColor) {
                 drawHex(x, y, {
                     strokeColor: selColor,
                     fillColor: DRAW_FILL[selColor] || 'rgba(255,205,60,0.28)',
+                    lineWidth: 2,
+                    opacity: 1
+                });
+            }
+            if (isHovered || isFocused) {
+                drawHex(x, y, {
+                    strokeColor: "rgba(255,255,255,0.85)",
+                    fillColor: "rgba(255,255,255,0.08)",
                     lineWidth: 2,
                     opacity: 1
                 });
@@ -346,7 +340,7 @@ function drawGrid(hoveredHex = null) {
         if (flashAlpha > 0) {
             drawHex(cx, cy, {
                 strokeColor: `rgba(255,255,255,${flashAlpha})`,
-                fillColor:   `rgba(255,255,255,${flashAlpha * 0.35})`,
+                fillColor:   `rgba(255,255,255,${flashAlpha * 0.12})`,
                 lineWidth: 2,
                 opacity: 1,
             });
