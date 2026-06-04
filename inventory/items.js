@@ -27,6 +27,22 @@ window.WEAPON_OPTIONS = [
   "Heavy Crossbow","Longbow",
 ];
 
+window.WEAPON_TYPES = {
+  // Thrown
+  "Dagger":"thrown","Handaxe":"thrown","Javelin":"thrown","Light Hammer":"thrown",
+  "Spear":"thrown","Dart":"thrown","Trident":"thrown",
+  // Ranged
+  "Light Crossbow":"ranged","Shortbow":"ranged","Sling":"ranged","Blowgun":"ranged",
+  "Hand Crossbow":"ranged","Heavy Crossbow":"ranged","Longbow":"ranged",
+  // Melee (all others default to melee — listed for completeness)
+  "Club":"melee","Greatclub":"melee","Mace":"melee","Quarterstaff":"melee",
+  "Sickle":"melee","Battleaxe":"melee","Flail":"melee","Glaive":"melee",
+  "Greataxe":"melee","Greatsword":"melee","Halberd":"melee","Lance":"melee",
+  "Longsword":"melee","Maul":"melee","Morningstar":"melee","Pike":"melee",
+  "Rapier":"melee","Scimitar":"melee","Shortsword":"melee","Warhammer":"melee",
+  "War Pick":"melee","Whip":"melee",
+};
+
 // Armor list used by magical armor items
 window.ARMOR_OPTIONS = [
   "Padded Armor","Leather Armor","Studded Leather Armor",
@@ -214,7 +230,7 @@ window.ITEM_LIBRARY = [
   { name: "Deathrite Coins",       bulk: Bulk.PACKABLE, cost: "120 gp", description: `Placing these gold coins over a corpse's eyes casts <i>speak with dead</i> on it. The coins then lose their magic.` },
   { name: "Dust of Revealing",     bulk: Bulk.PACKABLE, cost: "120 gp", description: `As a magical action, you can scatter this dust in a 10-foot emanation. For 1 minute, it glows faintly, revealing magical auras and ending invisibility and illusions within the area and on affected creatures. The dust is consumed on use.` },
   { name: "Dust of Disappearance", bulk: Bulk.PACKABLE, cost: "120 gp", description: `When you take a Utilize action to throw the dust into the air, you and each creature and object within a 10-foot emanation have the <i>invisible</i> condition for 2d4 minutes. The duration is the same for all subjects, and the dust is consumed when its magic takes effect. Immediately after an affected creature makes an attack roll, deals damage, or casts a spell, the <i>invisible</i> condition ends for that creature.` },
-  { name: "Salt of Binding",       bulk: Bulk.PACKABLE, cost: "120 gp", description: `You can spend 1 minute spreading this salt in a 5-foot-radius circle. When a Celestial, Elemental, Fey, Fiend, or Undead enters the circle, or touches its edge, if you are within 60ft of the circle, you can use your reaction to activate it. The area is then affected by the <i>magic circle</i> spell (DC 13), targeting the triggering creature's type for 1 hour. The salt is consumed on use.` },
+  { name: "Salt of Binding",       bulk: Bulk.PACKABLE, cost: "120 gp", description: `You can spend 1 minute spreading this salt in a 5-foot-radius circle. When a creature enters the circle, or touches its edge, if you are within 60ft, you can use your reaction to activate it. You learn the creature's type and the area is affected by the <i>magic circle</i> spell (DC 13) for 1 hour, or until a creature of that type within 10 feet of the area is dealt damaged. The salt is consumed on use.` },
   { name: "Stone of Illusion",     bulk: Bulk.PACKABLE, cost: "120 gp", description: `You can place this stone to cast <i>major image</i> at its location. The effect cannot be moved and remains until dispelled or the stone is moved, at which point this becomes a non-magical stone.` },
   { name: "Cloudy Hag Eye",        bulk: Bulk.PACKABLE, cost: "120 gp", description: `This functions as a <i>Hag Eye</i>. When used, there is a 10 percent chance it instead emits a loud, mocking cackle audible within 300 feet and disintegrates.` },
   { name: "Flicker Dagger",        bulk: Bulk.PACKABLE, cost: "120 gp", description: `When you throw this weapon, you can teleport to the targeted space or a space adjacent to it as long as you can see the location and it is unoccupied. Immediately after, the dagger is destroyed.` },

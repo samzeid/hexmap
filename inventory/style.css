@@ -1252,6 +1252,9 @@ main {
 .slot-bulk-tag--verybulky  { background: rgba(255, 150, 0, 0.18);  color: #ffaa55; }
 .slot-bulk-tag--container  { background: rgba(160, 100, 255, 0.18); color: #c090ff; }
 .slot-bulk-tag--ammo       { background: rgba(80, 160, 255, 0.18);  color: #66aaff; }
+.slot-bulk-tag--thrown     { background: rgba(255,  70,  70, 0.18); color: #ff6060; }
+.slot-bulk-tag--melee      { background: rgba(200,  60,  60, 0.18); color: #dd5555; }
+.slot-bulk-tag--ranged     { background: rgba(255, 130,  60, 0.18); color: #ff8844; }
 
 .slot-input:focus ~ .slot-label { display: none; }
 
@@ -1419,11 +1422,30 @@ main {
   flex-shrink: 0;
 }
 
+/* Compact vertical-first tag grid in inspector props */
+.insp-tag-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+  gap: 3px 4px;
+  align-self: center;
+  flex-shrink: 0;
+}
+.insp-tag-grid .ac-tag {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
 .ac-tag.bulky     { background: rgba(255,150,0,0.18);   color: #ffaa55; }
 .ac-tag.verybulky { background: rgba(255,80,0,0.18);   color: #ff7744; }
 .ac-tag.packable  { background: rgba(80,210,130,0.18); color: #66dd99; }
 .ac-tag.container { background: rgba(160,100,255,0.18); color: #c090ff; }
 .ac-tag.ammo      { background: rgba(80, 160,255,0.18); color: #66aaff; }
+.ac-tag.thrown    { background: rgba(255,  70, 70,0.18); color: #ff6060; }
+.ac-tag.melee     { background: rgba(200,  60, 60,0.18); color: #dd5555; }
+.ac-tag.ranged    { background: rgba(255, 130, 60,0.18); color: #ff8844; }
 
 /* ── INSPECTOR ───────────────────────────────────────────────── */
 #inspector {
@@ -1631,6 +1653,20 @@ main {
 }
 
 .insp-btn-sm:active { background: rgba(255,255,255,0.2); }
+
+/* Compact modifier — qty and uses/charges vars */
+.insp-inline-var--compact .insp-btn-sm {
+  width: 28px; height: 28px; font-size: 16px; border-radius: 6px;
+}
+.insp-inline-var--compact .insp-num-sm {
+  width: 40px; font-size: 14px; padding: 4px 2px; border-radius: 6px;
+}
+.insp-inline-var--compact .insp-inline-label { font-size: 11px; }
+
+/* Uses/charges — mid cyan tint */
+.insp-inline-var--uses .insp-inline-label  { color: rgba(100, 225, 235, 0.9); }
+.insp-inline-var--uses .insp-num-sm        { color: rgba(120, 230, 238, 0.95); border-color: rgba(100, 220, 230, 0.25); }
+.insp-inline-var--uses .insp-btn-sm        { color: rgba(110, 228, 236, 0.85); }
 
 .insp-num-sm {
   width: 52px;

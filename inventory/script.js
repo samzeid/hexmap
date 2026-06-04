@@ -643,8 +643,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       // Corner tags (bulk left, container right)
       const _isContainerSlot = !!(slotData.isContainer || (getLibraryItem(slotData.name) || {}).containerRows);
       const _isAmmoSlot = slotData.category === 'ammunition' || ((getLibraryItem(slotData.name) || {}).category === 'ammunition');
+      const _weaponTypeSlot = getSlotWeaponType(slotData);
       const _showBulkTag = !_isAmmoSlot && (_bulkId === 'packable' || _bulkId === 'bulky' || _bulkId === 'verybulky');
-      if (_isContainerSlot || _showBulkTag || _isAmmoSlot) {
+      if (_isContainerSlot || _showBulkTag || _isAmmoSlot || _weaponTypeSlot) {
         const tagsWrap = document.createElement('div');
         tagsWrap.className = 'slot-tags';
         if (_showBulkTag) {
@@ -663,6 +664,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           const t = document.createElement('span');
           t.className = 'slot-bulk-tag slot-bulk-tag--ammo';
           t.textContent = 'Ammo';
+          tagsWrap.appendChild(t);
+        }
+        if (_weaponTypeSlot) {
+          const t = document.createElement('span');
+          t.className = `slot-bulk-tag slot-bulk-tag--${_weaponTypeSlot}`;
+          t.textContent = _weaponTypeSlot.charAt(0).toUpperCase() + _weaponTypeSlot.slice(1);
           tagsWrap.appendChild(t);
         }
         wrap.appendChild(tagsWrap);
@@ -924,7 +931,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (!isCoinItem && !_isContainerItem && (container || slotData._shopItem)) {
       const qtyVal = slotData.variables?.qty?.value ?? 1;
       const qtyWrap = document.createElement('div');
-      qtyWrap.className = 'insp-inline-var';
+      qtyWrap.className = 'insp-inline-var insp-inline-var--compact';
       qtyWrap.innerHTML = `
         <span class="insp-inline-label">qty</span>
         <button class="insp-btn-sm" data-qd="-1">−</button>
@@ -955,7 +962,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       if (key === 'qty') continue; // rendered above
       if (meta.control !== 'plusminus' && meta.control !== 'both') continue;
       const wrap = document.createElement('div');
-      wrap.className = 'insp-inline-var' + (isCoinItem ? ' coin-inline-var' : '');
+      const isUsesKey = key === 'uses' || key === 'count' || key === 'charges';
+      wrap.className = 'insp-inline-var'
+        + (isCoinItem ? ' coin-inline-var' : ' insp-inline-var--compact')
+        + (isUsesKey && !isCoinItem ? ' insp-inline-var--uses' : '');
       if (isCoinItem) {
         wrap.innerHTML = `
           <span class="insp-inline-label coin-label-${key}">${key.toUpperCase()}</span>
@@ -1118,32 +1128,29 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const propsEl = document.getElementById('insp-props');
     propsEl.innerHTML = '';
 
-    // Bulk tag — leftmost chip, shown for packable and bulky items
+    // ── Display-only tags (compact grid) ──
     const _inspBulkId = slotData.bulk ? slotData.bulk.id
       : (lib?.bulk || Bulk.STOCK).id;
     const _isAmmoInsp = slotData.category === 'ammunition' || (lib && lib.category === 'ammunition');
-    if (!_isAmmoInsp && (_inspBulkId === 'packable' || _inspBulkId === 'bulky' || _inspBulkId === 'verybulky')) {
-      const bulkTag = document.createElement('span');
-      bulkTag.className = `ac-tag ${_inspBulkId}`;
-      bulkTag.textContent = _inspBulkId === 'packable' ? 'Packable' : 'Bulky';
-      propsEl.appendChild(bulkTag);
-    }
+    const _weaponTypeInsp = getSlotWeaponType(slotData);
 
-    // Ammo tag
-    if (_isAmmoInsp) {
-      const ammoTag = document.createElement('span');
-      ammoTag.className = 'ac-tag ammo';
-      ammoTag.textContent = 'Ammo';
-      propsEl.appendChild(ammoTag);
-    }
+    const tagGrid = document.createElement('div');
+    tagGrid.className = 'insp-tag-grid';
 
-    // Container tag — immediately after bulk tag
-    if (slotData.isContainer || (lib && lib.containerRows)) {
-      const containerTag = document.createElement('span');
-      containerTag.className = 'ac-tag container';
-      containerTag.textContent = 'Container';
-      propsEl.appendChild(containerTag);
-    }
+    const addTag = (cls, text) => {
+      const t = document.createElement('span');
+      t.className = `ac-tag ${cls}`;
+      t.textContent = text;
+      tagGrid.appendChild(t);
+    };
+
+    if (!_isAmmoInsp && (_inspBulkId === 'packable' || _inspBulkId === 'bulky' || _inspBulkId === 'verybulky'))
+      addTag(_inspBulkId, _inspBulkId === 'packable' ? 'Packable' : 'Bulky');
+    if (_weaponTypeInsp) addTag(_weaponTypeInsp, _weaponTypeInsp.charAt(0).toUpperCase() + _weaponTypeInsp.slice(1));
+    if (_isAmmoInsp) addTag('ammo', 'Ammo');
+    if (slotData.isContainer || (lib && lib.containerRows)) addTag('container', 'Container');
+
+    if (tagGrid.children.length) propsEl.appendChild(tagGrid);
 
     // Editable cost fields — non-custom treasure items with variable cost (DM only)
     const showCostInput = window._isDM && !itemHidden && container
@@ -1664,6 +1671,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     document.querySelectorAll('.char-tab.drag-target').forEach(tab => {
       tab.classList.remove('drag-target');
     });
+  }
+
+  function getSlotWeaponType(slotData) {
+    const wt = window.WEAPON_TYPES;
+    if (!wt) return null;
+    const weaponVal = slotData.variables?.weapon?.value;
+    if (weaponVal) return wt[weaponVal] || null;
+    const lib = getLibraryItem(slotData.name);
+    if (lib) return wt[lib.name] || null;
+    return null;
   }
 
   function getSlotTypeCostCp(slotData) {
