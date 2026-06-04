@@ -29,6 +29,7 @@ const detailPanel    = document.getElementById('detail-panel');
 const hexInspSect    = document.getElementById('hex-insp-section');
 const hexInspName    = document.getElementById('hex-insp-name');
 const hexInspNameIn  = document.getElementById('hex-insp-name-input');
+const hexInspRegion  = document.getElementById('hex-insp-region');
 const hexInspCoords  = document.getElementById('hex-insp-coords');
 const hexInspDesc    = document.getElementById('hex-insp-desc');
 const hexInspNotes   = document.getElementById('hex-insp-notes');
@@ -42,8 +43,10 @@ function refreshDetailPanel() {
         detailPanel.classList.add('detail-collapsed');
 }
 
-function showHexInfo(name, coords, desc, hasLocation) {
+function showHexInfo(name, coords, desc, hasLocation, regionName) {
     hexInspCoords.textContent = coords;
+    hexInspRegion.textContent = regionName || '';
+    hexInspRegion.hidden = !regionName;
     if (hasLocation) {
         hexInspName.textContent = name;
         hexInspName.hidden = false;
@@ -61,6 +64,7 @@ function showHexInfo(name, coords, desc, hasLocation) {
 
 function hideHexInfo() {
     hexInspSect.hidden = true;
+    hexInspRegion.hidden = true;
     document.getElementById('hex-flag-row').innerHTML = '';
     refreshDetailPanel();
 }
@@ -567,24 +571,21 @@ function drawGrid(hoveredHex = null) {
         const hexInfo = hexData.get(key);
         const notesKey = `${hoveredHex.col}_${hoveredHex.row}`;
 
-        let name = '', desc = '', hasLocation = false;
+        let name = '', desc = '', hasLocation = false, regionName = '';
         if (hexInfo) {
             const { politicalRegion, environmentalRegion, location } = hexInfo;
             const region = politicalRegion ?? environmentalRegion;
+            if (region && region.name) regionName = region.name;
             if (location && location.name) {
                 name = location.name;
                 desc = location.description || '';
                 hasLocation = true;
-            } else if (region && region.name) {
-                name = region.name;
-                desc = region.description || '';
-                hasLocation = true;
             }
         }
 
-        showHexInfo(name, `${hoveredHex.col}, ${hoveredHex.row}`, desc, hasLocation);
+        showHexInfo(name, `${hoveredHex.col}, ${hoveredHex.row}`, desc, hasLocation, regionName);
         attachHexNotes(notesKey);
-        attachHexCustomName(hasLocation ? null : notesKey);
+        attachHexCustomName(notesKey);
         updateFlagRow(hoveredHex.col, hoveredHex.row);
     } else {
         hideHexInfo();

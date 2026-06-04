@@ -221,6 +221,13 @@ body             #item-insp-section { display: none !important; }
 }
 #hex-insp-name-input::placeholder { color: rgba(255,255,255,0.3); font-weight: 400; }
 #hex-insp-name-input:focus { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.1); }
+#hex-insp-region {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  font-style: italic;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 #hex-insp-coords {
   font-size: 11px;
   color: rgba(255,255,255,0.4);
