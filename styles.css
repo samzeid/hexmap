@@ -262,7 +262,7 @@ body             #item-insp-section { display: none !important; }
   line-height: 1.5;
   padding: 8px 10px;
   resize: none;
-  min-height: 0;
+  min-height: 52px;
   height: auto;
   overflow-y: hidden;
   field-sizing: content;
