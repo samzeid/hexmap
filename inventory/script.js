@@ -345,7 +345,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     updateCurrencyDisplay();
     updateCarryDisplay();
 
-    // Refresh inspector name if panel is open for an inventory slot
+    // Refresh inspector if panel is open for an inventory slot
     if (inspectorItemKey && !inspectorItemKey.startsWith('shop-')
         && !inspectorEl.classList.contains('inspector-collapsed')) {
       const lastH = inspectorItemKey.lastIndexOf('-');
@@ -355,12 +355,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const ic  = parseInt(inspectorItemKey.substring(lastH + 1));
       const cnt = state.containers.find(c => c.id === cid);
       const sd  = cnt && cnt.slots[ir] && cnt.slots[ir][ic];
-      if (sd) {
-        const _sdLib = getLibraryItem(sd.name);
-        const _sdEl  = document.getElementById('insp-name');
-        if (_sdLib && _sdLib.gridSymbol) _sdEl.innerHTML = `${_sdLib.gridSymbol}&nbsp;${_sdLib.name}`;
-        else _sdEl.textContent = sd.name || '';
-      }
+      if (sd) showInspector(sd, cnt, ir, ic);
+      else hideInspector();
     }
 
     if (onChange) onChange();
@@ -2287,10 +2283,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const c = parseInt(key.substring(lastDash + 1));
       const container = state.containers.find(ct => ct.id === containerId);
       if (!container || !container.slots[r]) return;
-      const slotData = container.slots[r][c];
-      if (!slotData) return;
-      showInspector(slotData, container, r, c);
+      if (!container.slots[r][c]) return;
       inspectorItemKey = key;
+      inspectorEl.classList.remove('inspector-collapsed');
       render();
     },
 
