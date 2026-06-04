@@ -2418,7 +2418,7 @@ window.CharacterManager = ({ auth, database }) => {
     window.parent.postMessage({ type: 'toggleView' }, '*');
     requestAnimationFrame(_postHeaderHeight);
     if (!_hexmapMode) ensureCharSelected();
-    else deselectChar();
+    else { if (currentCharId) saveChar(currentCharId, true); dirty = false; }
   });
 
   // ── HEXMAP TOOLBAR ──────────────────────────────────────────────────────
@@ -3056,7 +3056,7 @@ window.CharacterManager = ({ auth, database }) => {
     invScrollEl.hidden = false;
     if (_shopFromHexmap) {
       _shopFromHexmap = false;
-      deselectChar();
+      if (currentCharId) saveChar(currentCharId, true); dirty = false;
       _hexmapMode = true;
       _applyViewMode();
       window.parent.postMessage({ type: 'toggleView' }, '*');
@@ -3674,7 +3674,7 @@ window.CharacterManager = ({ auth, database }) => {
             if (shopOpen) {
               closeShop();
             } else if (!_hexmapMode) {
-              deselectChar();
+              if (currentCharId) saveChar(currentCharId, true); dirty = false;
               _hexmapMode = true;
               _applyViewMode();
               window.parent.postMessage({ type: 'toggleView' }, '*');

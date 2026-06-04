@@ -63,7 +63,23 @@ function hideHexInfo() {
     refreshDetailPanel();
 }
 
+function setLocalFocus(col, row) {
+    _focusHex = { col, row };
+    latestInspectorHex = { col, row };
+    drawGrid({ col, row });
+}
+
+function clearLocalFocus() {
+    _focusHex = null;
+    latestInspectorHex = null;
+    hideHexInfo();
+    attachHexNotes(null);
+    attachHexCustomName(null);
+    drawGridLatestActive();
+}
+
 document.getElementById('hex-insp-toggle').addEventListener('click', () => {
+    clearLocalFocus();
     hexFocusRef.remove();
 });
 
@@ -629,9 +645,9 @@ canvas.addEventListener("mouseup", (event) => {
             revealHexInfo(startCol, startRow);
         } else {
             if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
-                hexFocusRef.remove();
+                clearLocalFocus();
             } else {
-                hexFocusRef.set({ col: startCol, row: startRow });
+                setLocalFocus(startCol, startRow);
             }
         }
     }
@@ -653,8 +669,7 @@ canvas.addEventListener("mouseleave", () => {
 });
 
 function revealHexInfo(col, row) {
-    latestInspectorHex = { col, row };
-    drawGrid({ col, row });
+    setLocalFocus(col, row);
 }
 
 function setHexSelected(key, color) {
@@ -942,9 +957,9 @@ canvas.addEventListener("touchend", (e) => {
             revealHexInfo(startCol, startRow);
         } else {
             if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
-                hexFocusRef.remove();
+                clearLocalFocus();
             } else {
-                hexFocusRef.set({ col: startCol, row: startRow });
+                setLocalFocus(startCol, startRow);
             }
         }
     }
