@@ -2122,6 +2122,10 @@ body.is-dragging #inv-scroll {
   box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
 }
 
+#hex-erase-btn { color: rgba(255,255,255,0.5); font-size: 13px; }
+#hex-erase-btn::after { display: none; }
+#hex-erase-btn.active-color { color: #e8e8f0; background: rgba(255,255,255,0.12); }
+
 
 /* ── HEXMAP MODE (header bar only, inventory panels hidden) ── */
 #app.hexmap-mode #inv-scroll,
