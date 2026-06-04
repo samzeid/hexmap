@@ -463,16 +463,6 @@
       "hexes": ["17,38"],
       "name": "Arish",
       "description": "Arish, Braken and Kina struggle to support the surging population of Calis."
-    },
-    {
-      "hexes": ["21,19"],
-      "name": "Water Temple",
-      "description": "The map found in Spike's cloak points here, included was a brief description, describing a flooded temple."
-    },
-    {
-      "hexes": ["18,20"],
-      "name": "Cursed Crypt",
-      "description": "A cursed dungeon was found, you cleared the mummy cursing it, but it can be explored further."
     }
   ]
 }
