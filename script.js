@@ -23,11 +23,55 @@ image.src = "https://lh3.googleusercontent.com/d/1fySy_aXhOZHiJGMw6B2xon_8nMiVey
 const canvas = document.getElementById("canvas");
 const canvasContext = canvas.getContext("2d");
 
-const invFrameWrap  = document.getElementById("inv-frame-wrap");
+const invFrameWrap   = document.getElementById("inv-frame-wrap");
+const detailPanel    = document.getElementById('detail-panel');
+const hexInspSect    = document.getElementById('hex-insp-section');
+const hexInspName    = document.getElementById('hex-insp-name');
+const hexInspNameIn  = document.getElementById('hex-insp-name-input');
+const hexInspCoords  = document.getElementById('hex-insp-coords');
+const hexInspDesc    = document.getElementById('hex-insp-desc');
+const hexInspNotes   = document.getElementById('hex-insp-notes');
 
 function sendToFrame(msg) {
     document.getElementById('inv-frame')?.contentWindow?.postMessage(msg, '*');
 }
+
+function refreshDetailPanel() {
+    if (hexInspSect.hidden && document.getElementById('item-insp-section').hidden)
+        detailPanel.classList.add('detail-collapsed');
+}
+
+function showHexInfo(name, coords, desc, hasLocation) {
+    hexInspCoords.textContent = coords;
+    if (hasLocation) {
+        hexInspName.textContent = name;
+        hexInspName.hidden = false;
+        hexInspNameIn.hidden = true;
+        hexInspDesc.textContent = desc;
+        hexInspDesc.hidden = !desc;
+    } else {
+        hexInspName.hidden = true;
+        hexInspNameIn.hidden = false;
+        hexInspDesc.hidden = true;
+    }
+    hexInspSect.hidden = false;
+    detailPanel.classList.remove('detail-collapsed');
+}
+
+function hideHexInfo() {
+    hexInspSect.hidden = true;
+    refreshDetailPanel();
+}
+
+document.getElementById('hex-insp-toggle').addEventListener('click', () => {
+    hexFocusRef.remove();
+});
+
+document.getElementById('item-insp-toggle').addEventListener('click', () => {
+    document.getElementById('item-insp-section').hidden = true;
+    refreshDetailPanel();
+    sendToFrame({ type: 'closeItemInspector' });
+});
 
 new ResizeObserver(() => {
     setPan(panX, panY);
@@ -56,29 +100,49 @@ function attachHexNotes(key) {
     if (_hexNotesKey === key) return;
     if (_hexNotesRef) { _hexNotesRef.off('value', _onHexNote); _hexNotesRef = null; }
     _hexNotesKey = key;
-    sendToFrame({ type: 'hexNotes', value: '' });
+    hexInspNotes.value = '';
     if (!key) return;
     _hexNotesRef = database.ref(`/hexNotes/${key}`);
     _hexNotesRef.on('value', _onHexNote);
 }
 
 function _onHexNote(snap) {
-    sendToFrame({ type: 'hexNotes', value: snap.val() || '' });
+    if (document.activeElement !== hexInspNotes) hexInspNotes.value = snap.val() || '';
 }
 
 function attachHexCustomName(key) {
     if (_hexCustomNameKey === key) return;
     if (_hexCustomNameRef) { _hexCustomNameRef.off('value', _onHexCustomName); _hexCustomNameRef = null; }
     _hexCustomNameKey = key;
-    sendToFrame({ type: 'hexCustomName', value: '' });
+    hexInspNameIn.value = '';
     if (!key) return;
     _hexCustomNameRef = database.ref(`/hexCustomNames/${key}`);
     _hexCustomNameRef.on('value', _onHexCustomName);
 }
 
 function _onHexCustomName(snap) {
-    sendToFrame({ type: 'hexCustomName', value: snap.val() || '' });
+    if (document.activeElement !== hexInspNameIn) hexInspNameIn.value = snap.val() || '';
 }
+
+hexInspNotes.addEventListener('input', () => {
+    clearTimeout(_hexNotesSaveTimer);
+    _hexNotesSaveTimer = setTimeout(() => {
+        if (!_hexNotesKey) return;
+        const val = hexInspNotes.value;
+        if (val) database.ref(`/hexNotes/${_hexNotesKey}`).set(val);
+        else     database.ref(`/hexNotes/${_hexNotesKey}`).remove();
+    }, 600);
+});
+
+hexInspNameIn.addEventListener('input', () => {
+    clearTimeout(_hexCustomNameSaveTimer);
+    _hexCustomNameSaveTimer = setTimeout(() => {
+        if (!_hexCustomNameKey) return;
+        const val = hexInspNameIn.value;
+        if (val) database.ref(`/hexCustomNames/${_hexCustomNameKey}`).set(val);
+        else     database.ref(`/hexCustomNames/${_hexCustomNameKey}`).remove();
+    }, 600);
+});
 
 const selectedHexes = new Map(); // key → color string
 
@@ -442,11 +506,11 @@ function drawGrid(hoveredHex = null) {
             }
         }
 
-        sendToFrame({ type: 'hexInfo', name, coords: `${hoveredHex.col}, ${hoveredHex.row}`, desc, hasLocation });
+        showHexInfo(name, `${hoveredHex.col}, ${hoveredHex.row}`, desc, hasLocation);
         attachHexNotes(notesKey);
         attachHexCustomName(hasLocation ? null : notesKey);
     } else {
-        sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
+        hideHexInfo();
         attachHexNotes(null);
         attachHexCustomName(null);
     }
@@ -685,7 +749,7 @@ hexFocusRef.on('value', snap => {
         latestInspectorHex = { col: _focusHex.col, row: _focusHex.row };
     } else {
         latestInspectorHex = null;
-        sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
+        hideHexInfo();
         attachHexNotes(null);
         attachHexCustomName(null);
     }
@@ -946,31 +1010,25 @@ window.addEventListener("message", (e) => {
     if (e.data.type === "toggleView") {
         document.body.classList.toggle('inv-open');
         if (document.body.classList.contains('inv-open')) {
-            sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
+            hideHexInfo();
             attachHexNotes(null);
             attachHexCustomName(null);
         }
     }
-    if (e.data.type === 'hexCustomNameInput') {
-        clearTimeout(_hexCustomNameSaveTimer);
-        _hexCustomNameSaveTimer = setTimeout(() => {
-            if (!_hexCustomNameKey) return;
-            const val = e.data.value;
-            if (val) database.ref(`/hexCustomNames/${_hexCustomNameKey}`).set(val);
-            else     database.ref(`/hexCustomNames/${_hexCustomNameKey}`).remove();
-        }, 600);
+    if (e.data.type === 'itemInfo') {
+        const sect = document.getElementById('item-insp-section');
+        if (e.data.name) {
+            document.getElementById('item-insp-name').textContent = e.data.name;
+            document.getElementById('item-insp-desc').innerHTML   = e.data.desc || '';
+            sect.hidden = false;
+            detailPanel.classList.remove('detail-collapsed');
+        } else {
+            sect.hidden = true;
+            refreshDetailPanel();
+        }
     }
-    if (e.data.type === 'hexNotesInput') {
-        clearTimeout(_hexNotesSaveTimer);
-        _hexNotesSaveTimer = setTimeout(() => {
-            if (!_hexNotesKey) return;
-            const val = e.data.value;
-            if (val) database.ref(`/hexNotes/${_hexNotesKey}`).set(val);
-            else     database.ref(`/hexNotes/${_hexNotesKey}`).remove();
-        }, 600);
-    }
-    if (e.data.type === 'hexInfoClose') {
-        hexFocusRef.remove();
+    if (e.data.type === 'closeItemInspector') {
+        sendToFrame({ type: 'closeItemInspector' });
     }
     if (e.data.type === "headerHeight") {
         document.documentElement.style.setProperty('--inv-header-h', e.data.height + 'px');

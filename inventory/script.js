@@ -1637,13 +1637,15 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
 
     inspectorEl.classList.remove('inspector-collapsed');
+    window.parent.postMessage({
+      type: 'itemInfo',
+      name: document.getElementById('insp-name')?.textContent || '',
+      desc: document.getElementById('insp-desc')?.innerHTML   || ''
+    }, '*');
   }
 
   function refreshInspectorCollapsed() {
-    const hexSect = document.getElementById('hex-insp-section');
-    const hasHex  = !hexSect.hidden;
-    const hasItem = inspectorItemKey !== null;
-    if (!hasHex && !hasItem) {
+    if (inspectorItemKey === null) {
       inspectorEl.classList.add('inspector-collapsed');
     }
   }
@@ -1654,6 +1656,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     inspectorItemKey = null;
     _customEditKey = null; _customEditOpen = false;
     refreshInspectorCollapsed();
+    window.parent.postMessage({ type: 'itemInfo', name: '', desc: '' }, '*');
   }
 
   function toggleInspectorFor(key, slotData, container, r, c) {
@@ -1671,17 +1674,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     render();
   });
 
-  document.getElementById('hex-insp-toggle').addEventListener('click', () => {
-    window.parent.postMessage({ type: 'hexInfoClose' }, '*');
-  });
-
-  document.getElementById('hex-insp-notes').addEventListener('input', e => {
-    window.parent.postMessage({ type: 'hexNotesInput', value: e.target.value }, '*');
-  });
-
-  document.getElementById('hex-insp-name-input').addEventListener('input', e => {
-    window.parent.postMessage({ type: 'hexCustomNameInput', value: e.target.value }, '*');
-  });
 
   document.addEventListener('pointerdown', e => {
     if (inspectorItemKey !== null
@@ -2354,8 +2346,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       document.getElementById('char-carry').value = state.carryCapacity;
       render();
     },
-    refreshHexPanel()    { refreshInspectorCollapsed(); },
-    hideItemInspector()  { hideInspector(); },
   };
 };
 
@@ -2412,7 +2402,6 @@ window.CharacterManager = ({ auth, database }) => {
     document.getElementById('app').classList.toggle('hexmap-mode', _hexmapMode);
     _closeBtnI.className = _hexmapMode ? 'fa-solid fa-scroll' : 'fa-solid fa-map';
     _closeBtn.title      = _hexmapMode ? 'Inventory' : 'Map view';
-    if (_hexmapMode && inv) inv.hideItemInspector();
   }
 
   function _postHeaderHeight() {
@@ -2492,39 +2481,9 @@ window.CharacterManager = ({ auth, database }) => {
         _hexSignOutBtn.hidden = !e.data.signedIn;
       }
     }
-    if (e.data.type === 'hexInfo') {
-      const panel     = document.getElementById('inspector');
-      const hexSect   = document.getElementById('hex-insp-section');
-      const nameEl    = document.getElementById('hex-insp-name');
-      const nameInput = document.getElementById('hex-insp-name-input');
-      const descEl    = document.getElementById('hex-insp-desc');
-      if (e.data.coords) {
-        document.getElementById('hex-insp-coords').textContent = e.data.coords;
-        if (e.data.hasLocation) {
-          nameEl.textContent = e.data.name;
-          nameEl.hidden      = false;
-          nameInput.hidden   = true;
-          descEl.textContent = e.data.desc;
-          descEl.hidden      = !e.data.desc;
-        } else {
-          nameEl.hidden      = true;
-          nameInput.hidden   = false;
-          descEl.hidden      = true;
-        }
-        hexSect.hidden = false;
-        panel.classList.remove('inspector-collapsed');
-      } else {
-        hexSect.hidden = true;
-        inv.refreshHexPanel();
-      }
-    }
-    if (e.data.type === 'hexNotes') {
-      const ta = document.getElementById('hex-insp-notes');
-      if (document.activeElement !== ta) ta.value = e.data.value;
-    }
-    if (e.data.type === 'hexCustomName') {
-      const input = document.getElementById('hex-insp-name-input');
-      if (document.activeElement !== input) input.value = e.data.value;
+    if (e.data.type === 'closeItemInspector') {
+      hideInspector();
+      render();
     }
     if (e.data.type === 'signOut') {
       auth.signOut().catch(() => {});
