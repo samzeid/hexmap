@@ -1837,6 +1837,19 @@ main {
 #insp-notes:focus { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.05); }
 #insp-notes::placeholder { color: rgba(255,255,255,0.2); }
 
+#insp-copy {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: transparent;
+  color: rgba(255,255,255,0.45);
+  font-size: 13px;
+  cursor: pointer;
+}
+#insp-copy:active { background: rgba(255,255,255,0.06); }
+
 #insp-remove {
   width: 100%;
   margin-top: 8px;

@@ -1110,6 +1110,34 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       costEl.appendChild(document.createTextNode(displayCostStr));
     }
 
+    // ── Copy (DM only) ──
+    const copyBtnEl = document.getElementById('insp-copy');
+    copyBtnEl.hidden = !container || !window._isDM;
+    if (container && window._isDM) {
+      copyBtnEl.onclick = () => {
+        const equipped = state.containers.find(c => c.id === 'equipped');
+        if (!equipped) return;
+        const copy = JSON.parse(JSON.stringify(slotData));
+        delete copy.conflict; delete copy.conflictMsg;
+        // Find a free slot in equipped, growing if needed
+        let placed = false;
+        for (let ri = 0; ri < equipped.slots.length; ri++) {
+          for (let ci = 0; ci < 2; ci++) {
+            if (!equipped.slots[ri][ci]) {
+              placeSlotData(copy, equipped, ri, ci);
+              placed = true; break;
+            }
+          }
+          if (placed) break;
+        }
+        if (!placed) {
+          equipped.slots.push([null, null]);
+          equipped.rows++;
+          placeSlotData(copy, equipped, equipped.slots.length - 1, 0);
+        }
+      };
+    }
+
     // ── Remove ──
     const removeBtnEl = document.getElementById('insp-remove');
     removeBtnEl.hidden = !container;
