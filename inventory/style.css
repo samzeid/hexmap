@@ -52,6 +52,7 @@ input, textarea, select { font-size: max(16px, 1em); }
   background: rgba(255,255,255,0.02);
   border-bottom: 1px solid var(--card-border);
   flex-shrink: 0;
+  min-height: 48px;
 }
 
 #tab-bar-left {
@@ -657,7 +658,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 #char-header {
   display: flex;
   gap: 10px;
-  padding: 8px 16px;
+  padding: 6px 16px;
   background: rgba(255,255,255,0.03);
   border-bottom: 1px solid var(--card-border);
   flex-shrink: 0;
@@ -1071,7 +1072,7 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding-top: 8px;
+  min-height: 24px;
 }
 
 #char-fields-edit-btn {
@@ -2028,3 +2029,52 @@ body.is-dragging #inv-scroll {
   0%, 100% { border-color: rgba(255,255,255,0.15); background: transparent;          box-shadow: none; }
   45%      { border-color: #ff4444;                background: rgba(255,68,68,0.25); box-shadow: 0 0 0 3px rgba(255,68,68,0.55); }
 }
+
+/* ── HEXMAP TOOLBAR ──────────────────────────────────────────── */
+#hexmap-toolbar {
+  display: none;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 16px;
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+
+#hex-sign-out-btn {
+  position: absolute;
+  right: 16px;
+}
+
+#hexmap-toolbar button {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.25);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#hexmap-toolbar button:hover  { color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.08); }
+#hexmap-toolbar button:active { background: rgba(255,255,255,0.08); }
+#hexmap-toolbar button.active { color: var(--text); background: rgba(255,255,255,0.08); }
+
+
+/* ── HEXMAP MODE (header bar only, inventory panels hidden) ── */
+#app.hexmap-mode #inv-scroll,
+#app.hexmap-mode #shop-panel,
+#app.hexmap-mode #inspector,
+#app.hexmap-mode #drag-trash-btn { display: none !important; }
+
+#app.hexmap-mode #char-header   { display: none; }
+#app.hexmap-mode #hexmap-toolbar { display: flex; }

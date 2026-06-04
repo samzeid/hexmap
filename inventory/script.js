@@ -2378,9 +2378,63 @@ window.CharacterManager = ({ auth, database }) => {
   });
 
   // ── CLOSE / LOGOUT ──────────────────────────────────────────────────────
-  document.getElementById('inv-close-btn').addEventListener('click', () => {
-    window.parent.postMessage({ type: 'closeInventory' }, '*');
+  // ── VIEW TOGGLE (hexmap ↔ inventory) ────────────────────────────────────
+  let _hexmapMode = true;
+  let _shopFromHexmap = false;
+  const _closeBtn  = document.getElementById('inv-close-btn');
+  const _closeBtnI = _closeBtn.querySelector('i');
+
+  function _applyViewMode() {
+    document.getElementById('app').classList.toggle('hexmap-mode', _hexmapMode);
+    _closeBtnI.className = _hexmapMode ? 'fa-solid fa-scroll' : 'fa-solid fa-map';
+    _closeBtn.title      = _hexmapMode ? 'Inventory' : 'Map view';
+  }
+
+  function _postHeaderHeight() {
+    const tabBar  = document.getElementById('char-tab-bar');
+    const toolbar = document.getElementById('hexmap-toolbar');
+    const charHdr = document.getElementById('char-header');
+    if (tabBar) {
+      const contentEl = _hexmapMode ? toolbar : charHdr;
+      window.parent.postMessage({ type: 'headerHeight', height: tabBar.offsetHeight + (contentEl?.offsetHeight || 0) }, '*');
+    }
+  }
+
+  _closeBtn.addEventListener('click', () => {
+    if (_shopFromHexmap && shopOpen) {
+      closeShop();
+      return;
+    }
+    _hexmapMode = !_hexmapMode;
+    _applyViewMode();
+    window.parent.postMessage({ type: 'toggleView' }, '*');
+    requestAnimationFrame(_postHeaderHeight);
+    if (!_hexmapMode) ensureCharSelected();
+    else deselectChar();
   });
+
+  // ── HEXMAP TOOLBAR ──────────────────────────────────────────────────────
+  const _hexToolBtn    = document.getElementById('hex-tool-btn');
+  const _hexOverlayBtn = document.getElementById('hex-overlay-btn');
+  const _hexClearBtn   = document.getElementById('hex-clear-btn');
+  const _hexSignOutBtn = document.getElementById('hex-sign-out-btn');
+
+  _hexToolBtn.addEventListener('click',    () => window.parent.postMessage({ type: 'hexAction', action: 'toolToggle' }, '*'));
+  _hexOverlayBtn.addEventListener('click', () => window.parent.postMessage({ type: 'hexAction', action: 'overlayToggle' }, '*'));
+  _hexClearBtn.addEventListener('click',   () => window.parent.postMessage({ type: 'hexAction', action: 'clearHexes' }, '*'));
+  _hexSignOutBtn.addEventListener('click', () => {
+    auth.signOut().catch(() => {});
+    window.parent.postMessage({ type: 'hexAction', action: 'signOut' }, '*');
+  });
+
+  // Start in hexmap-mode and report header height
+  _applyViewMode();
+  requestAnimationFrame(_postHeaderHeight);
+
+  // Repost height whenever any header element resizes
+  new ResizeObserver(_postHeaderHeight).observe(document.getElementById('char-tab-bar'));
+  new ResizeObserver(_postHeaderHeight).observe(document.getElementById('char-header'));
+  new ResizeObserver(_postHeaderHeight).observe(document.getElementById('hexmap-toolbar'));
 
   // Converts a plain username to a Firebase-compatible email by appending a
   // fixed domain. If the value already contains '@' it is returned unchanged.
@@ -2389,9 +2443,18 @@ window.CharacterManager = ({ auth, database }) => {
     return s.includes('@') ? s : `${s}@bytespritegames.com`;
   }
 
-  // Receive sign-in/out messages from the parent page
+  // Receive messages from the parent page
   window.addEventListener('message', e => {
-    if (e.data && e.data.type === 'signOut') {
+    if (!e.data) return;
+    if (e.data.type === 'hexState') {
+      if (e.data.toolIcon)    _hexToolBtn.querySelector('i').className    = `fa-solid fa-fw ${e.data.toolIcon}`;
+      if (e.data.overlayIcon) _hexOverlayBtn.querySelector('i').className = `fa-solid fa-fw ${e.data.overlayIcon}`;
+      _hexToolBtn.classList.toggle('active', !!e.data.toolActive);
+      if (e.data.signedIn !== undefined) {
+        _hexSignOutBtn.hidden = !e.data.signedIn;
+      }
+    }
+    if (e.data.type === 'signOut') {
       auth.signOut().catch(() => {});
     }
     if (e.data && e.data.type === 'signIn') {
@@ -2955,6 +3018,14 @@ window.CharacterManager = ({ auth, database }) => {
     document.getElementById('shop-category').value = '';
     updateShopWallet();
     buildShop();
+    if (_hexmapMode) {
+      _shopFromHexmap = true;
+      _hexmapMode = false;
+      _applyViewMode();
+      window.parent.postMessage({ type: 'toggleView' }, '*');
+      requestAnimationFrame(_postHeaderHeight);
+      ensureCharSelected();
+    }
   }
 
   function closeShop() {
@@ -2962,6 +3033,14 @@ window.CharacterManager = ({ auth, database }) => {
     shopTabBtn.classList.remove('active');
     shopPanel.hidden   = true;
     invScrollEl.hidden = false;
+    if (_shopFromHexmap) {
+      _shopFromHexmap = false;
+      deselectChar();
+      _hexmapMode = true;
+      _applyViewMode();
+      window.parent.postMessage({ type: 'toggleView' }, '*');
+      requestAnimationFrame(_postHeaderHeight);
+    }
   }
 
   shopTabBtn.addEventListener('click', () => {
@@ -3264,6 +3343,27 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   // ── CHARACTER SWITCHING ──────────────────────────────────────────────────
+  function ensureCharSelected() {
+    if (currentCharId && allChars[currentCharId]) return;
+    const chars = Object.values(allChars)
+      .filter(c => window._isDM || !c.hiddenFromPlayers)
+      .sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt));
+    const target = chars.find(c => c.ownerUid === currentUser?.uid) || chars[0];
+    if (target) switchToChar(target.id, true);
+  }
+
+  function deselectChar() {
+    if (currentCharId) saveChar(currentCharId, true);
+    dirty = false;
+    currentCharId = null;
+    suppressSave = true;
+    try { inv.loadState(blankState()); } catch(e) {}
+    suppressSave = false;
+    setFieldsOpen(false);
+    updateCharHideBtn();
+    renderTabs();
+  }
+
   function switchToChar(charId, skipSave) {
     inv.cancelDrag();
     if (!skipSave && currentCharId) saveChar(currentCharId, true);
@@ -3273,7 +3373,7 @@ window.CharacterManager = ({ auth, database }) => {
     try { inv.loadState(allChars[charId].state); } catch (e) { console.warn('loadState error:', e); }
     suppressSave = false;
     const s = inv.getState();
-    setFieldsOpen(!s.charName || !s.carryCapacity);
+    setFieldsOpen(false);
     updateCharHideBtn();
     renderTabs();
     if (shopOpen) { updateShopWallet(); buildShop(); }
@@ -3550,8 +3650,22 @@ window.CharacterManager = ({ auth, database }) => {
 
         tab.addEventListener('click', () => {
           if (char.id === currentCharId) {
-            if (shopOpen) closeShop();
+            if (shopOpen) {
+              closeShop();
+            } else if (!_hexmapMode) {
+              deselectChar();
+              _hexmapMode = true;
+              _applyViewMode();
+              window.parent.postMessage({ type: 'toggleView' }, '*');
+              requestAnimationFrame(_postHeaderHeight);
+            }
           } else {
+            if (_hexmapMode) {
+              _hexmapMode = false;
+              _applyViewMode();
+              window.parent.postMessage({ type: 'toggleView' }, '*');
+              requestAnimationFrame(_postHeaderHeight);
+            }
             switchToChar(char.id, false);
           }
         });

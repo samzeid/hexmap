@@ -25,7 +25,7 @@
     <!-- Character tabs -->
     <div id="char-tab-bar">
       <div id="tab-bar-left">
-        <button id="inv-close-btn" title="Close inventory"><i class="fa-solid fa-scroll"></i></button>
+        <button id="inv-close-btn" title="Inventory" hidden><i class="fa-solid fa-scroll"></i></button>
       </div>
       <div id="char-tabs-scroll">
         <div id="char-tabs"></div>
@@ -33,6 +33,14 @@
       <button id="add-char-btn" title="New character">＋</button>
       <button id="shop-tab-btn" title="Item shop"><i class="fa-solid fa-cart-shopping"></i></button>
       <button id="role-btn" title="Toggle DM / Player role" hidden></button>
+    </div>
+
+    <!-- Hexmap controls — shown instead of char-header in hexmap view -->
+    <div id="hexmap-toolbar">
+      <button id="hex-tool-btn" title="Pan / Select"><i class="fa-solid fa-fw fa-arrows-up-down-left-right"></i></button>
+      <button id="hex-overlay-btn" title="Toggle overlay"><i class="fa-solid fa-fw fa-layer-group"></i></button>
+      <button id="hex-clear-btn" title="Clear hexes"><i class="fa-solid fa-spray-can-sparkles"></i></button>
+      <button id="hex-sign-out-btn" title="Sign out" hidden><i class="fa-solid fa-right-from-bracket"></i></button>
     </div>
 
     <!-- Character header — always visible above both shop and inventory -->

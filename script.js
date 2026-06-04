@@ -12,50 +12,62 @@ const app = firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const database = app.database();
 
-// Firebase reference for updating "selectedHexes" set.
-const selectedHexesRef = database.ref("selectedHexes");
+const hexPingRef     = database.ref('hexPing');
+const hexSelectedRef = database.ref('hexSelected');
 
 // Get elements
 const image = new Image();
 image.src = "https://lh3.googleusercontent.com/d/1fySy_aXhOZHiJGMw6B2xon_8nMiVeyK6?authuser=0";
 const canvas = document.getElementById("canvas");
 const canvasContext = canvas.getContext("2d");
-const zoomCanvas = document.getElementById("zoomPreview");
-const zoomCanvasContext = zoomCanvas.getContext("2d");
 
-const info = document.getElementById("info");
-const infoText = document.getElementById("infoText");
-const hexCoords = document.getElementById("hexCoords");
-const infoToggle = document.getElementById('info-toggle');
-const positionToggleBtn = document.getElementById('positionToggleBtn');
-const signOutBtn = document.getElementById("sign-out-btn");
-const invOverlay = document.getElementById("inv-overlay");
+const hexInspector  = document.getElementById('hex-inspector');
+const hexInspName   = document.getElementById('hex-insp-name');
+const hexInspCoords = document.getElementById('hex-insp-coords');
+const hexInspDesc   = document.getElementById('hex-insp-desc');
+const hexInspNotes  = document.getElementById('hex-insp-notes');
+const invFrameWrap  = document.getElementById("inv-frame-wrap");
 
 new ResizeObserver(() => {
     setPan(panX, panY);
-    updatePositionBtn();
     drawGridLatestActive();
-}).observe(info);
+}).observe(canvas);
 
-let detailCollapsed = false;
-
-function setDetailCollapsed(collapsed) {
-    detailCollapsed = collapsed;
-    const i = infoToggle.querySelector('i');
-    i.className = collapsed ? 'fa-solid fa-fw fa-chevron-up' : 'fa-solid fa-fw fa-chevron-down';
-}
-
-infoToggle.addEventListener('click', () => {
-    if (info.classList.contains('has-content')) {
-        info.classList.remove('has-content');
-        setDetailCollapsed(true);
-    } else {
-        setDetailCollapsed(false);
-        drawGridLatestActive();
-    }
+document.getElementById('hex-insp-toggle').addEventListener('click', () => {
+    hexInspector.classList.add('hex-insp-collapsed');
+    latestInspectorHex = null;
+    attachHexNotes(null);
 });
 
-const clearBtn = document.getElementById('clearBtn');
+let _hexNotesRef = null;
+let _hexNotesKey = null;
+let _hexNotesSaveTimer = null;
+
+function attachHexNotes(key) {
+    if (_hexNotesKey === key) return;
+    if (_hexNotesRef) { _hexNotesRef.off('value', _onHexNote); _hexNotesRef = null; }
+    _hexNotesKey = key;
+    hexInspNotes.value = '';
+    if (!key) return;
+    _hexNotesRef = database.ref(`/hexNotes/${key}`);
+    _hexNotesRef.on('value', _onHexNote);
+}
+
+function _onHexNote(snap) {
+    if (document.activeElement !== hexInspNotes) {
+        hexInspNotes.value = snap.val() || '';
+    }
+}
+
+hexInspNotes.addEventListener('input', () => {
+    clearTimeout(_hexNotesSaveTimer);
+    _hexNotesSaveTimer = setTimeout(() => {
+        if (!_hexNotesKey) return;
+        const val = hexInspNotes.value;
+        if (val) database.ref(`/hexNotes/${_hexNotesKey}`).set(val);
+        else     database.ref(`/hexNotes/${_hexNotesKey}`).remove();
+    }, 600);
+});
 
 const selectedHexes = new Set();
 
@@ -71,17 +83,19 @@ let offsetX = -11;
 let offsetY = 1;
 
 let lastHex = null;
+let latestInspectorHex = null;
 
 //let isShowRegionOn = false;
 let showRegion = null;
-let panelAtTop = false;
 
 let isDragging = false;
 let isPanning = false;
+let hasDragged = false;
 let startDragX = 0;
 let startDragY = 0;
 let startPanX = 0;
 let startPanY = 0;
+const DRAG_THRESHOLD = 6;
 
 let startRow = 0;
 let startCol = 0;
@@ -214,11 +228,15 @@ window.addEventListener('resize', fitContainer);
 fitContainer();
 
 function resizeCanvas() {
-    canvas.width  = canvasContainer.clientWidth;
-    canvas.height = canvasContainer.clientHeight;
+    const w = canvasContainer.clientWidth;
+    const h = canvasContainer.clientHeight;
+    if (!w || !h) return;
 
-    const zoomX = canvas.width / image.naturalWidth;
-    const zoomY = canvas.height / image.naturalHeight;
+    canvas.width  = w;
+    canvas.height = h;
+
+    const zoomX = w / image.naturalWidth;
+    const zoomY = h / image.naturalHeight;
     minZoom = Math.max(zoomX, zoomY);
     maxZoom = minZoom * maxZoomScale;
 
@@ -227,6 +245,16 @@ function resizeCanvas() {
 
     drawGridLatestActive();
 }
+
+// Ping/flash state — declared here so drawGrid can reference them safely
+let _pingTimer  = null;
+let _pingFired  = false;
+let _flashHex   = null;
+let _flashStart = null;
+let _panAnimId  = null;
+const PING_HOLD_MS   = 600;
+const FLASH_DURATION = 1400;
+let _lastSeenPingTime = Date.now();
 
 new ResizeObserver(() => resizeCanvas()).observe(canvasContainer);
 resizeCanvas();
@@ -278,10 +306,9 @@ function drawGrid(hoveredHex = null) {
                     opacity: 1
                 });
             } else if (isSelected) {
-                // Draw selected hexes.
                 drawHex(x, y, {
-                    strokeColor: "yellow",
-                    fillColor: "rgba(255,255,0,0.3)",
+                    strokeColor: "#ffcd3c",
+                    fillColor: "rgba(255,205,60,0.28)",
                     lineWidth: 2,
                     opacity: 1
                 });
@@ -289,82 +316,59 @@ function drawGrid(hoveredHex = null) {
         }
     }
 
-    // Display the infoText preview panel details for the hovered hex.
+    // Flash overlay for ping
+    if (_flashHex && _flashStart !== null) {
+        const elapsed = performance.now() - _flashStart;
+        const t = elapsed / FLASH_DURATION;
+        const alpha = Math.sin(t * Math.PI * 3) * (1 - t);
+        if (alpha > 0) {
+            const fx = _flashHex.col * hexHorizSpacing + hexSize + offsetX;
+            const fy = _flashHex.row * hexVertSpacing + (_flashHex.col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
+            drawHex(fx, fy, {
+                strokeColor: `rgba(255,220,50,${alpha})`,
+                fillColor:   `rgba(255,220,50,${alpha * 0.35})`,
+                lineWidth: 3,
+                opacity: 1,
+            });
+        }
+    }
+
+    // Show hex description in inspector panel.
     if (hoveredHex) {
         const key = `${hoveredHex.col},${hoveredHex.row}`;
         const hexInfo = hexData.get(key);
 
-        hexCoords.textContent = `${hoveredHex.col}, ${hoveredHex.row}`;
-
-        let text = '';
         if (hexInfo) {
             const { politicalRegion, environmentalRegion, location } = hexInfo;
             const region = politicalRegion ?? environmentalRegion;
 
-            if (region && location) {
-                text = `<b>${location.name}</b> <span class="region-tag">· ${region.name}</span><br><i>${location.description}</i>`;
-            } else if (location) {
-                text = `<b>${location.name}</b><br><i>${location.description}</i>`;
+            let name = '', desc = '';
+            if (location) {
+                name = location.name;
+                desc = location.description || '';
             } else if (region) {
-                text = `<b>${region.name}</b><br><i>${region.description}</i>`;
+                name = region.name;
+                desc = region.description || '';
             }
+
+            if (name) {
+                hexInspName.textContent = name;
+                hexInspCoords.textContent = `${hoveredHex.col}, ${hoveredHex.row}${region && location ? ' · ' + region.name : ''}`;
+                hexInspDesc.textContent = desc;
+                hexInspector.classList.remove('hex-insp-collapsed');
+                attachHexNotes(`${hoveredHex.col}_${hoveredHex.row}`);
+            } else {
+                hexInspector.classList.add('hex-insp-collapsed');
+                attachHexNotes(null);
+            }
+        } else {
+            hexInspector.classList.add('hex-insp-collapsed');
+            attachHexNotes(null);
         }
-
-        infoText.innerHTML = text;
-
-        if (!detailCollapsed) {
-            info.classList.add('has-content');
-            setDetailCollapsed(false);
-        }
-
-        const x = hoveredHex.col * hexHorizSpacing + hexSize + offsetX;
-        const y = hoveredHex.row * hexVertSpacing + (hoveredHex.col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
-        drawZoomedHex(x, y);
     } else {
-        zoomCanvasContext.clearRect(0, 0, zoomCanvas.width, zoomCanvas.height);
-        hexCoords.textContent = '';
-        infoText.textContent = '';
-        info.classList.remove('has-content');
-        if (!detailCollapsed) setDetailCollapsed(false);
+        hexInspector.classList.add('hex-insp-collapsed');
+        attachHexNotes(null);
     }
-    checkAutoSnap();
-}
-
-function drawZoomedHex(centerX, centerY) {
-    const zoomSize = 100;
-    const scale = 2;
-
-    zoomCanvasContext.clearRect(0, 0, zoomCanvas.width, zoomCanvas.height);
-
-    const srcX = centerX - zoomSize / scale;
-    const srcY = centerY - zoomSize / scale;
-    const srcSize = zoomCanvas.width / scale;
-
-    zoomCanvasContext.imageSmoothingEnabled = false;
-    zoomCanvasContext.drawImage(
-        image,
-        srcX,
-        srcY,
-        srcSize,
-        srcSize,
-        0,
-        0,
-        zoomCanvas.width,
-        zoomCanvas.height
-    );
-
-    zoomCanvasContext.beginPath();
-    for (let i = 0; i < 6; i++) {
-        const angle = Math.PI / 3 * i;
-        const px = zoomCanvas.width / 2 + (hexSize * scale) * Math.cos(angle);
-        const py = zoomCanvas.height / 2 + (hexSize * scale) * Math.sin(angle);
-        if (i === 0) zoomCanvasContext.moveTo(px, py);
-        else zoomCanvasContext.lineTo(px, py);
-    }
-    zoomCanvasContext.closePath();
-    zoomCanvasContext.strokeStyle = "rgba(255,255,255,0.3)";
-    zoomCanvasContext.lineWidth = 4;
-    zoomCanvasContext.stroke();
 }
 
 // Calculate which hex coordinates a given (x,y) on the canvas corresponds to
@@ -421,23 +425,10 @@ canvas.addEventListener("mousedown", (event) => {
 
     startDragX = event.clientX;
     startDragY = event.clientY;
-
+    hasDragged = false;
     if (col >= 0 && row >= 0) {
-        if (activeTool == 'select') {
-            isSelecting = true;
-            setHexSelected(key, true);
-            drawGrid({ col, row });
-            lastHex = key;
-            return;
-        } else if(activeTool=='erase') {
-            isSelecting = false;
-            setHexSelected(key, false);
-            drawGrid({ col, row });
-            lastHex = key;
-            return;
-        }
-        drawGrid({ col, row });
         lastHex = key;
+        startPingTimer(col, row);
     }
 
     isPanning = true;
@@ -451,44 +442,13 @@ canvas.addEventListener("mousemove", (event) => {
     if (isPanning) {
         const dx = (event.clientX - startDragX);
         const dy = (event.clientY - startDragY);
+        if (Math.hypot(dx, dy) > DRAG_THRESHOLD) { hasDragged = true; cancelPingTimer(); }
 
-        setPan(startPanX + dx, startPanY + dy)
-        
-        drawGrid({ col: startCol, row: startRow });
+        setPan(startPanX + dx, startPanY + dy);
+        drawGridLatestActive();
         return;
     }
 
-    
-    // Select the hovered hex.
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left - offsetX;
-    const y = event.clientY - rect.top - offsetY;
-
-    const hoveredHex = getHexAtPosition(x, y);
-
-    // Make sure the hovered hex is within grid bounds
-    if (hoveredHex && hoveredHex.col >= 0 && hoveredHex.row >= 0) {
-        drawGrid(hoveredHex);
-    } else {
-        drawGridLatestActive();
-    }
-    
-    // Handle selection.
-    if (!isDragging) return;
-
-    const { col, row } = getHexAtPosition(x, y);
-    const key = `${col},${row}`;
-
-    if (col >= 0 && row >= 0 && key !== lastHex) {
-        if (isSelecting) {
-            setHexSelected(key, true);
-        } else {
-            setHexSelected(key,false);
-        }
-        lastHex = key;
-    }
-
-    event.preventDefault();
 });
 
 canvas.addEventListener("wheel", (e) => {
@@ -517,11 +477,24 @@ canvas.addEventListener("wheel", (e) => {
     drawGridLatestActive();
 }, { passive: false });
 
-canvas.addEventListener("mouseup", () => {
+canvas.addEventListener("mouseup", (event) => {
+    cancelPingTimer();
+    if (!hasDragged && !_pingFired && startCol >= 0 && startRow >= 0) {
+        if (activeTool === 'select') {
+            const _sk = `${startCol},${startRow}`;
+            setHexSelected(_sk, !selectedHexes.has(_sk));
+        } else if (activeTool === 'erase') {
+            setHexSelected(`${startCol},${startRow}`, false);
+        } else {
+            latestInspectorHex = { col: startCol, row: startRow };
+            drawGrid({ col: startCol, row: startRow });
+        }
+    }
     isPanning = false;
     isDragging = false;
+    hasDragged = false;
+    _pingFired = false;
     lastHex = null;
-
     event.preventDefault();
 });
 
@@ -535,64 +508,74 @@ canvas.addEventListener("mouseleave", () => {
 });
 
 function setHexSelected(key, value) {
-    selectedHexesRef.update({
-        [key]: value ? Date.now() : null
-    })
-    .then(() => {
-        console.log(`Hex ${key} selected.`);
-    })
-    .catch((error) => {
-        console.error(`Error setting hex ${key}:`, error);
-    });
+    if (value) hexSelectedRef.child(key).set(true);
+    else hexSelectedRef.child(key).remove();
 }
 
-function clearHexSelected(){
-    selectedHexesRef.remove()
-    .then(() => {
-        console.log("All selected hexes removed from the database.");
-    })
-    .catch((error) => {
-        console.error("Error removing all selected hexes:", error);
-    });
+function clearHexSelected() {
+    hexSelectedRef.remove();
 }
 
-// listener for when selections change.
-selectedHexesRef.on("value", (snapshot) => {
-    let lastHex = null;
+// ── PING ──────────────────────────────────────────────────────────────────
+function startPingTimer(col, row) {
+    cancelPingTimer();
+    _pingFired = false;
+    _pingTimer = setTimeout(() => {
+        _pingTimer = null;
+        _pingFired = true;
+        hexPingRef.set({ col, row, t: Date.now() });
+    }, PING_HOLD_MS);
+}
 
-    const hexesData = snapshot.val(); // Get the data snapshot
-    selectedHexes.clear();
+function cancelPingTimer() {
+    if (_pingTimer) { clearTimeout(_pingTimer); _pingTimer = null; }
+}
 
-    if (hexesData) {
-        const hexEntries = Object.entries(hexesData)
-            .filter(([_, timestamp]) => typeof timestamp === "number" && !isNaN(timestamp))
-            .sort((a, b) => b[1] - a[1]); // Most recent first
-
-        for (const [hexId] of hexEntries) {
-            selectedHexes.add(hexId);
-        }
-
-        if (hexEntries.length > 0) {
-            lastHex = hexEntries[0][0]; // key = "col,row"
-        }
-    }
-
-    if (lastHex) {
-        const [col, row] = lastHex.split(',').map(Number);
-        latestActiveHexCol = col;
-        latestActiveHexRow = row;
-        drawGrid({ col, row }); // Draw with highlight
-    } else {
-        latestActiveHexCol = null;
-        latestActiveHexRow = null;
+function centerOnHex(col, row) {
+    const wx = col * hexHorizSpacing + hexSize + offsetX;
+    const wy = row * hexVertSpacing + (col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
+    const targetZoom = Math.min(maxZoom, Math.max(zoom, minZoom * 2.5));
+    const targetX = canvas.width  / 2 - wx * targetZoom;
+    const targetY = canvas.height / 2 - wy * targetZoom;
+    const startX = panX, startY = panY, startZoom = zoom, t0 = performance.now();
+    if (_panAnimId) cancelAnimationFrame(_panAnimId);
+    function step(now) {
+        const p = Math.min((now - t0) / 450, 1);
+        const e = 1 - Math.pow(1 - p, 3);
+        zoom = startZoom + (targetZoom - startZoom) * e;
+        setPan(startX + (targetX - startX) * e, startY + (targetY - startY) * e);
         drawGridLatestActive();
+        if (p < 1) _panAnimId = requestAnimationFrame(step);
+        else _panAnimId = null;
     }
+    _panAnimId = requestAnimationFrame(step);
+}
 
-    console.log("Current selected hexes data received:", hexesData);
-    console.log("Selected hexes Set contents:", Array.from(selectedHexes)); // Convert Set to Array for logging
+function flashHex(col, row) {
+    _flashHex   = { col, row };
+    _flashStart = performance.now();
+    function tick(now) {
+        if (!_flashHex) return;
+        drawGridLatestActive();
+        if (now - _flashStart < FLASH_DURATION) requestAnimationFrame(tick);
+        else { _flashHex = null; drawGridLatestActive(); }
+    }
+    requestAnimationFrame(tick);
+}
 
-}, (error) => {
-    console.error("Error fetching selected hexes:", error);
+hexPingRef.on('value', snap => {
+    const ping = snap.val();
+    if (!ping || ping.t <= _lastSeenPingTime) return;
+    _lastSeenPingTime = ping.t;
+    centerOnHex(ping.col, ping.row);
+    flashHex(ping.col, ping.row);
+});
+
+hexSelectedRef.on('value', snap => {
+    selectedHexes.clear();
+    const val = snap.val();
+    if (val) Object.keys(val).forEach(k => selectedHexes.add(k));
+    drawGridLatestActive();
 });
 
 // ── LOGIN ──────────────────────────────────────────────────────────────────
@@ -632,25 +615,27 @@ loginPassword.addEventListener("keydown", e => {
 });
 
 
-signOutBtn.addEventListener("click", () => {
-  auth.signOut();
-  document.getElementById('inv-frame')?.contentWindow?.postMessage({ type: 'signOut' }, '*');
-});
-
 auth.onAuthStateChanged((user) => {
     if (user) {
         loginScreen.classList.add("hidden");
-        signOutBtn.title  = `Sign out (${user.displayName || (user.email || '').split('@')[0] || 'Player'})`;
-        signOutBtn.hidden = false;
+        // Pass credentials to inventory iframe (fields still populated right after login)
+        const email    = toFirebaseEmail(loginEmail.value.trim());
+        const password = loginPassword.value;
+        if (email && password) {
+            document.getElementById('inv-frame')
+                ?.contentWindow?.postMessage({ type: 'signIn', email, password }, '*');
+        }
         // Register username → uid so DMs can assign characters by username
         const username = (user.displayName || user.email || '').split('@')[0];
         if (username) database.ref(`/inventory_user_lookup/${username}`).set(user.uid);
+        sendHexState();
     } else {
         loginScreen.classList.remove("hidden");
-        signOutBtn.hidden = true;
+        document.getElementById('inv-frame')?.contentWindow?.postMessage({ type: 'signOut' }, '*');
         const btn = document.getElementById("email-sign-in-btn");
         btn.textContent = "Sign in";
         btn.disabled    = false;
+        sendHexState();
     }
 
     drawGridLatestActive();
@@ -700,26 +685,18 @@ canvas.addEventListener("touchstart", (e) => {
         startCol = col;
         const key = `${col},${row}`;
 
+        hasDragged = false;
+        isPanning = true;
+        startPanX = panX;
+        startPanY = panY;
         if (col >= 0 && row >= 0) {
-            if (activeTool === 'select') {
-                isDragging = true;
-                isSelecting = true;
-                setHexSelected(key, true);
-            } else if (activeTool === 'erase') {
-                isDragging = true;
-                isSelecting = false;
-                setHexSelected(key, false);
-            } else if (activeTool === 'pan') {
-                isPanning = true;
-                startPanX = panX;
-                startPanY = panY;
-            }
-            drawGrid({ col, row });
             lastHex = key;
+            startPingTimer(col, row);
         }
     } else if (e.touches.length === 2) {
         isDragging = false;
         isPanning = false;
+        cancelPingTimer();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         initialPinchDistance = Math.hypot(dx, dy);
@@ -739,17 +716,12 @@ canvas.addEventListener("touchmove", (e) => {
         const { col, row } = getHexAtPosition(x, y);
         const key = `${col},${row}`;
 
-        if (activeTool === 'select' || activeTool === 'erase') {
-            if (isDragging && col >= 0 && row >= 0 && key !== lastHex) {
-                setHexSelected(key, isSelecting);
-                lastHex = key;
-                drawGrid({ col, row });
-            }
-        } else if (activeTool === 'pan' && isPanning) {
+        if (isPanning) {
             const dx = touch.clientX - touchStartX;
             const dy = touch.clientY - touchStartY;
+            if (Math.hypot(dx, dy) > DRAG_THRESHOLD) { hasDragged = true; cancelPingTimer(); }
             setPan(startPanX + dx, startPanY + dy);
-            drawGrid({ col: startCol, row: startRow });
+            drawGridLatestActive();
         }
     } else if (e.touches.length === 2) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -785,9 +757,22 @@ canvas.addEventListener("touchend", (e) => {
     if (e.touches.length < 2) {
         initialPinchDistance = null;
     }
-
+    cancelPingTimer();
+    if (!hasDragged && !_pingFired && startCol >= 0 && startRow >= 0) {
+        if (activeTool === 'select') {
+            const _sk = `${startCol},${startRow}`;
+            setHexSelected(_sk, !selectedHexes.has(_sk));
+        } else if (activeTool === 'erase') {
+            setHexSelected(`${startCol},${startRow}`, false);
+        } else {
+            latestInspectorHex = { col: startCol, row: startRow };
+            drawGrid({ col: startCol, row: startRow });
+        }
+    }
     isDragging = false;
     isPanning = false;
+    hasDragged = false;
+    _pingFired = false;
     lastHex = null;
 });
 
@@ -800,119 +785,68 @@ const toolIcons = {
 };
 
 let activeTool = 'pan';
-const toolToggleBtn = document.getElementById('toolToggleBtn');
 
 function setActiveTool(toolName) {
     activeTool = toolName;
-    toolToggleBtn.querySelector('i').className = `fa-solid fa-fw ${toolIcons[toolName]}`;
+    sendHexState();
 }
-
-toolToggleBtn.addEventListener('click', () => {
-    const next = (toolStates.indexOf(activeTool) + 1) % toolStates.length;
-    setActiveTool(toolStates[next]);
-});
 
 // Overlay cycle: none → territory → environment → none
 const overlayStates = [null, 'political', 'environmental'];
 const overlayIcons  = ['fa-layer-group', 'fa-circle-user', 'fa-tree'];
 let overlayIndex = 0;
-const overlayToggleBtn = document.getElementById('overlayToggleBtn');
 
-overlayToggleBtn.addEventListener('click', () => {
-    overlayIndex = (overlayIndex + 1) % overlayStates.length;
-    showRegion = overlayStates[overlayIndex];
-    overlayToggleBtn.querySelector('i').className = `fa-solid fa-fw ${overlayIcons[overlayIndex]}`;
-    drawGridLatestActive();
-});
-
-clearBtn.addEventListener('click', () => {
-    clearHexSelected();
-});
-
-function updatePositionBtn() {
-    const gap = 10;
-    const panelH = info.offsetHeight;
-    if (panelAtTop) {
-        positionToggleBtn.style.top    = `${panelH + gap}px`;
-        positionToggleBtn.style.bottom = '';
-    } else {
-        positionToggleBtn.style.bottom = `${panelH + gap}px`;
-        positionToggleBtn.style.top    = '';
-    }
+function sendHexState() {
+    document.getElementById('inv-frame')?.contentWindow?.postMessage({
+        type:        'hexState',
+        toolIcon:    toolIcons[activeTool],
+        overlayIcon: overlayIcons[overlayIndex],
+        toolActive:  activeTool !== 'pan',
+        signedIn:    !!auth.currentUser,
+    }, '*');
 }
-
-function applyPanelSnap() {
-    info.classList.toggle('panel-top', panelAtTop);
-    updatePositionBtn();
-}
-
-function checkAutoSnap() {
-    if (!image.naturalWidth || invOverlay.classList.contains('open')) {
-        positionToggleBtn.classList.remove('visible');
-        return;
-    }
-    const imageHeight = image.naturalHeight * zoom;
-
-    // Condition 1: too zoomed out — would constantly flip
-    if (imageHeight - canvas.height < 80) {
-        positionToggleBtn.classList.add('visible');
-        return;
-    }
-
-    // Condition 2: at a boundary where a snap would have fired
-    const atBottom = !panelAtTop && panY <= canvas.height - imageHeight + 4;
-    const atTop    =  panelAtTop && panY >= -4;
-    positionToggleBtn.classList.toggle('visible', atBottom || atTop);
-}
-
-positionToggleBtn.addEventListener('click', () => {
-    panelAtTop = !panelAtTop;
-    info.classList.toggle('panel-top', panelAtTop);
-    updatePositionBtn();
-    positionToggleBtn.querySelector('i').className =
-        panelAtTop ? 'fa-solid fa-fw fa-arrow-down' : 'fa-solid fa-fw fa-arrow-up';
-    positionToggleBtn.title = panelAtTop ? 'Move panel to bottom' : 'Move panel to top';
-    setPan(panX, panY);
-    drawGridLatestActive();
-});
 
 function drawGridLatestActive(){
-    if(latestActiveHexCol != null && latestActiveHexRow != null)
-        drawGrid({col: latestActiveHexCol, row: latestActiveHexRow});
+    if (latestInspectorHex)
+        drawGrid(latestInspectorHex);
     else
         drawGrid();
 }
 
-
-const invBtn     = document.getElementById("invBtn");
-
-invBtn.addEventListener("click", () => {
-    const open = invOverlay.classList.toggle("open");
-    invBtn.classList.toggle("active", open);
-    info.classList.toggle("inv-open", open);
-    if (open) {
-        const email    = toFirebaseEmail(loginEmail.value.trim());
-        const password = loginPassword.value;
-        if (loginEmail.value.trim() && password) {
-            document.getElementById('inv-frame')
-                ?.contentWindow?.postMessage({ type: 'signIn', email, password }, '*');
-        }
-    }
-});
-
 document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && invOverlay.classList.contains("open")) {
-        invOverlay.classList.remove("open");
-        invBtn.classList.remove("active");
-        info.classList.remove("inv-open");
+    if (e.key === "Escape" && document.body.classList.contains('inv-open')) {
+        document.body.classList.remove('inv-open');
     }
 });
 
 window.addEventListener("message", (e) => {
-    if (e.data && e.data.type === "closeInventory") {
-        invOverlay.classList.remove("open");
-        invBtn.classList.remove("active");
-        info.classList.remove("inv-open");
+    if (!e.data) return;
+    if (e.data.type === "toggleView") {
+        document.body.classList.toggle('inv-open');
+    }
+    if (e.data.type === "headerHeight") {
+        document.documentElement.style.setProperty('--inv-header-h', e.data.height + 'px');
+    }
+    if (e.data.type === "hexAction") {
+        switch (e.data.action) {
+            case 'toolToggle': {
+                const next = (toolStates.indexOf(activeTool) + 1) % toolStates.length;
+                setActiveTool(toolStates[next]);
+                break;
+            }
+            case 'overlayToggle':
+                overlayIndex = (overlayIndex + 1) % overlayStates.length;
+                showRegion = overlayStates[overlayIndex];
+                sendHexState();
+                drawGridLatestActive();
+                break;
+            case 'clearHexes':
+                clearHexSelected();
+                break;
+            case 'signOut':
+                auth.signOut();
+                break;
+        }
     }
 });
 

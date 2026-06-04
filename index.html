@@ -34,34 +34,25 @@
     </div>
   </div>
 
-  <!-- Inventory overlay -->
-  <div id="inv-overlay">
+  <!-- Persistent inventory header / full inventory view -->
+  <div id="inv-frame-wrap">
     <iframe id="inv-frame" src="inventory/index.html" frameborder="0"></iframe>
   </div>
+  <div id="inv-separator"></div>
   <div id="container">
     <canvas id="canvas"></canvas>
   </div>
-  <button id="positionToggleBtn" title="Move panel to top"><i class="fa-solid fa-fw fa-arrow-up"></i></button>
-  <div id="info">
-    <div id="info-header">
-      <button id="invBtn" title="Inventory"><i class="fa-solid fa-scroll"></i></button>
-      <div class="vdivider"></div>
-      <div id="controls-tools">
-        <button id="toolToggleBtn"><i class="fa-solid fa-fw fa-arrows-up-down-left-right"></i></button>
-        <button id="overlayToggleBtn"><i class="fa-solid fa-fw fa-layer-group"></i></button>
-        <button id="clearBtn"><i class="fa-solid fa-spray-can-sparkles"></i></button>
+
+  <div id="hex-inspector" class="hex-insp-collapsed">
+    <div id="hex-insp-header">
+      <div id="hex-insp-top">
+        <h2 id="hex-insp-name"></h2>
+        <span id="hex-insp-coords"></span>
       </div>
-      <div class="vdivider"></div>
-      <button id="sign-out-btn" hidden><i class="fa-solid fa-right-from-bracket"></i></button>
-      <button id="info-toggle" title="Toggle detail"><i class="fa-solid fa-fw fa-chevron-up"></i></button>
+      <button id="hex-insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
     </div>
-    <div id="info-body">
-      <div id="info-preview">
-        <canvas id="zoomPreview" width="200" height="200"></canvas>
-        <div id="hexCoords"></div>
-      </div>
-      <div id="infoText"></div>
-    </div>
+    <p id="hex-insp-desc"></p>
+    <textarea id="hex-insp-notes" placeholder="Notes…"></textarea>
   </div>
 
   <!-- Firebase SDKs -->
