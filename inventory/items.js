@@ -199,7 +199,7 @@ window.ITEM_LIBRARY = [
   { name: "Bubble Token",            bulk: Bulk.PACKABLE, cost: "60 gp",  description: `This small metal disk is inscribed with the image of a jet of bubbles. As a magic action, choose up to 5 creatures underwater you can see within 60ft; they gain 1 hour of additional air before suffocating while they remain underwater. The token's magic is expended, whereupon the disk becomes nonmagical.` },
   { name: "Feather Token",           bulk: Bulk.PACKABLE, cost: "60 gp",  description: `This small metal disk is inscribed with the image of a feather. When you fall at least 20 feet while the token is on your person, you descend 60 feet per round and take no damage from falling. The token's magic is expended after you land, whereupon the disk becomes nonmagical.` },
   { name: "Balm of Disguise",        bulk: Bulk.PACKABLE, cost: "60 gp",  description: `You can apply this balm to gain the effects of the <i>disguise self</i> spell (DC 13). The effect ends early if you are fully submerged in water.` },
-  { name: "Tonic of Potency",        bulk: Bulk.PACKABLE, cost: "60 gp",  description: `This bottle contains 6 drops. As an action, you can add up to 3 drops to any of the following items: alchemist's fire, basic poison, bottled lightning, flask of floods, holy water, oil of elemental damage, and winter's breath. When the item deals damage, deal an additional damage die for each drop added (maximum 3).`, hasUses: true, variables: { uses: { value: 6, control: "both", min: 0, max: 6 } } },
+  { name: "Tonic of Potency",        bulk: Bulk.PACKABLE, cost: "10 gp",  description: `This bottle contains 6 drops. As an action, you can add up to 3 drops to any of the following items: alchemist's fire, basic poison, bottled lightning, flask of floods, holy water, oil of elemental damage, and winter's breath. When the item deals damage, deal an additional damage die for each drop added (maximum 3).`, hasUses: 'coins', variables: { uses: { value: 6, control: "both", min: 0, max: 6 } } },
   { name: "Seed of Climbing",        bulk: Bulk.PACKABLE, cost: "60 gp",  description: `As a magic action, you can plant this seed adjacent to a wall. The seed immediately sprouts a thick network of vines that grows up to 30 feet high and 5 feet wide along the wall. Immediately after planting the seed, you can choose to climb onto the vines as they grow, near instantly ascending to the top.` },
 
   { _rarity: "Uncommon" },
@@ -410,9 +410,9 @@ window.ITEM_LIBRARY = [
 
   { _section: "Vehicles" },
   // ── CARRIAGES ────────────────────────────────────────────────────────────
-  { name: "Sled",         bulk: Bulk.BULKY, cost: "20 gp",  noCarry: true, containerRows: 12,  description: `24 item slots. Requires 4 sled dogs to pilot. Encumbrance limit is 10× the mounts' carry capacity.` },
-  { name: "Small Wagon", bulk: Bulk.BULKY, cost: "75 gp",  noCarry: true, containerRows: 100, description: `200 item slots. Requires 1 large mount to pilot. Encumbrance limit is 10× the mount's carry capacity.` },
-  { name: "Large Wagon", bulk: Bulk.BULKY, cost: "100 gp", noCarry: true, containerRows: 200, description: `400 item slots. Requires 2 large mounts to pilot. Encumbrance limit is 10× the mounts' carry capacity.` },
+  { name: "Sled",         bulk: Bulk.BULKY, cost: "20 gp",  noCarry: true, containerRows: 20,  description: `40 item slots. Requires 4 sled dogs to pilot. Encumbrance limit is 5× the mounts' carry capacity.` },
+  { name: "Small Wagon", bulk: Bulk.BULKY, cost: "75 gp",  noCarry: true, containerRows: 45, description: `90 item slots. Requires 1 large mount to pilot. Encumbrance limit is 5× the mount's carry capacity.` },
+  { name: "Large Wagon", bulk: Bulk.BULKY, cost: "100 gp", noCarry: true, containerRows: 90, description: `180 item slots. Requires 2 large mounts to pilot. Encumbrance limit is 5× the mounts' carry capacity.` },
 
   { _section: "Valuables" },
   // Gems and Jewelry: use the value counter to track worth in gp
