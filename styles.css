@@ -252,13 +252,13 @@ body             #item-insp-section { display: none !important; }
 #hex-insp-notes {
   width: 100%;
   box-sizing: border-box;
-  margin-top: 10px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.12);
+  margin-top: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
   border-radius: 8px;
-  color: #e8e8f0;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-size: 13px;
+  color: rgba(255,255,255,0.6);
+  font-family: inherit;
+  font-size: 14px;
   line-height: 1.5;
   padding: 8px 10px;
   resize: none;
@@ -269,8 +269,8 @@ body             #item-insp-section { display: none !important; }
   outline: none;
   display: block;
 }
-#hex-insp-notes::placeholder { color: rgba(255,255,255,0.25); }
-#hex-insp-notes:focus { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.07); }
+#hex-insp-notes::placeholder { color: rgba(255,255,255,0.2); }
+#hex-insp-notes:focus { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.05); }
 
 #hex-insp-section { padding-bottom: 10px; }
 
