@@ -618,6 +618,8 @@ function startPingTimer(col, row) {
         _lastSeenPingTime = t;
         pingSound.currentTime = 0;
         pingSound.play().catch(() => {});
+        centerOnHex(col, row);
+        flashHex(col, row);
         hexPingRef.set({ col, row, t });
         hexFocusRef.set({ col, row });
     }, PING_HOLD_MS);

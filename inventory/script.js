@@ -1645,7 +1645,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const hasItem = inspectorItemKey !== null;
     if (!hasHex && !hasItem) {
       inspectorEl.classList.add('inspector-collapsed');
-      inspectorEl.classList.remove('has-hex-info');
     }
   }
 
@@ -2355,8 +2354,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       document.getElementById('char-carry').value = state.carryCapacity;
       render();
     },
-    // Called by CharacterManager when hex inspector section changes visibility
-    refreshHexPanel() { refreshInspectorCollapsed(); },
+    refreshHexPanel()    { refreshInspectorCollapsed(); },
+    hideItemInspector()  { hideInspector(); },
   };
 };
 
@@ -2413,6 +2412,7 @@ window.CharacterManager = ({ auth, database }) => {
     document.getElementById('app').classList.toggle('hexmap-mode', _hexmapMode);
     _closeBtnI.className = _hexmapMode ? 'fa-solid fa-scroll' : 'fa-solid fa-map';
     _closeBtn.title      = _hexmapMode ? 'Inventory' : 'Map view';
+    if (_hexmapMode && inv) inv.hideItemInspector();
   }
 
   function _postHeaderHeight() {
@@ -2512,11 +2512,9 @@ window.CharacterManager = ({ auth, database }) => {
           descEl.hidden      = true;
         }
         hexSect.hidden = false;
-        panel.classList.add('has-hex-info');
         panel.classList.remove('inspector-collapsed');
       } else {
         hexSect.hidden = true;
-        panel.classList.remove('has-hex-info');
         inv.refreshHexPanel();
       }
     }

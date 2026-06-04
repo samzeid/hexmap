@@ -2142,11 +2142,8 @@ body.is-dragging #inv-scroll {
 #app.hexmap-mode #insp-copy,
 #app.hexmap-mode #insp-remove { display: none !important; }
 
-/* Force-collapse inspector in hexmap mode unless hex info is showing */
-#app.hexmap-mode #inspector:not(.has-hex-info) {
-  transform: translateY(100%) !important;
-  overflow: hidden !important;
-}
+/* Hide hex section when in inventory mode, item section when in hexmap mode */
+#app:not(.hexmap-mode) #hex-insp-section { display: none !important; }
 
 /* ── HEX INSPECTOR SECTION (inside unified panel) ─────────────── */
 #hex-insp-section {
