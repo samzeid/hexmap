@@ -2115,7 +2115,7 @@ body.is-dragging #inv-scroll {
 }
 
 .hex-color-btn[data-color="#E6194B"]::after { background: #E6194B; }
-.hex-color-btn[data-color="#3AEAF9"]::after { background: #3AEAF9; }
+.hex-color-btn[data-color="#00C5FF"]::after { background: #00C5FF; }
 .hex-color-btn[data-color="#FFDC26"]::after { background: #FFDC26; }
 
 .hex-color-btn.active-color::after {

@@ -71,12 +71,37 @@ hexInspNotes.addEventListener('input', () => {
 
 const selectedHexes = new Map(); // key → color string
 
-const DRAW_COLORS = ['#E6194B', '#3AEAF9', '#FFDC26'];
-const DRAW_FILL   = {
-    '#E6194B': 'rgba(230,25,75,0.28)',
-    '#3AEAF9': 'rgba(58,234,249,0.28)',
-    '#FFDC26': 'rgba(255,220,38,0.28)',
+const DRAW_COLORS = ['#E6194B', '#00C5FF', '#FFDC26'];
+const DRAW_HATCH  = {
+    '#E6194B': 'vertical',
+    '#00C5FF': 'horizontal',
+    '#FFDC26': 'diagonal',
 };
+
+const _patternCache = new Map();
+function getHatchPattern(color, type) {
+    const cacheKey = `${color}-${type}`;
+    if (_patternCache.has(cacheKey)) return _patternCache.get(cacheKey);
+    const sp = 5;
+    const off = document.createElement('canvas');
+    off.width = sp; off.height = sp;
+    const c = off.getContext('2d');
+    c.strokeStyle = color;
+    c.lineWidth = 1.5;
+    c.globalAlpha = 0.65;
+    c.beginPath();
+    if (type === 'vertical') {
+        c.moveTo(sp / 2, 0); c.lineTo(sp / 2, sp);
+    } else if (type === 'horizontal') {
+        c.moveTo(0, sp / 2); c.lineTo(sp, sp / 2);
+    } else {
+        c.moveTo(0, 0); c.lineTo(sp, sp);
+    }
+    c.stroke();
+    const pat = canvasContext.createPattern(off, 'repeat');
+    _patternCache.set(cacheKey, pat);
+    return pat;
+}
 let activeDrawColor = DRAW_COLORS[0];
 
 const hexSize = 13.525;
@@ -240,6 +265,7 @@ function resizeCanvas() {
     const h = canvasContainer.clientHeight;
     if (!w || !h) return;
 
+    _patternCache.clear();
     canvas.width  = w;
     canvas.height = h;
 
@@ -315,7 +341,7 @@ function drawGrid(hoveredHex = null) {
             if (selColor) {
                 drawHex(x, y, {
                     strokeColor: selColor,
-                    fillColor: DRAW_FILL[selColor] || 'rgba(255,205,60,0.28)',
+                    fillColor: getHatchPattern(selColor, DRAW_HATCH[selColor]),
                     lineWidth: 2,
                     opacity: 1
                 });
