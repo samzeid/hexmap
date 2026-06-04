@@ -196,16 +196,22 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       if (libC && libC.fixedCarryWeight != null) continue;
       for (const row of container.slots)
         for (const slot of row)
-          if (slot && !isNoCarry(slot)) used += itemFillCost(slot);
+          if (slot && !isNoCarry(slot)) used += itemFillCost(slot, container);
     }
 
     return parseFloat(used.toFixed(2));
   }
 
-  function itemFillCost(slotData) {
+  function itemFillCost(slotData, container) {
     if (!slotData) return 0;
     const lib = getLibraryItem(slotData.name);
-    if (slotData.category === 'ammunition' || lib?.category === 'ammunition') return 0;
+    if (slotData.category === 'ammunition' || lib?.category === 'ammunition') {
+      if (!container) return 0;
+      const cLib = container.linkedTo ? getLibraryItem(container.name) : null;
+      if (cLib?.fixedCarryWeight != null) return 0; // inside ammo cache or fixed-weight container
+      const qty = slotData.variables?.qty?.value || 1;
+      return qty * 0.25;
+    }
     if (lib && lib.fixedCarryWeight != null) return lib.fixedCarryWeight;
     const v = slotData.variables;
     if (v && ('pp' in v || 'gp' in v || 'sp' in v || 'cp' in v)) {
@@ -224,7 +230,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   function containerFillUsed(container) {
     let fill = 0;
     for (const row of container.slots)
-      for (const slot of row) fill += itemFillCost(slot);
+      for (const slot of row) fill += itemFillCost(slot, container);
     return fill;
   }
 
@@ -748,8 +754,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }),
     };
 
-    const existingFill = existing ? itemFillCost(existing) : 0;
-    if (itemFillCost(slotData) - existingFill > containerFillAvailable(container) + 0.001) {
+    const existingFill = existing ? itemFillCost(existing, container) : 0;
+    if (itemFillCost(slotData, container) - existingFill > containerFillAvailable(container) + 0.001) {
       closeDropdown();
       render();
       return;
@@ -1962,7 +1968,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         const linked = state.containers.find(c => c.id === targetItem.containerId);
         if (linked) {
           const freeSlot = findEmptySlot(linked, -1);
-          if (freeSlot && itemFillCost(slotData) <= containerFillAvailable(linked) + 0.001) {
+          if (freeSlot && itemFillCost(slotData, linked) <= containerFillAvailable(linked) + 0.001) {
             removeFromSource();
             if (placeSlotData(slotData, linked, freeSlot.r, freeSlot.c) && !slotData._unresolved && isShopDrag && onShopPurchase) onShopPurchase(slotData);
             if (onSound) onSound(isShopDrag ? 'coin' : 'place');
@@ -2066,8 +2072,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
     slotData.conflict = false;
     const existing = container.slots[r][c];
-    const existingFill = existing ? itemFillCost(existing) : 0;
-    if (itemFillCost(slotData) - existingFill > containerFillAvailable(container) + 0.001) {
+    const existingFill = existing ? itemFillCost(existing, container) : 0;
+    if (itemFillCost(slotData, container) - existingFill > containerFillAvailable(container) + 0.001) {
       render();
       return;
     }
