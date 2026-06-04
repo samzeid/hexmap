@@ -2069,6 +2069,59 @@ body.is-dragging #inv-scroll {
 #hexmap-toolbar button:active { background: rgba(255,255,255,0.08); }
 #hexmap-toolbar button.active { color: var(--text); background: rgba(255,255,255,0.08); }
 
+#hex-tool-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+#hex-color-swatches {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+#hexmap-toolbar.show-colors #hex-color-swatches {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.hex-color-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hex-color-btn::after {
+  content: '';
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.hex-color-btn[data-color="#ffcd3c"]::after { background: #ffcd3c; }
+.hex-color-btn[data-color="#ff6060"]::after { background: #ff6060; }
+.hex-color-btn[data-color="#55aaff"]::after { background: #55aaff; }
+
+.hex-color-btn.active-color::after {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
+}
+
 
 /* ── HEXMAP MODE (header bar only, inventory panels hidden) ── */
 #app.hexmap-mode #inv-scroll,

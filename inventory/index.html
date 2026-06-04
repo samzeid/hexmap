@@ -37,7 +37,14 @@
 
     <!-- Hexmap controls — shown instead of char-header in hexmap view -->
     <div id="hexmap-toolbar">
-      <button id="hex-tool-btn" title="Pan / Select"><i class="fa-solid fa-fw fa-arrows-up-down-left-right"></i></button>
+      <div id="hex-tool-wrap">
+        <div id="hex-color-swatches">
+          <button class="hex-color-btn" data-color="#ffcd3c" title="Gold"></button>
+          <button class="hex-color-btn" data-color="#ff6060" title="Red"></button>
+          <button class="hex-color-btn" data-color="#55aaff" title="Blue"></button>
+        </div>
+        <button id="hex-tool-btn" title="Pan / Select"><i class="fa-solid fa-fw fa-arrows-up-down-left-right"></i></button>
+      </div>
       <button id="hex-overlay-btn" title="Toggle overlay"><i class="fa-solid fa-fw fa-layer-group"></i></button>
       <button id="hex-clear-btn" title="Clear hexes"><i class="fa-solid fa-spray-can-sparkles"></i></button>
       <button id="hex-sign-out-btn" title="Sign out" hidden><i class="fa-solid fa-right-from-bracket"></i></button>

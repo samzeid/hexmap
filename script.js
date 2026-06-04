@@ -15,6 +15,7 @@ const database = app.database();
 const hexPingRef     = database.ref('hexPing');
 const hexSelectedRef = database.ref('hexSelected');
 const hexFocusRef    = database.ref('hexFocus');
+const pingSound      = new Audio('ping.ogg');
 
 // Get elements
 const image = new Image();
@@ -68,7 +69,15 @@ hexInspNotes.addEventListener('input', () => {
     }, 600);
 });
 
-const selectedHexes = new Set();
+const selectedHexes = new Map(); // key → color string
+
+const DRAW_COLORS = ['#ffcd3c', '#ff6060', '#55aaff'];
+const DRAW_FILL   = {
+    '#ffcd3c': 'rgba(255,205,60,0.28)',
+    '#ff6060': 'rgba(255,96,96,0.28)',
+    '#55aaff': 'rgba(85,170,255,0.28)',
+};
+let activeDrawColor = DRAW_COLORS[0];
 
 const hexSize = 13.525;
 const hexWidth = 27.275;
@@ -253,7 +262,10 @@ let _flashStart = null;
 let _panAnimId  = null;
 let _focusHex   = null;
 const PING_HOLD_MS      = 600;
-const FLASH_DURATION    = 1400;
+const PING_DURATION     = 2500;
+const PING_RING_COUNT   = 3;
+const PING_RING_LIFE    = 1200;
+const PING_RING_STAGGER = 600;
 const PING_PANEL_OFFSET = 80;
 let _lastSeenPingTime = Date.now();
 
@@ -276,9 +288,9 @@ function drawGrid(hoveredHex = null) {
             const y = row * hexVertSpacing + (col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
 
             const key = `${col},${row}`;
-            const isHovered  = hoveredHex && hoveredHex.col === col && hoveredHex.row === row;
-            const isFocused  = _focusHex  && _focusHex.col  === col && _focusHex.row  === row;
-            const isSelected = selectedHexes.has(key);
+            const isHovered   = hoveredHex && hoveredHex.col === col && hoveredHex.row === row;
+            const isFocused   = _focusHex  && _focusHex.col  === col && _focusHex.row  === row;
+            const selColor    = selectedHexes.get(key);
 
             const hexInfo = hexData.get(key);
 
@@ -314,10 +326,10 @@ function drawGrid(hoveredHex = null) {
                     lineWidth: 2,
                     opacity: 1
                 });
-            } else if (isSelected) {
+            } else if (selColor) {
                 drawHex(x, y, {
-                    strokeColor: "#ffcd3c",
-                    fillColor: "rgba(255,205,60,0.28)",
+                    strokeColor: selColor,
+                    fillColor: DRAW_FILL[selColor] || 'rgba(255,205,60,0.28)',
                     lineWidth: 2,
                     opacity: 1
                 });
@@ -325,20 +337,33 @@ function drawGrid(hoveredHex = null) {
         }
     }
 
-    // Flash overlay for ping
+    // Circular ping pulse rings
     if (_flashHex && _flashStart !== null) {
         const elapsed = performance.now() - _flashStart;
-        const t = elapsed / FLASH_DURATION;
-        const alpha = Math.sin(t * Math.PI * 3) * (1 - t);
-        if (alpha > 0) {
-            const fx = _flashHex.col * hexHorizSpacing + hexSize + offsetX;
-            const fy = _flashHex.row * hexVertSpacing + (_flashHex.col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
-            drawHex(fx, fy, {
-                strokeColor: `rgba(255,220,50,${alpha})`,
-                fillColor:   `rgba(255,220,50,${alpha * 0.35})`,
-                lineWidth: 3,
+        const cx = _flashHex.col * hexHorizSpacing + hexSize + offsetX;
+        const cy = _flashHex.row * hexVertSpacing + (_flashHex.col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
+        const flashAlpha = Math.max(0, 1 - elapsed / (PING_RING_LIFE * 0.6));
+        if (flashAlpha > 0) {
+            drawHex(cx, cy, {
+                strokeColor: `rgba(255,255,255,${flashAlpha})`,
+                fillColor:   `rgba(255,255,255,${flashAlpha * 0.35})`,
+                lineWidth: 2,
                 opacity: 1,
             });
+        }
+        for (let i = 0; i < PING_RING_COUNT; i++) {
+            const ringElapsed = elapsed - i * PING_RING_STAGGER;
+            if (ringElapsed <= 0 || ringElapsed >= PING_RING_LIFE) continue;
+            const t = ringElapsed / PING_RING_LIFE;
+            const radius = hexSize * (0.4 + t * 4.5);
+            const alpha  = (1 - t) * 0.9;
+            canvasContext.save();
+            canvasContext.beginPath();
+            canvasContext.arc(cx, cy, radius, 0, Math.PI * 2);
+            canvasContext.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+            canvasContext.lineWidth = 3;
+            canvasContext.stroke();
+            canvasContext.restore();
         }
     }
 
@@ -394,7 +419,7 @@ function getHexAtPosition(screenX, screenY) {
 }
 
 function copySelectedHexesToClipboard() {
-    const hexStrings = Array.from(selectedHexes).map(key => `"${key}"`);
+    const hexStrings = Array.from(selectedHexes.keys()).map(key => `"${key}"`);
     const clipboardText = hexStrings.join(", ");
     navigator.clipboard.writeText(clipboardText)
     .then(() => {
@@ -491,7 +516,7 @@ canvas.addEventListener("mouseup", (event) => {
     if (!hasDragged && !_pingFired && startCol >= 0 && startRow >= 0) {
         if (activeTool === 'select') {
             const _sk = `${startCol},${startRow}`;
-            setHexSelected(_sk, !selectedHexes.has(_sk));
+            setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
         } else if (activeTool === 'erase') {
             setHexSelected(`${startCol},${startRow}`, false);
         } else {
@@ -519,8 +544,8 @@ canvas.addEventListener("mouseleave", () => {
     event.preventDefault();
 });
 
-function setHexSelected(key, value) {
-    if (value) hexSelectedRef.child(key).set(true);
+function setHexSelected(key, color) {
+    if (color) hexSelectedRef.child(key).set(color);
     else hexSelectedRef.child(key).remove();
 }
 
@@ -571,7 +596,7 @@ function flashHex(col, row) {
     function tick(now) {
         if (!_flashHex) return;
         drawGridLatestActive();
-        if (now - _flashStart < FLASH_DURATION) requestAnimationFrame(tick);
+        if (now - _flashStart < PING_DURATION) requestAnimationFrame(tick);
         else { _flashHex = null; drawGridLatestActive(); }
     }
     requestAnimationFrame(tick);
@@ -583,12 +608,14 @@ hexPingRef.on('value', snap => {
     _lastSeenPingTime = ping.t;
     centerOnHex(ping.col, ping.row);
     flashHex(ping.col, ping.row);
+    pingSound.currentTime = 0;
+    pingSound.play().catch(() => {});
 });
 
 hexSelectedRef.on('value', snap => {
     selectedHexes.clear();
     const val = snap.val();
-    if (val) Object.keys(val).forEach(k => selectedHexes.add(k));
+    if (val) Object.entries(val).forEach(([k, color]) => selectedHexes.set(k, color));
     drawGridLatestActive();
 });
 
@@ -788,7 +815,7 @@ canvas.addEventListener("touchend", (e) => {
     if (!hasDragged && !_pingFired && startCol >= 0 && startRow >= 0) {
         if (activeTool === 'select') {
             const _sk = `${startCol},${startRow}`;
-            setHexSelected(_sk, !selectedHexes.has(_sk));
+            setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
         } else if (activeTool === 'erase') {
             setHexSelected(`${startCol},${startRow}`, false);
         } else {
@@ -832,7 +859,9 @@ function sendHexState() {
         toolIcon:    toolIcons[activeTool],
         overlayIcon: overlayIcons[overlayIndex],
         toolActive:  activeTool !== 'pan',
+        showColors:  activeTool === 'select',
         signedIn:    !!auth.currentUser,
+        activeColor: activeDrawColor,
     }, '*');
 }
 
@@ -869,6 +898,12 @@ window.addEventListener("message", (e) => {
                 showRegion = overlayStates[overlayIndex];
                 sendHexState();
                 drawGridLatestActive();
+                break;
+            case 'colorSelect':
+                if (DRAW_COLORS.includes(e.data.color)) {
+                    activeDrawColor = e.data.color;
+                    sendHexState();
+                }
                 break;
             case 'clearHexes':
                 clearHexSelected();

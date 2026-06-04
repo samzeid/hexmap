@@ -2422,6 +2422,12 @@ window.CharacterManager = ({ auth, database }) => {
   _hexToolBtn.addEventListener('click',    () => window.parent.postMessage({ type: 'hexAction', action: 'toolToggle' }, '*'));
   _hexOverlayBtn.addEventListener('click', () => window.parent.postMessage({ type: 'hexAction', action: 'overlayToggle' }, '*'));
   _hexClearBtn.addEventListener('click',   () => window.parent.postMessage({ type: 'hexAction', action: 'clearHexes' }, '*'));
+
+  document.querySelectorAll('.hex-color-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      window.parent.postMessage({ type: 'hexAction', action: 'colorSelect', color: btn.dataset.color }, '*');
+    });
+  });
   _hexSignOutBtn.addEventListener('click', () => {
     auth.signOut().catch(() => {});
     window.parent.postMessage({ type: 'hexAction', action: 'signOut' }, '*');
@@ -2450,6 +2456,13 @@ window.CharacterManager = ({ auth, database }) => {
       if (e.data.toolIcon)    _hexToolBtn.querySelector('i').className    = `fa-solid fa-fw ${e.data.toolIcon}`;
       if (e.data.overlayIcon) _hexOverlayBtn.querySelector('i').className = `fa-solid fa-fw ${e.data.overlayIcon}`;
       _hexToolBtn.classList.toggle('active', !!e.data.toolActive);
+      document.getElementById('hexmap-toolbar').classList.toggle('tool-active', !!e.data.toolActive);
+      document.getElementById('hexmap-toolbar').classList.toggle('show-colors', !!e.data.showColors);
+      if (e.data.activeColor) {
+        document.querySelectorAll('.hex-color-btn').forEach(btn => {
+          btn.classList.toggle('active-color', btn.dataset.color === e.data.activeColor);
+        });
+      }
       if (e.data.signedIn !== undefined) {
         _hexSignOutBtn.hidden = !e.data.signedIn;
       }
