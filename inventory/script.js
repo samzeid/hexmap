@@ -2355,6 +2355,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       document.getElementById('char-carry').value = state.carryCapacity;
       render();
     },
+    // Called by CharacterManager when hex inspector section changes visibility
+    refreshHexPanel() { refreshInspectorCollapsed(); },
   };
 };
 
@@ -2491,6 +2493,7 @@ window.CharacterManager = ({ auth, database }) => {
       }
     }
     if (e.data.type === 'hexInfo') {
+      const panel     = document.getElementById('inspector');
       const hexSect   = document.getElementById('hex-insp-section');
       const nameEl    = document.getElementById('hex-insp-name');
       const nameInput = document.getElementById('hex-insp-name-input');
@@ -2509,12 +2512,12 @@ window.CharacterManager = ({ auth, database }) => {
           descEl.hidden      = true;
         }
         hexSect.hidden = false;
-        inspectorEl.classList.add('has-hex-info');
-        inspectorEl.classList.remove('inspector-collapsed');
+        panel.classList.add('has-hex-info');
+        panel.classList.remove('inspector-collapsed');
       } else {
         hexSect.hidden = true;
-        inspectorEl.classList.remove('has-hex-info');
-        refreshInspectorCollapsed();
+        panel.classList.remove('has-hex-info');
+        inv.refreshHexPanel();
       }
     }
     if (e.data.type === 'hexNotes') {
