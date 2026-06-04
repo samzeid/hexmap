@@ -1004,11 +1004,11 @@ window.addEventListener("message", (e) => {
     if (!e.data) return;
     if (e.data.type === "toggleView") {
         document.body.classList.toggle('inv-open');
-        if (document.body.classList.contains('inv-open')) {
-            hideHexInfo();
-            attachHexNotes(null);
-            attachHexCustomName(null);
-        }
+        latestInspectorHex = null;
+        hideHexInfo();
+        attachHexNotes(null);
+        attachHexCustomName(null);
+        hexFocusRef.remove();
     }
     if (e.data.type === "headerHeight") {
         document.documentElement.style.setProperty('--inv-header-h', e.data.height + 'px');
