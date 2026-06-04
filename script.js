@@ -23,21 +23,17 @@ image.src = "https://lh3.googleusercontent.com/d/1fySy_aXhOZHiJGMw6B2xon_8nMiVey
 const canvas = document.getElementById("canvas");
 const canvasContext = canvas.getContext("2d");
 
-const hexInspector  = document.getElementById('hex-inspector');
-const hexInspName   = document.getElementById('hex-insp-name');
-const hexInspCoords = document.getElementById('hex-insp-coords');
-const hexInspDesc   = document.getElementById('hex-insp-desc');
-const hexInspNotes  = document.getElementById('hex-insp-notes');
 const invFrameWrap  = document.getElementById("inv-frame-wrap");
+
+function sendToFrame(msg) {
+    document.getElementById('inv-frame')?.contentWindow?.postMessage(msg, '*');
+}
 
 new ResizeObserver(() => {
     setPan(panX, panY);
     drawGridLatestActive();
 }).observe(canvas);
 
-document.getElementById('hex-insp-toggle').addEventListener('click', () => {
-    hexFocusRef.remove();
-});
 
 let _hexNotesRef = null;
 let _hexNotesKey = null;
@@ -47,27 +43,15 @@ function attachHexNotes(key) {
     if (_hexNotesKey === key) return;
     if (_hexNotesRef) { _hexNotesRef.off('value', _onHexNote); _hexNotesRef = null; }
     _hexNotesKey = key;
-    hexInspNotes.value = '';
+    sendToFrame({ type: 'hexNotes', value: '' });
     if (!key) return;
     _hexNotesRef = database.ref(`/hexNotes/${key}`);
     _hexNotesRef.on('value', _onHexNote);
 }
 
 function _onHexNote(snap) {
-    if (document.activeElement !== hexInspNotes) {
-        hexInspNotes.value = snap.val() || '';
-    }
+    sendToFrame({ type: 'hexNotes', value: snap.val() || '' });
 }
-
-hexInspNotes.addEventListener('input', () => {
-    clearTimeout(_hexNotesSaveTimer);
-    _hexNotesSaveTimer = setTimeout(() => {
-        if (!_hexNotesKey) return;
-        const val = hexInspNotes.value;
-        if (val) database.ref(`/hexNotes/${_hexNotesKey}`).set(val);
-        else     database.ref(`/hexNotes/${_hexNotesKey}`).remove();
-    }, 600);
-});
 
 const selectedHexes = new Map(); // key → color string
 
@@ -78,30 +62,7 @@ const DRAW_HATCH  = {
     '#FFDC26': 'diagonal',
 };
 
-const _patternCache = new Map();
-function getHatchPattern(color, type) {
-    const cacheKey = `${color}-${type}`;
-    if (_patternCache.has(cacheKey)) return _patternCache.get(cacheKey);
-    const sp = 5;
-    const off = document.createElement('canvas');
-    off.width = sp; off.height = sp;
-    const c = off.getContext('2d');
-    c.strokeStyle = color;
-    c.lineWidth = 1.5;
-    c.globalAlpha = 0.65;
-    c.beginPath();
-    if (type === 'vertical') {
-        c.moveTo(sp / 2, 0); c.lineTo(sp / 2, sp);
-    } else if (type === 'horizontal') {
-        c.moveTo(0, sp / 2); c.lineTo(sp, sp / 2);
-    } else {
-        c.moveTo(0, 0); c.lineTo(sp, sp);
-    }
-    c.stroke();
-    const pat = canvasContext.createPattern(off, 'repeat');
-    _patternCache.set(cacheKey, pat);
-    return pat;
-}
+
 let activeDrawColor = DRAW_COLORS[0];
 
 const hexSize = 13.525;
@@ -223,27 +184,63 @@ function drawHex(x, y, options = {}) {
     const {
         strokeColor = "rgba(0,0,0,0.0)",
         fillColor = null,
+        hatchType = null,
+        hatchColor = null,
         lineWidth = 1,
         opacity = 1,
     } = options;
 
-    canvasContext.save();
-    canvasContext.globalAlpha = opacity;
-    canvasContext.beginPath();
-    for (let i = 0; i < 6; i++) {
-        const angle = Math.PI / 3 * i;
-        const px = x + hexSize * Math.cos(angle);
-        const py = y + hexSize * Math.sin(angle);
-        if (i === 0) canvasContext.moveTo(px, py);
-        else canvasContext.lineTo(px, py);
+    function buildPath() {
+        canvasContext.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = Math.PI / 3 * i;
+            const px = x + hexSize * Math.cos(angle);
+            const py = y + hexSize * Math.sin(angle);
+            if (i === 0) canvasContext.moveTo(px, py);
+            else canvasContext.lineTo(px, py);
+        }
+        canvasContext.closePath();
     }
 
-    canvasContext.closePath();
+    canvasContext.save();
+    canvasContext.globalAlpha = opacity;
+    buildPath();
 
     if (fillColor) {
         canvasContext.fillStyle = fillColor;
         canvasContext.fill();
     }
+
+    if (hatchType && hatchColor) {
+        canvasContext.save();
+        buildPath();
+        canvasContext.clip();
+        canvasContext.strokeStyle = hatchColor;
+        canvasContext.lineWidth = 1.5;
+        canvasContext.globalAlpha = opacity * 0.6;
+        const sp = 5, r = hexSize + 2;
+        canvasContext.beginPath();
+        if (hatchType === 'vertical') {
+            for (let dx = -r; dx <= r + sp; dx += sp) {
+                canvasContext.moveTo(x + dx, y - r);
+                canvasContext.lineTo(x + dx, y + r);
+            }
+        } else if (hatchType === 'horizontal') {
+            for (let dy = -r; dy <= r + sp; dy += sp) {
+                canvasContext.moveTo(x - r, y + dy);
+                canvasContext.lineTo(x + r, y + dy);
+            }
+        } else {
+            for (let d = -2 * r; d <= 2 * r + sp; d += sp) {
+                canvasContext.moveTo(x - r, y - r + d);
+                canvasContext.lineTo(x + r, y + r + d);
+            }
+        }
+        canvasContext.stroke();
+        canvasContext.restore();
+    }
+
+    buildPath();
     canvasContext.strokeStyle = strokeColor;
     canvasContext.lineWidth = lineWidth;
     canvasContext.stroke();
@@ -265,7 +262,6 @@ function resizeCanvas() {
     const h = canvasContainer.clientHeight;
     if (!w || !h) return;
 
-    _patternCache.clear();
     canvas.width  = w;
     canvas.height = h;
 
@@ -341,7 +337,8 @@ function drawGrid(hoveredHex = null) {
             if (selColor) {
                 drawHex(x, y, {
                     strokeColor: selColor,
-                    fillColor: getHatchPattern(selColor, DRAW_HATCH[selColor]),
+                    hatchType:  DRAW_HATCH[selColor],
+                    hatchColor: selColor,
                     lineWidth: 2,
                     opacity: 1
                 });
@@ -406,21 +403,18 @@ function drawGrid(hoveredHex = null) {
             }
 
             if (name) {
-                hexInspName.textContent = name;
-                hexInspCoords.textContent = `${hoveredHex.col}, ${hoveredHex.row}${region && location ? ' · ' + region.name : ''}`;
-                hexInspDesc.textContent = desc;
-                hexInspector.classList.remove('hex-insp-collapsed');
+                sendToFrame({ type: 'hexInfo', name, coords: `${hoveredHex.col}, ${hoveredHex.row}${region && location ? ' · ' + region.name : ''}`, desc });
                 attachHexNotes(`${hoveredHex.col}_${hoveredHex.row}`);
             } else {
-                hexInspector.classList.add('hex-insp-collapsed');
+                sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
                 attachHexNotes(null);
             }
         } else {
-            hexInspector.classList.add('hex-insp-collapsed');
+            sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
             attachHexNotes(null);
         }
     } else {
-        hexInspector.classList.add('hex-insp-collapsed');
+        sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
         attachHexNotes(null);
     }
 }
@@ -645,7 +639,7 @@ hexFocusRef.on('value', snap => {
         latestInspectorHex = { col: _focusHex.col, row: _focusHex.row };
     } else {
         latestInspectorHex = null;
-        hexInspector.classList.add('hex-insp-collapsed');
+        sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
         attachHexNotes(null);
     }
     drawGridLatestActive();
@@ -874,7 +868,7 @@ const overlayIcons  = ['fa-layer-group', 'fa-circle-user', 'fa-tree'];
 let overlayIndex = 0;
 
 function sendHexState() {
-    document.getElementById('inv-frame')?.contentWindow?.postMessage({
+    sendToFrame({
         type:        'hexState',
         toolIcon:    toolIcons[activeTool],
         overlayIcon: overlayIcons[overlayIndex],
@@ -882,7 +876,7 @@ function sendHexState() {
         showColors:  activeTool === 'select',
         signedIn:    !!auth.currentUser,
         activeColor: activeDrawColor,
-    }, '*');
+    });
 }
 
 function drawGridLatestActive(){
@@ -902,6 +896,22 @@ window.addEventListener("message", (e) => {
     if (!e.data) return;
     if (e.data.type === "toggleView") {
         document.body.classList.toggle('inv-open');
+        if (document.body.classList.contains('inv-open')) {
+            sendToFrame({ type: 'hexInfo', name: '', coords: '', desc: '' });
+            attachHexNotes(null);
+        }
+    }
+    if (e.data.type === 'hexNotesInput') {
+        clearTimeout(_hexNotesSaveTimer);
+        _hexNotesSaveTimer = setTimeout(() => {
+            if (!_hexNotesKey) return;
+            const val = e.data.value;
+            if (val) database.ref(`/hexNotes/${_hexNotesKey}`).set(val);
+            else     database.ref(`/hexNotes/${_hexNotesKey}`).remove();
+        }, 600);
+    }
+    if (e.data.type === 'hexInfoClose') {
+        hexFocusRef.remove();
     }
     if (e.data.type === "headerHeight") {
         document.documentElement.style.setProperty('--inv-header-h', e.data.height + 'px');

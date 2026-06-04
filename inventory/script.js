@@ -1639,12 +1639,22 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     inspectorEl.classList.remove('inspector-collapsed');
   }
 
+  function refreshInspectorCollapsed() {
+    const hexSect = document.getElementById('hex-insp-section');
+    const hasHex  = !hexSect.hidden;
+    const hasItem = inspectorItemKey !== null;
+    if (!hasHex && !hasItem) {
+      inspectorEl.classList.add('inspector-collapsed');
+      inspectorEl.classList.remove('has-hex-info');
+    }
+  }
+
   function hideInspector() {
     if (document.querySelector('#insp-props .insp-select.flash-required')) return;
     if (document.querySelector('#insp-props .chip-flash-required')) return;
-    inspectorEl.classList.add('inspector-collapsed');
     inspectorItemKey = null;
     _customEditKey = null; _customEditOpen = false;
+    refreshInspectorCollapsed();
   }
 
   function toggleInspectorFor(key, slotData, container, r, c) {
@@ -1662,8 +1672,17 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     render();
   });
 
+  document.getElementById('hex-insp-toggle').addEventListener('click', () => {
+    window.parent.postMessage({ type: 'hexInfoClose' }, '*');
+  });
+
+  document.getElementById('hex-insp-notes').addEventListener('input', e => {
+    window.parent.postMessage({ type: 'hexNotesInput', value: e.target.value }, '*');
+  });
+
   document.addEventListener('pointerdown', e => {
-    if (!inspectorEl.classList.contains('inspector-collapsed')
+    if (inspectorItemKey !== null
+        && !inspectorEl.classList.contains('inspector-collapsed')
         && !inspectorEl.contains(e.target)
         && !e.target.closest('.slot')
         && !e.target.closest('.shop-item-row')) {
@@ -2466,6 +2485,25 @@ window.CharacterManager = ({ auth, database }) => {
       if (e.data.signedIn !== undefined) {
         _hexSignOutBtn.hidden = !e.data.signedIn;
       }
+    }
+    if (e.data.type === 'hexInfo') {
+      const hexSect = document.getElementById('hex-insp-section');
+      if (e.data.name) {
+        document.getElementById('hex-insp-name').textContent   = e.data.name;
+        document.getElementById('hex-insp-coords').textContent = e.data.coords;
+        document.getElementById('hex-insp-desc').textContent   = e.data.desc;
+        hexSect.hidden = false;
+        inspectorEl.classList.add('has-hex-info');
+        inspectorEl.classList.remove('inspector-collapsed');
+      } else {
+        hexSect.hidden = true;
+        inspectorEl.classList.remove('has-hex-info');
+        refreshInspectorCollapsed();
+      }
+    }
+    if (e.data.type === 'hexNotes') {
+      const ta = document.getElementById('hex-insp-notes');
+      if (document.activeElement !== ta) ta.value = e.data.value;
     }
     if (e.data.type === 'signOut') {
       auth.signOut().catch(() => {});

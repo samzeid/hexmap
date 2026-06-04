@@ -93,6 +93,20 @@
     <div id="drag-trash-btn" hidden><i class="fa-solid fa-trash"></i></div>
 
     <div id="inspector" class="inspector-collapsed">
+
+      <!-- Hex location section (shown when hovering a named hex) -->
+      <div id="hex-insp-section" hidden>
+        <div id="hex-insp-header">
+          <div id="hex-insp-top">
+            <h2 id="hex-insp-name"></h2>
+            <span id="hex-insp-coords"></span>
+          </div>
+          <button id="hex-insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
+        </div>
+        <p id="hex-insp-desc"></p>
+        <textarea id="hex-insp-notes" placeholder="Notes…"></textarea>
+      </div>
+
       <div id="insp-header">
         <div id="insp-name-row">
           <div id="insp-top">
