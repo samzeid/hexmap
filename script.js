@@ -164,8 +164,16 @@ function attachHexNotes(key) {
     _hexNotesRef.on('value', _onHexNote);
 }
 
+function _autoResizeNotes() {
+    hexInspNotes.style.height = '0';
+    hexInspNotes.style.height = hexInspNotes.scrollHeight + 'px';
+}
+
 function _onHexNote(snap) {
-    if (document.activeElement !== hexInspNotes) hexInspNotes.value = snap.val() || '';
+    if (document.activeElement !== hexInspNotes) {
+        hexInspNotes.value = snap.val() || '';
+        _autoResizeNotes();
+    }
 }
 
 function attachHexCustomName(key) {
@@ -183,6 +191,7 @@ function _onHexCustomName(snap) {
 }
 
 hexInspNotes.addEventListener('input', () => {
+    _autoResizeNotes();
     clearTimeout(_hexNotesSaveTimer);
     _hexNotesSaveTimer = setTimeout(() => {
         if (!_hexNotesKey) return;

@@ -255,8 +255,11 @@ body             #item-insp-section { display: none !important; }
   font-size: 13px;
   line-height: 1.5;
   padding: 8px 10px;
-  resize: vertical;
-  min-height: 64px;
+  resize: none;
+  min-height: 0;
+  height: auto;
+  overflow-y: hidden;
+  field-sizing: content;
   outline: none;
   display: block;
 }
