@@ -53,28 +53,29 @@ function refreshDetailPanel() {
 
 function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey) {
     if (hexKey !== _hexPanelKey) {
-        _hexEditMode = false;
-        _hexPanelKey = hexKey;
+        // New hex — reset everything
+        _hexEditMode    = false;
+        _hexPanelKey    = hexKey;
+        _hexHasLocation = hasLocation;
+        _hexJsonDesc    = desc;
+
+        hexInspCoords.textContent = coords;
+        hexInspRegion.textContent = regionName || '';
+        hexInspRegion.hidden      = !regionName;
+        hexEditBtn.hidden         = !isDMView || hasLocation;
+
+        if (hasLocation) {
+            hexInspName.textContent = name;
+            hexInspDesc.textContent = desc;
+        } else {
+            // Clear stale text; Firebase listeners will repopulate
+            hexInspName.textContent = '';
+            hexInspDesc.textContent = '';
+        }
     }
-    _hexHasLocation = hasLocation;
-    _hexJsonDesc    = desc;
+    // Same hex redraw: don't touch content — Firebase listeners own it
 
-    hexInspCoords.textContent = coords;
-    hexInspRegion.textContent = regionName || '';
-    hexInspRegion.hidden = !regionName;
-    hexEditBtn.hidden    = !isDMView || hasLocation;
-
-    // Set static content (always, regardless of mode)
-    if (hasLocation) {
-        hexInspName.textContent = name;
-        hexInspDesc.textContent = desc;
-    } else {
-        hexInspDesc.textContent = ''; // _onHexDesc will fill if custom desc exists
-    }
-
-    // Apply whichever mode is current (preserves edit state on redraw)
     _applyHexEditMode();
-
     hexInspSect.hidden = false;
     detailPanel.classList.remove('detail-collapsed');
 }
@@ -88,8 +89,6 @@ function _applyHexEditMode() {
         hexInspName.hidden = true;
         hexInspDesc.hidden = true;
     } else {
-        // Sync display text from edit textarea in case DM made changes
-        if (!_hexHasLocation) hexInspDesc.textContent = hexInspDescEdit.value;
         hexInspName.hidden = _hexHasLocation ? false : !hexInspName.textContent;
         hexInspDesc.hidden = !_hexJsonDesc && !hexInspDesc.textContent;
         _autoResizeNotes();
@@ -188,14 +187,30 @@ let _hexCustomNameRef = null;
 let _hexCustomNameKey = null;
 let _hexCustomNameSaveTimer = null;
 
-const hexNotesCache = new Map(); // col_row → true, for dot rendering
-const hexFlags      = new Map(); // col_row → color string
-let   isDMView      = false;
+const hexNotesCache       = new Map(); // col_row → true
+const hexCustomNamesCache = new Map(); // col_row → true
+const hexDescCache        = new Map(); // col_row → true
+const hexFlags            = new Map(); // col_row → color string
+let   isDMView            = false;
 
 database.ref('/hexNotes').on('value', snap => {
     hexNotesCache.clear();
     const val = snap.val();
     if (val) Object.keys(val).forEach(k => hexNotesCache.set(k, true));
+    drawGridLatestActive();
+});
+
+database.ref('/hexCustomNames').on('value', snap => {
+    hexCustomNamesCache.clear();
+    const val = snap.val();
+    if (val) Object.keys(val).forEach(k => hexCustomNamesCache.set(k, true));
+    drawGridLatestActive();
+});
+
+database.ref('/hexDescriptions').on('value', snap => {
+    hexDescCache.clear();
+    const val = snap.val();
+    if (val) Object.keys(val).forEach(k => hexDescCache.set(k, true));
     drawGridLatestActive();
 });
 
@@ -605,7 +620,7 @@ function drawGrid(hoveredHex = null) {
             const _flagColor = hexFlags.get(_flagKey);
             if (_flagColor) {
                 drawFlag(x, y, _flagColor);
-            } else if (isDMView && hexNotesCache.has(_flagKey)) {
+            } else if (isDMView && (hexNotesCache.has(_flagKey) || hexCustomNamesCache.has(_flagKey) || hexDescCache.has(_flagKey))) {
                 drawFlag(x, y, '#ffffff');
             }
         }
