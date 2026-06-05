@@ -652,6 +652,16 @@ function drawGrid(hoveredHex = null) {
             } else if (_hasData && (isDMView || !_isHidden)) {
                 drawFlag(x, y, '#ffffff', _dimAlpha);
             }
+            if (_isHidden && isDMView) {
+                const _iconSize = Math.round(hexSize * 0.55);
+                canvasContext.save();
+                canvasContext.font = `900 ${_iconSize}px "Font Awesome 6 Free"`;
+                canvasContext.fillStyle = 'rgba(255,60,60,0.9)';
+                canvasContext.textAlign = 'center';
+                canvasContext.textBaseline = 'middle';
+                canvasContext.fillText('\uf070', x, y - hexSize * 0.62);
+                canvasContext.restore();
+            }
         }
     }
 
