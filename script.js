@@ -539,11 +539,17 @@ function drawHex(x, y, options = {}) {
 const canvasContainer = canvas.parentElement;
 
 function fitContainer() {
-    const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+    const vv = window.visualViewport;
+    const h = vv ? vv.height : window.innerHeight;
+    const offsetTop = vv ? vv.offsetTop : 0;
     const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inv-header-h')) || 0;
+    canvasContainer.style.top = (offsetTop + headerH) + 'px';
     canvasContainer.style.height = (h - headerH) + 'px';
 }
-if (window.visualViewport) window.visualViewport.addEventListener('resize', fitContainer);
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', fitContainer);
+    window.visualViewport.addEventListener('scroll', fitContainer);
+}
 window.addEventListener('resize', fitContainer);
 fitContainer();
 

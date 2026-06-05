@@ -113,10 +113,10 @@ body {
 
 #container {
   position: fixed;
-  top: var(--inv-header-h);
+  top: 0;
   left: 0;
   width: 100%;
-  height: calc(100% - var(--inv-header-h));
+  height: 100%;
   overflow: hidden;
 }
 
