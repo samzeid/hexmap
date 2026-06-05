@@ -1,8 +1,6 @@
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
-:root { --inv-header-h: 0px; }
-
 body {
   margin: 0;
   padding: 0;
@@ -111,31 +109,16 @@ body {
 
 #google-sign-in-btn:active { background: rgba(255,255,255,0.06); }
 
-#container {
-  position: fixed;
-  top: var(--inv-header-h);
-  left: 0;
-  width: 100%;
-  height: calc(100% - var(--inv-header-h));
+/* ── APP / HEX VIEW ────────────────────────────────────────────── */
+#app { will-change: transform; }
+
+#hex-view {
+  flex: 1;
   overflow: hidden;
-  will-change: transform;
+  position: relative;
 }
 
-body.inv-open #container { display: none; }
-
-#inv-separator {
-  position: fixed;
-  top: var(--inv-header-h);
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: rgba(255,255,255,0.09);
-  z-index: 998;
-  pointer-events: none;
-  will-change: transform;
-}
-
-body.inv-open #inv-separator { display: none; }
+#app:not(.hexmap-mode) #hex-view { display: none; }
 
 #canvas {
   background: #000;
@@ -178,9 +161,9 @@ body.inv-open #inv-separator { display: none; }
 }
 
 /* Hex section only in hexmap mode; item section reserved for future cross-page use */
-body.inv-open    #detail-panel      { display: none !important; }
-body.inv-open    #hex-insp-section  { display: none !important; }
-body             #item-insp-section { display: none !important; }
+#app:not(.hexmap-mode) #detail-panel      { display: none !important; }
+#app:not(.hexmap-mode) #hex-insp-section  { display: none !important; }
+body                   #item-insp-section { display: none !important; }
 
 /* Hex section */
 #hex-insp-section.hex-location-hidden #hex-insp-name,
@@ -382,35 +365,10 @@ body             #item-insp-section { display: none !important; }
 }
 
 
-/* ── INVENTORY FRAME ───────────────────────────────────────────── */
-#inv-frame-wrap {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 999;
-  height: var(--inv-header-h);
-  overflow: hidden;
-  will-change: transform;
-}
-
-body.inv-open #inv-frame-wrap {
-  height: 100dvh;
-}
-
-#inv-frame {
-  width: 100%;
-  height: 100dvh;
-  border: none;
-  display: block;
-}
-
 
 /* ── KEYBOARD ANIMATION ─────────────────────────────────────────── */
-body.kb-animating #container,
-body.kb-animating #inv-frame-wrap,
-body.kb-animating #inv-separator,
-body.kb-animating #detail-panel { transition: none !important; }
+body.kb-animating #detail-panel,
+body.kb-animating #inspector { transition: none !important; }
 
 /* ── MOBILE ─────────────────────────────────────────────────────── */
 @media (max-width: 640px) {

@@ -26,8 +26,6 @@ image.src = "https://lh3.googleusercontent.com/d/1fySy_aXhOZHiJGMw6B2xon_8nMiVey
 const canvas = document.getElementById("canvas");
 const canvasContext = canvas.getContext("2d");
 
-const invFrameWrap   = document.getElementById("inv-frame-wrap");
-const invSeparator   = document.getElementById('inv-separator');
 const detailPanel    = document.getElementById('detail-panel');
 const hexInspSect    = document.getElementById('hex-insp-section');
 const hexInspName    = document.getElementById('hex-insp-name');
@@ -45,7 +43,7 @@ let _hexJsonDesc    = '';
 let _hexPanelKey    = null;
 
 function sendToFrame(msg) {
-    document.getElementById('inv-frame')?.contentWindow?.postMessage(msg, '*');
+    window.postMessage(msg, '*');
 }
 
 function refreshDetailPanel() {
@@ -538,6 +536,7 @@ function drawHex(x, y, options = {}) {
 }
 
 const canvasContainer = canvas.parentElement;
+const appEl = document.getElementById('app');
 
 let _kbTimer = null;
 let _kbSavedZoom = 1, _kbSavedPanX = 0, _kbSavedPanY = 0;
@@ -545,10 +544,6 @@ function fitContainer() {
     const vv = window.visualViewport;
     const h = vv ? vv.height : window.innerHeight;
     const offsetTop = vv ? vv.offsetTop : 0;
-    const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inv-header-h')) || 0;
-    const ty = offsetTop ? `translateY(${offsetTop}px)` : '';
-    const invOpen = document.body.classList.contains('inv-open');
-    // Snapshot zoom/pan before keyboard animation alters canvas size
     if (!document.body.classList.contains('kb-animating')) {
         _kbSavedZoom = zoom; _kbSavedPanX = panX; _kbSavedPanY = panY;
     }
@@ -556,7 +551,6 @@ function fitContainer() {
     clearTimeout(_kbTimer);
     _kbTimer = setTimeout(() => {
         document.body.classList.remove('kb-animating');
-        // Resize canvas to settled size, restoring exact view so map doesn't jump
         const w = canvasContainer.clientWidth;
         const cH = canvasContainer.clientHeight;
         if (w && cH && (w !== canvas.width || cH !== canvas.height)) {
@@ -572,14 +566,8 @@ function fitContainer() {
             drawGridLatestActive();
         }
     }, 300);
-    // In full-screen inventory mode the iframe fills the screen and handles
-    // its own keyboard layout — don't fight it with the hexmap compensation.
-    if (!invOpen) {
-        invFrameWrap.style.transform    = ty;
-        invSeparator.style.transform    = ty;
-        canvasContainer.style.transform = ty;
-        canvasContainer.style.height    = (h - headerH) + 'px';
-    }
+    appEl.style.height    = h + 'px';
+    appEl.style.transform = offsetTop ? `translateY(${offsetTop}px)` : '';
 }
 if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', fitContainer);
@@ -960,10 +948,9 @@ function cancelPingTimer() {
 function centerOnHex(col, row) {
     const wx = col * hexHorizSpacing + hexSize + offsetX;
     const wy = row * hexVertSpacing + (col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
-    const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inv-header-h')) || 0;
     const targetZoom = Math.min(maxZoom, Math.max(zoom, minZoom * 2.5));
     const targetX = canvas.width  / 2 - wx * targetZoom;
-    const targetY = canvas.height / 2 - headerH / 2 - PING_PANEL_OFFSET - wy * targetZoom;
+    const targetY = canvas.height / 2 - PING_PANEL_OFFSET - wy * targetZoom;
     const startX = panX, startY = panY, startZoom = zoom, t0 = performance.now();
     if (_panAnimId) cancelAnimationFrame(_panAnimId);
     function step(now) {
@@ -1060,20 +1047,12 @@ loginPassword.addEventListener("keydown", e => {
 auth.onAuthStateChanged((user) => {
     if (user) {
         loginScreen.classList.add("hidden");
-        // Pass credentials to inventory iframe (fields still populated right after login)
-        const email    = toFirebaseEmail(loginEmail.value.trim());
-        const password = loginPassword.value;
-        if (email && password) {
-            document.getElementById('inv-frame')
-                ?.contentWindow?.postMessage({ type: 'signIn', email, password }, '*');
-        }
         // Register username → uid so DMs can assign characters by username
         const username = (user.displayName || user.email || '').split('@')[0];
         if (username) database.ref(`/inventory_user_lookup/${username}`).set(user.uid);
         sendHexState();
     } else {
         loginScreen.classList.remove("hidden");
-        document.getElementById('inv-frame')?.contentWindow?.postMessage({ type: 'signOut' }, '*');
         const btn = document.getElementById("email-sign-in-btn");
         btn.textContent = "Sign in";
         btn.disabled    = false;
@@ -1265,66 +1244,35 @@ function drawGridLatestActive(){
 }
 
 document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && document.body.classList.contains('inv-open')) {
-        document.body.classList.remove('inv-open');
+    if (e.key === "Escape" && !appEl.classList.contains('hexmap-mode')) {
+        window.invGoToHexmap && window.invGoToHexmap();
     }
 });
 
-window.addEventListener("message", (e) => {
-    if (!e.data) return;
-    if (e.data.type === "toggleView") {
-        document.body.classList.toggle('inv-open');
-        if (document.body.classList.contains('inv-open')) {
-            // Switching to inventory: hide panel but preserve hex focus for return
-            hideHexInfo();
-            attachHexNotes(null);
-            attachHexCustomName(null);
-        }
-        // Switching back to hexview: drawGridLatestActive() restores the panel
-        // automatically from latestInspectorHex, which we kept intact.
+// ── BRIDGE GLOBALS (called directly by inventory/script.js) ──────────────────
+window.hexOnGoToInventory = function() {
+    hideHexInfo();
+    attachHexNotes(null);
+    attachHexCustomName(null);
+};
+window.hexOnGoToHexmap = function() {
+    // drawGridLatestActive restores panel from latestInspectorHex
+};
+window.hexSetDmStatus = function(isDM) {
+    isDMView = isDM;
+    _hexPanelKey = null;
+    _hexCustomNameKey = null;
+    _hexDescKey = null;
+    drawGridLatestActive();
+};
+window.hexAction = function(action, data) {
+    switch (action) {
+        case 'toolToggle': { const next = (toolStates.indexOf(activeTool) + 1) % toolStates.length; setActiveTool(toolStates[next]); break; }
+        case 'overlayToggle': overlayIndex = (overlayIndex + 1) % overlayStates.length; showRegion = overlayStates[overlayIndex]; sendHexState(); drawGridLatestActive(); break;
+        case 'colorSelect': if (DRAW_COLORS.includes(data)) { activeDrawColor = data; eraseMode = false; sendHexState(); } break;
+        case 'eraseToggle': eraseMode = !eraseMode; sendHexState(); break;
+        case 'clearHexes': clearHexSelected(); break;
+        case 'signOut': auth.signOut(); break;
     }
-    if (e.data.type === "dmStatus") {
-        isDMView = !!e.data.isDM;
-        _hexPanelKey = null;
-        _hexCustomNameKey = null;
-        _hexDescKey = null;
-        drawGridLatestActive();
-    }
-    if (e.data.type === "headerHeight") {
-        document.documentElement.style.setProperty('--inv-header-h', e.data.height + 'px');
-        fitContainer();
-    }
-    if (e.data.type === "hexAction") {
-        switch (e.data.action) {
-            case 'toolToggle': {
-                const next = (toolStates.indexOf(activeTool) + 1) % toolStates.length;
-                setActiveTool(toolStates[next]);
-                break;
-            }
-            case 'overlayToggle':
-                overlayIndex = (overlayIndex + 1) % overlayStates.length;
-                showRegion = overlayStates[overlayIndex];
-                sendHexState();
-                drawGridLatestActive();
-                break;
-            case 'colorSelect':
-                if (DRAW_COLORS.includes(e.data.color)) {
-                    activeDrawColor = e.data.color;
-                    eraseMode = false;
-                    sendHexState();
-                }
-                break;
-            case 'eraseToggle':
-                eraseMode = !eraseMode;
-                sendHexState();
-                break;
-            case 'clearHexes':
-                clearHexSelected();
-                break;
-            case 'signOut':
-                auth.signOut();
-                break;
-        }
-    }
-});
+};
 

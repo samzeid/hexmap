@@ -10,19 +10,19 @@
       meta.setAttribute('content', c + ',width=1');
       setTimeout(function () { meta.setAttribute('content', c); }, 300);
     });
-    // Block browser pinch-zoom — Safari fires gesturestart/gesturechange
     document.addEventListener('gesturestart',  function(e) { e.preventDefault(); }, { passive: false });
     document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, { passive: false });
-    // Block multi-touch scroll zoom on the document level
     document.addEventListener('touchmove', function(e) {
       if (e.touches.length > 1) e.preventDefault();
     }, { passive: false });
   </script>
   <title>Hex Grid Overlay</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="inventory/style.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
+
   <!-- Login screen -->
   <div id="login-screen">
     <div id="login-card">
@@ -34,51 +34,146 @@
     </div>
   </div>
 
-  <!-- Persistent inventory header / full inventory view -->
-  <div id="inv-frame-wrap">
-    <iframe id="inv-frame" src="inventory/index.html" frameborder="0"></iframe>
-  </div>
-  <div id="inv-separator"></div>
-  <div id="container">
-    <canvas id="canvas"></canvas>
-  </div>
+  <!-- Main app -->
+  <div id="app" class="hexmap-mode">
 
-<!-- Universal detail panel — lives in parent so it's visible in both modes -->
-  <div id="detail-panel" class="detail-collapsed">
-    <!-- Hex section: shown in hexmap mode -->
-    <div id="hex-insp-section" hidden>
-      <div id="hex-insp-header">
-        <div id="hex-insp-name-col">
-          <div id="hex-insp-top">
-            <button id="hex-edit-btn" hidden title="Edit"><i class="fas fa-sliders"></i></button>
-            <h2 id="hex-insp-name"></h2>
-            <input id="hex-insp-name-input" type="text" placeholder="Name this hex…" hidden />
-            <span id="hex-insp-region" hidden></span>
-            <span id="hex-insp-coords"></span>
-          </div>
-          <div id="hex-flag-row"></div>
+    <!-- Character tabs -->
+    <div id="char-tab-bar">
+      <div id="tab-bar-left">
+        <button id="inv-close-btn" title="Inventory"><i class="fa-solid fa-scroll"></i></button>
+      </div>
+      <div id="char-tabs-scroll">
+        <div id="char-tabs"></div>
+      </div>
+      <button id="add-char-btn" title="New character">＋</button>
+      <button id="shop-tab-btn" title="Item shop"><i class="fa-solid fa-cart-shopping"></i></button>
+      <button id="role-btn" title="Toggle DM / Player role" hidden></button>
+    </div>
+
+    <!-- Hexmap controls toolbar (hexmap mode only) -->
+    <div id="hexmap-toolbar">
+      <div id="hex-tool-wrap">
+        <div id="hex-color-swatches">
+          <button id="hex-erase-btn" class="hex-color-btn" title="Erase"><i class="fa-solid fa-eraser"></i></button>
+          <button class="hex-color-btn" data-color="#E6194B" title="Red"></button>
+          <button class="hex-color-btn" data-color="#00C5FF" title="Cyan"></button>
+          <button class="hex-color-btn" data-color="#FFDC26" title="Gold"></button>
         </div>
-        <button id="hex-insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
+        <button id="hex-tool-btn" title="Pan / Select"><i class="fa-solid fa-fw fa-arrows-up-down-left-right"></i></button>
       </div>
-      <p id="hex-insp-desc" hidden></p>
-      <textarea id="hex-insp-desc-edit" hidden placeholder="Description…"></textarea>
-      <textarea id="hex-insp-notes" placeholder="Notes…"></textarea>
+      <button id="hex-overlay-btn" title="Toggle overlay"><i class="fa-solid fa-fw fa-layer-group"></i></button>
+      <button id="hex-clear-btn" title="Clear hexes" hidden><i class="fa-solid fa-spray-can-sparkles"></i></button>
+      <button id="hex-sign-out-btn" title="Sign out" hidden><i class="fa-solid fa-right-from-bracket"></i></button>
     </div>
-    <!-- Item section: shown in inventory mode -->
-    <div id="item-insp-section" hidden>
-      <div id="item-insp-header">
-        <h2 id="item-insp-name"></h2>
-        <button id="item-insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
+
+    <!-- Character header (inventory mode only) -->
+    <header id="char-header">
+      <div class="char-field grow">
+        <div class="char-name-row">
+          <input type="text" id="char-name" placeholder="Character name" autocomplete="off" />
+          <div class="carry-row">
+            <span id="carry-used">0</span>
+            <span class="carry-slash">/</span>
+            <input type="text" id="char-carry" placeholder="—" autocomplete="off" />
+          </div>
+          <button id="char-assign-btn" hidden title="Assign to player"><i class="fas fa-user-gear"></i></button>
+          <button id="char-hide-btn"   hidden title="Hide from players"><i class="fas fa-eye"></i></button>
+        </div>
+        <div class="char-coin-row">
+          <button id="char-fields-edit-btn" title="Edit name &amp; carry capacity"><i class="fas fa-user-pen"></i></button>
+          <div id="coin-counter" hidden></div>
+        </div>
       </div>
-      <p id="item-insp-desc"></p>
+    </header>
+
+    <!-- Hex canvas view (hexmap mode only) -->
+    <div id="hex-view">
+      <canvas id="canvas"></canvas>
     </div>
-  </div>
+
+    <!-- Shop panel (shown when shop tab is active) -->
+    <div id="shop-panel" hidden>
+      <div id="shop-filter-bar">
+        <input id="shop-search" type="text" placeholder="Search items…" autocomplete="off" spellcheck="false" />
+        <select id="shop-category"><option value="">All categories</option></select>
+      </div>
+      <div id="shop-scroll"></div>
+    </div>
+
+    <!-- Scrollable inventory area (inventory mode only) -->
+    <div id="inv-scroll">
+      <main>
+        <div id="containers"></div>
+      </main>
+      <div id="autocomplete-dropdown" hidden></div>
+    </div>
+
+    <div id="drag-trash-btn" hidden><i class="fa-solid fa-trash"></i></div>
+
+    <!-- Inventory item inspector -->
+    <div id="inspector" class="inspector-collapsed">
+      <div id="insp-header">
+        <div id="insp-name-row">
+          <div id="insp-top">
+            <h2 id="insp-name"></h2>
+            <span id="insp-cost" hidden></span>
+            <div id="insp-inline-vars"></div>
+          </div>
+          <div id="insp-props" hidden></div>
+        </div>
+        <button id="insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
+      </div>
+      <p id="insp-warn" hidden></p>
+      <div id="insp-container-rows-row" hidden class="insp-toggle-row">
+        <span class="insp-toggle-label">Container rows</span>
+        <input type="number" id="insp-container-rows" value="2" min="1" max="20" class="insp-num" style="width:60px" />
+      </div>
+      <div id="insp-vars"></div>
+      <p id="insp-desc"></p>
+      <textarea id="insp-desc-edit" hidden placeholder="Description..."></textarea>
+      <textarea id="insp-notes" hidden placeholder="Notes..."></textarea>
+      <button id="insp-copy" hidden>Copy item</button>
+      <button id="insp-remove">Remove item</button>
+    </div>
+
+    <!-- Hex detail panel (hexmap mode only) -->
+    <div id="detail-panel" class="detail-collapsed">
+      <div id="hex-insp-section" hidden>
+        <div id="hex-insp-header">
+          <div id="hex-insp-name-col">
+            <div id="hex-insp-top">
+              <button id="hex-edit-btn" hidden title="Edit"><i class="fas fa-sliders"></i></button>
+              <h2 id="hex-insp-name"></h2>
+              <input id="hex-insp-name-input" type="text" placeholder="Name this hex…" hidden />
+              <span id="hex-insp-region" hidden></span>
+              <span id="hex-insp-coords"></span>
+            </div>
+            <div id="hex-flag-row"></div>
+          </div>
+          <button id="hex-insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
+        </div>
+        <p id="hex-insp-desc" hidden></p>
+        <textarea id="hex-insp-desc-edit" hidden placeholder="Description…"></textarea>
+        <textarea id="hex-insp-notes" placeholder="Notes…"></textarea>
+      </div>
+      <div id="item-insp-section" hidden>
+        <div id="item-insp-header">
+          <h2 id="item-insp-name"></h2>
+          <button id="item-insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
+        </div>
+        <p id="item-insp-desc"></p>
+      </div>
+    </div>
+
+  </div><!-- /app -->
 
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-  
   <script src="script.js"></script>
+  <script src="inventory/items.js"></script>
+  <script src="inventory/script.js"></script>
+  <script>window.CharacterManager({ auth, database });</script>
 </body>
 </html>

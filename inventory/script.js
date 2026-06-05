@@ -2365,7 +2365,7 @@ window.CharacterManager = ({ auth, database }) => {
   const playSound = (() => {
     const audios = {};
     ['bin', 'coin', 'place'].forEach(name => {
-      const a = new Audio(`../sounds/${name}.ogg`);
+      const a = new Audio(`sounds/${name}.ogg`);
       a.preload = 'auto';
       audios[name] = a;
     });
@@ -2403,16 +2403,6 @@ window.CharacterManager = ({ auth, database }) => {
     _closeBtn.title      = _hexmapMode ? 'Inventory' : 'Map view';
   }
 
-  function _postHeaderHeight() {
-    const tabBar  = document.getElementById('char-tab-bar');
-    const toolbar = document.getElementById('hexmap-toolbar');
-    const charHdr = document.getElementById('char-header');
-    if (tabBar) {
-      const contentEl = _hexmapMode ? toolbar : charHdr;
-      window.parent.postMessage({ type: 'headerHeight', height: tabBar.offsetHeight + (contentEl?.offsetHeight || 0) }, '*');
-    }
-  }
-
   _closeBtn.addEventListener('click', () => {
     if (_shopFromHexmap && shopOpen) {
       closeShop();
@@ -2420,8 +2410,8 @@ window.CharacterManager = ({ auth, database }) => {
     }
     _hexmapMode = !_hexmapMode;
     _applyViewMode();
-    window.parent.postMessage({ type: 'toggleView' }, '*');
-    requestAnimationFrame(_postHeaderHeight);
+    if (_hexmapMode) window.hexOnGoToHexmap && window.hexOnGoToHexmap();
+    else window.hexOnGoToInventory && window.hexOnGoToInventory();
     if (!_hexmapMode) ensureCharSelected();
     else deselectChar();
   });
@@ -2432,31 +2422,24 @@ window.CharacterManager = ({ auth, database }) => {
   const _hexClearBtn   = document.getElementById('hex-clear-btn');
   const _hexSignOutBtn = document.getElementById('hex-sign-out-btn');
 
-  _hexToolBtn.addEventListener('click',    () => window.parent.postMessage({ type: 'hexAction', action: 'toolToggle' }, '*'));
-  _hexOverlayBtn.addEventListener('click', () => window.parent.postMessage({ type: 'hexAction', action: 'overlayToggle' }, '*'));
-  _hexClearBtn.addEventListener('click',   () => window.parent.postMessage({ type: 'hexAction', action: 'clearHexes' }, '*'));
+  _hexToolBtn.addEventListener('click',    () => window.hexAction && window.hexAction('toolToggle'));
+  _hexOverlayBtn.addEventListener('click', () => window.hexAction && window.hexAction('overlayToggle'));
+  _hexClearBtn.addEventListener('click',   () => window.hexAction && window.hexAction('clearHexes'));
 
   document.getElementById('hex-erase-btn').addEventListener('click', () => {
-    window.parent.postMessage({ type: 'hexAction', action: 'eraseToggle' }, '*');
+    window.hexAction && window.hexAction('eraseToggle');
   });
   document.querySelectorAll('.hex-color-btn[data-color]').forEach(btn => {
     btn.addEventListener('click', () => {
-      window.parent.postMessage({ type: 'hexAction', action: 'colorSelect', color: btn.dataset.color }, '*');
+      window.hexAction && window.hexAction('colorSelect', btn.dataset.color);
     });
   });
   _hexSignOutBtn.addEventListener('click', () => {
     auth.signOut().catch(() => {});
-    window.parent.postMessage({ type: 'hexAction', action: 'signOut' }, '*');
   });
 
-  // Start in hexmap-mode and report header height
+  // Start in hexmap-mode
   _applyViewMode();
-  requestAnimationFrame(_postHeaderHeight);
-
-  // Repost height whenever any header element resizes
-  new ResizeObserver(_postHeaderHeight).observe(document.getElementById('char-tab-bar'));
-  new ResizeObserver(_postHeaderHeight).observe(document.getElementById('char-header'));
-  new ResizeObserver(_postHeaderHeight).observe(document.getElementById('hexmap-toolbar'));
 
   // Converts a plain username to a Firebase-compatible email by appending a
   // fixed domain. If the value already contains '@' it is returned unchanged.
@@ -2484,24 +2467,6 @@ window.CharacterManager = ({ auth, database }) => {
       if (e.data.signedIn !== undefined) {
         _hexSignOutBtn.hidden = !e.data.signedIn;
       }
-    }
-    if (e.data.type === 'signOut') {
-      auth.signOut().catch(() => {});
-    }
-    if (e.data && e.data.type === 'signIn') {
-      const firebaseEmail = toFirebaseEmail(e.data.email);
-      const current   = (auth.currentUser?.email || '').toLowerCase();
-      const requested = firebaseEmail.toLowerCase();
-      if (!auth.currentUser) {
-        // Not signed in — sign in directly without a signOut first
-        auth.signInWithEmailAndPassword(firebaseEmail, e.data.password).catch(() => {});
-      } else if (current !== requested) {
-        // Signed in as a different user — switch accounts
-        auth.signOut().then(() =>
-          auth.signInWithEmailAndPassword(firebaseEmail, e.data.password).catch(() => {})
-        );
-      }
-      // Same user already signed in — do nothing
     }
   });
 
@@ -3053,8 +3018,7 @@ window.CharacterManager = ({ auth, database }) => {
       _shopFromHexmap = true;
       _hexmapMode = false;
       _applyViewMode();
-      window.parent.postMessage({ type: 'toggleView' }, '*');
-      requestAnimationFrame(_postHeaderHeight);
+      window.hexOnGoToInventory && window.hexOnGoToInventory();
       ensureCharSelected();
     }
   }
@@ -3069,8 +3033,7 @@ window.CharacterManager = ({ auth, database }) => {
       deselectChar();
       _hexmapMode = true;
       _applyViewMode();
-      window.parent.postMessage({ type: 'toggleView' }, '*');
-      requestAnimationFrame(_postHeaderHeight);
+      window.hexOnGoToHexmap && window.hexOnGoToHexmap();
     }
   }
 
@@ -3143,7 +3106,7 @@ window.CharacterManager = ({ auth, database }) => {
     charAssignBtn.hidden = !isDM;
     charHideBtn.hidden   = !isDM;
     _hexClearBtn.hidden  = !isDM;
-    window.parent.postMessage({ type: 'dmStatus', isDM }, '*');
+    window.hexSetDmStatus && window.hexSetDmStatus(isDM);
     roleBtn.textContent  = 'DM';
     roleBtn.title        = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
     roleBtn.dataset.role = isDM ? 'dm' : 'player';
@@ -3688,15 +3651,13 @@ window.CharacterManager = ({ auth, database }) => {
               deselectChar();
               _hexmapMode = true;
               _applyViewMode();
-              window.parent.postMessage({ type: 'toggleView' }, '*');
-              requestAnimationFrame(_postHeaderHeight);
+              window.hexOnGoToHexmap && window.hexOnGoToHexmap();
             }
           } else {
             if (_hexmapMode) {
               _hexmapMode = false;
               _applyViewMode();
-              window.parent.postMessage({ type: 'toggleView' }, '*');
-              requestAnimationFrame(_postHeaderHeight);
+              window.hexOnGoToInventory && window.hexOnGoToInventory();
             }
             switchToChar(char.id, false);
           }
@@ -3784,4 +3745,9 @@ window.CharacterManager = ({ auth, database }) => {
       drag = null;
     });
   })();
+
+  window.invGoToHexmap = function() {
+    _hexmapMode = true;
+    _applyViewMode();
+  };
 };
