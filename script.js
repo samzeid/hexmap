@@ -62,7 +62,6 @@ function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey) {
         hexInspCoords.textContent = coords;
         hexInspRegion.textContent = regionName || '';
         hexInspRegion.hidden      = !regionName;
-        hexEditBtn.hidden         = !isDMView || hasLocation;
 
         if (hasLocation) {
             hexInspName.textContent = name;
@@ -81,6 +80,7 @@ function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey) {
 }
 
 function _applyHexEditMode() {
+    hexEditBtn.hidden = !isDMView || _hexHasLocation;
     hexEditBtn.classList.toggle('active', _hexEditMode);
     hexInspNameIn.hidden   = !_hexEditMode || _hexHasLocation;
     hexInspDescEdit.hidden = !_hexEditMode;
