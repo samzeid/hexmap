@@ -542,8 +542,13 @@ const canvasContainer = canvas.parentElement;
 function fitContainer() {
     const vv = window.visualViewport;
     const h = vv ? vv.height : window.innerHeight;
+    const offsetTop = vv ? vv.offsetTop : 0;
     const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inv-header-h')) || 0;
-    canvasContainer.style.height = (h - headerH) + 'px';
+    const ty = offsetTop ? `translateY(${offsetTop}px)` : '';
+    invFrameWrap.style.transform    = ty;
+    invSeparator.style.transform    = ty;
+    canvasContainer.style.transform = ty;
+    canvasContainer.style.height    = (h - headerH) + 'px';
 }
 if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', fitContainer);

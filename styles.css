@@ -118,6 +118,7 @@ body {
   width: 100%;
   height: calc(100% - var(--inv-header-h));
   overflow: hidden;
+  will-change: transform;
 }
 
 body.inv-open #container { display: none; }
@@ -131,6 +132,7 @@ body.inv-open #container { display: none; }
   background: rgba(255,255,255,0.09);
   z-index: 998;
   pointer-events: none;
+  will-change: transform;
 }
 
 body.inv-open #inv-separator { display: none; }
@@ -389,6 +391,7 @@ body             #item-insp-section { display: none !important; }
   z-index: 999;
   height: var(--inv-header-h);
   overflow: hidden;
+  will-change: transform;
 }
 
 body.inv-open #inv-frame-wrap {
