@@ -567,7 +567,7 @@ function drawGrid(hoveredHex = null) {
             if (_flagColor) {
                 drawFlag(x, y, _flagColor);
             } else if (isDMView && hexNotesCache.has(_flagKey)) {
-                drawFlag(x, y, 'rgba(200,200,200,0.72)');
+                drawFlag(x, y, '#ffffff');
             }
         }
     }
