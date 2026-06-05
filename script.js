@@ -577,6 +577,17 @@ function fitContainer() {
     }, 300);
     appEl.style.height    = h + 'px';
     appEl.style.transform = offsetTop ? `translateY(${offsetTop}px)` : '';
+    // Immediately sync the drawing buffer to the new CSS display size to prevent
+    // the browser from CSS-stretching the old buffer during the debounce window.
+    requestAnimationFrame(() => {
+        const w = canvasContainer.clientWidth;
+        const cH = canvasContainer.clientHeight;
+        if (w && cH && (w !== canvas.width || cH !== canvas.height)) {
+            canvas.width  = w;
+            canvas.height = cH;
+            drawGridLatestActive();
+        }
+    });
 }
 if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', fitContainer);
