@@ -583,8 +583,19 @@ function fitContainer() {
         const w = canvasContainer.clientWidth;
         const cH = canvasContainer.clientHeight;
         if (w && cH && (w !== canvas.width || cH !== canvas.height)) {
+            const growing = w > canvas.width || cH > canvas.height;
             canvas.width  = w;
             canvas.height = cH;
+            if (growing) {
+                // Canvas got larger (desktop resize / keyboard close): recalc zoom bounds
+                // and re-clamp pan so the image always covers the full canvas.
+                const zoomX = w / image.naturalWidth;
+                const zoomY = cH / image.naturalHeight;
+                minZoom = Math.max(zoomX, zoomY);
+                maxZoom = minZoom * maxZoomScale;
+                zoom = clamp(zoom, minZoom, maxZoom);
+                setPan(panX, panY);
+            }
             drawGridLatestActive();
         }
     });
