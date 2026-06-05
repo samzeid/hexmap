@@ -84,7 +84,7 @@ function _applyHexEditMode() {
     hexEditBtn.classList.toggle('active', _hexEditMode);
     hexInspNameIn.hidden   = !_hexEditMode || _hexHasLocation;
     hexInspDescEdit.hidden = !_hexEditMode;
-    hexInspNotes.hidden    = !_hexEditMode;
+    hexInspNotes.hidden    = false;
     if (_hexEditMode) {
         hexInspName.hidden = true;
         hexInspDesc.hidden = true;
@@ -109,7 +109,6 @@ function hideHexInfo() {
     _hexPanelKey = null;
     hexInspSect.hidden     = true;
     hexInspRegion.hidden   = true;
-    hexInspNotes.hidden    = true;
     hexInspDescEdit.hidden = true;
     attachHexDesc(null);
     document.getElementById('hex-flag-row').innerHTML = '';
@@ -290,7 +289,7 @@ function attachHexDesc(key) {
     if (_hexDescFireRef) { _hexDescFireRef.off('value', _onHexDesc); _hexDescFireRef = null; }
     _hexDescKey = key;
     hexInspDescEdit.value = '';
-    if (!key) { hexInspDesc.textContent = ''; return; }
+    if (!key) return;
     _hexDescFireRef = hexDescRef.child(key);
     _hexDescFireRef.on('value', _onHexDesc);
 }

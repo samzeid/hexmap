@@ -1052,8 +1052,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const notesEl = document.getElementById('insp-notes');
     if (slotData.custom) {
       const customDesc = slotData.description || '';
-      descP.hidden = !customDesc; descEdit.hidden = true; notesEl.hidden = true;
+      descP.hidden = !customDesc; descEdit.hidden = true; notesEl.hidden = !container;
       if (customDesc) descP.innerHTML = customDesc;
+      if (container) {
+        notesEl.value = slotData.notes || '';
+        notesEl.oninput = () => { slotData.notes = notesEl.value; };
+      }
     } else if (itemHidden) {
       descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
       descP.innerHTML = '<i>Details not available.</i>';
