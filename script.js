@@ -540,15 +540,37 @@ function drawHex(x, y, options = {}) {
 const canvasContainer = canvas.parentElement;
 
 let _kbTimer = null;
+let _kbSavedZoom = 1, _kbSavedPanX = 0, _kbSavedPanY = 0;
 function fitContainer() {
     const vv = window.visualViewport;
     const h = vv ? vv.height : window.innerHeight;
     const offsetTop = vv ? vv.offsetTop : 0;
     const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inv-header-h')) || 0;
     const ty = offsetTop ? `translateY(${offsetTop}px)` : '';
+    // Snapshot zoom/pan before keyboard animation alters canvas size
+    if (!document.body.classList.contains('kb-animating')) {
+        _kbSavedZoom = zoom; _kbSavedPanX = panX; _kbSavedPanY = panY;
+    }
     document.body.classList.add('kb-animating');
     clearTimeout(_kbTimer);
-    _kbTimer = setTimeout(() => document.body.classList.remove('kb-animating'), 300);
+    _kbTimer = setTimeout(() => {
+        document.body.classList.remove('kb-animating');
+        // Resize canvas to settled size, restoring exact view so map doesn't jump
+        const w = canvasContainer.clientWidth;
+        const cH = canvasContainer.clientHeight;
+        if (w && cH && (w !== canvas.width || cH !== canvas.height)) {
+            canvas.width  = w;
+            canvas.height = cH;
+            const zoomX = w  / image.naturalWidth;
+            const zoomY = cH / image.naturalHeight;
+            minZoom = Math.max(zoomX, zoomY);
+            maxZoom = minZoom * maxZoomScale;
+            zoom = clamp(_kbSavedZoom, minZoom, maxZoom);
+            panX = _kbSavedPanX;
+            panY = _kbSavedPanY;
+            drawGridLatestActive();
+        }
+    }, 300);
     invFrameWrap.style.transform    = ty;
     invSeparator.style.transform    = ty;
     canvasContainer.style.transform = ty;
@@ -595,7 +617,7 @@ const PING_RING_STAGGER = 600;
 const PING_PANEL_OFFSET = 80;
 let _lastSeenPingTime = Date.now();
 
-new ResizeObserver(() => resizeCanvas()).observe(canvasContainer);
+new ResizeObserver(() => { if (!document.body.classList.contains('kb-animating')) resizeCanvas(); }).observe(canvasContainer);
 resizeCanvas();
 
 // Draw the entire hex grid, optionally highlighting a hovered hex
