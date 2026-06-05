@@ -113,10 +113,10 @@ body {
 
 #container {
   position: fixed;
-  top: 0;
+  top: var(--inv-header-h);
   left: 0;
   width: 100%;
-  height: 100%;
+  height: calc(100% - var(--inv-header-h));
   overflow: hidden;
 }
 
@@ -124,7 +124,7 @@ body.inv-open #container { display: none; }
 
 #inv-separator {
   position: fixed;
-  top: 0; /* overridden by fitContainer() */
+  top: var(--inv-header-h);
   left: 0;
   right: 0;
   height: 1px;
@@ -383,7 +383,7 @@ body             #item-insp-section { display: none !important; }
 /* ── INVENTORY FRAME ───────────────────────────────────────────── */
 #inv-frame-wrap {
   position: fixed;
-  top: 0; /* overridden by fitContainer() */
+  top: 0;
   left: 0;
   right: 0;
   z-index: 999;

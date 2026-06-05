@@ -542,11 +542,7 @@ const canvasContainer = canvas.parentElement;
 function fitContainer() {
     const vv = window.visualViewport;
     const h = vv ? vv.height : window.innerHeight;
-    const offsetTop = vv ? vv.offsetTop : 0;
     const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inv-header-h')) || 0;
-    invFrameWrap.style.top   = offsetTop + 'px';
-    invSeparator.style.top   = (offsetTop + headerH) + 'px';
-    canvasContainer.style.top    = (offsetTop + headerH) + 'px';
     canvasContainer.style.height = (h - headerH) + 'px';
 }
 if (window.visualViewport) {
