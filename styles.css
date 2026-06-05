@@ -124,7 +124,7 @@ body.inv-open #container { display: none; }
 
 #inv-separator {
   position: fixed;
-  top: var(--inv-header-h);
+  top: 0; /* overridden by fitContainer() */
   left: 0;
   right: 0;
   height: 1px;
@@ -383,7 +383,7 @@ body             #item-insp-section { display: none !important; }
 /* ── INVENTORY FRAME ───────────────────────────────────────────── */
 #inv-frame-wrap {
   position: fixed;
-  top: 0;
+  top: 0; /* overridden by fitContainer() */
   left: 0;
   right: 0;
   z-index: 999;

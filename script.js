@@ -27,6 +27,7 @@ const canvas = document.getElementById("canvas");
 const canvasContext = canvas.getContext("2d");
 
 const invFrameWrap   = document.getElementById("inv-frame-wrap");
+const invSeparator   = document.getElementById('inv-separator');
 const detailPanel    = document.getElementById('detail-panel');
 const hexInspSect    = document.getElementById('hex-insp-section');
 const hexInspName    = document.getElementById('hex-insp-name');
@@ -543,7 +544,9 @@ function fitContainer() {
     const h = vv ? vv.height : window.innerHeight;
     const offsetTop = vv ? vv.offsetTop : 0;
     const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inv-header-h')) || 0;
-    canvasContainer.style.top = (offsetTop + headerH) + 'px';
+    invFrameWrap.style.top   = offsetTop + 'px';
+    invSeparator.style.top   = (offsetTop + headerH) + 'px';
+    canvasContainer.style.top    = (offsetTop + headerH) + 'px';
     canvasContainer.style.height = (h - headerH) + 'px';
 }
 if (window.visualViewport) {
