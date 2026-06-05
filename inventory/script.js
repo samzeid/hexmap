@@ -1019,7 +1019,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     inlineEl.querySelectorAll('.insp-btn-sm').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (!btn.dataset.k) return;
         const m = slotData.variables[btn.dataset.k];
+        if (!m) return;
         let v = m.value + parseInt(btn.dataset.d);
         if (typeof m.min === 'number') v = Math.max(m.min, v);
         if (typeof m.max === 'number') v = Math.min(m.max, v);
@@ -1027,11 +1029,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         inlineEl.querySelector(`.insp-num-sm[data-k="${btn.dataset.k}"]`).value = v;
         render();
         refreshCostDisplay();
+        if (!container) refreshShopRow();
       });
     });
     inlineEl.querySelectorAll('.insp-num-sm').forEach(inp => {
       inp.addEventListener('input', () => {
+        if (!inp.dataset.k) return;
         const m = slotData.variables[inp.dataset.k];
+        if (!m) return;
         let v = parseInt(inp.value);
         if (isNaN(v)) return;
         if (typeof m.min === 'number') v = Math.max(m.min, v);
@@ -1039,8 +1044,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         m.value = v;
         render();
         refreshCostDisplay();
+        if (!container) refreshShopRow();
       });
-      inp.addEventListener('blur', () => { inp.value = slotData.variables[inp.dataset.k].value; });
+      inp.addEventListener('blur', () => {
+        if (!inp.dataset.k) return;
+        const m = slotData.variables[inp.dataset.k];
+        if (m) inp.value = m.value;
+      });
     });
 
     // ── Warning ──
