@@ -148,15 +148,8 @@ function updateFlagRow(col, row) {
         eyeBtn.title = hidden ? 'Hidden from players — click to show' : 'Visible to players — click to hide';
         eyeBtn.innerHTML = `<i class="fas fa-eye${hidden ? '-slash' : ''}"></i>`;
         eyeBtn.addEventListener('click', () => {
-            if (hidden) {
-                hexHiddenCache.delete(key);
-                hexHiddenRef.child(key).remove();
-            } else {
-                hexHiddenCache.set(key, true);
-                hexHiddenRef.child(key).set(true);
-            }
-            _hexPanelKey = null;
-            drawGridLatestActive();
+            if (hidden) hexHiddenRef.child(key).remove();
+            else        hexHiddenRef.child(key).set(true);
         });
         hexFlagRow.appendChild(eyeBtn);
     }
@@ -249,6 +242,8 @@ hexHiddenRef.on('value', snap => {
     const val = snap.val();
     if (val) Object.keys(val).forEach(k => hexHiddenCache.set(k, true));
     _hexPanelKey = null;
+    _hexCustomNameKey = null;
+    _hexDescKey = null;
     drawGridLatestActive();
 });
 
@@ -1239,6 +1234,8 @@ window.addEventListener("message", (e) => {
     if (e.data.type === "dmStatus") {
         isDMView = !!e.data.isDM;
         _hexPanelKey = null;
+        _hexCustomNameKey = null;
+        _hexDescKey = null;
         drawGridLatestActive();
     }
     if (e.data.type === "headerHeight") {
