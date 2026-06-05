@@ -1312,7 +1312,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         _updateUnresolved();
         if (!container) refreshShopRow();
         render();
-        if (container) showInspector(slotData, container, r, c);
+        showInspector(slotData, container, r, c);
       });
       ctrlTarget.appendChild(sel);
     }
@@ -1335,7 +1335,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         _updateUnresolved();
         if (!container) refreshShopRow();
         render();
-        if (container) showInspector(slotData, container, r, c);
+        showInspector(slotData, container, r, c);
       });
       ctrlTarget.appendChild(sel);
     }
@@ -3408,7 +3408,11 @@ window.CharacterManager = ({ auth, database }) => {
     setFieldsOpen(false);
     updateCharHideBtn();
     renderTabs();
-    if (shopOpen) { updateShopWallet(); buildShop(); }
+    if (shopOpen) {
+      document.querySelectorAll('.shop-item-row').forEach(row => {
+        if (row._applyRowState) row._applyRowState();
+      });
+    }
   }
 
   function createChar() {
