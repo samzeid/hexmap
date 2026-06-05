@@ -1052,7 +1052,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const notesEl = document.getElementById('insp-notes');
     if (slotData.custom) {
       const customDesc = slotData.description || '';
-      descP.hidden = !customDesc; descEdit.hidden = true; notesEl.hidden = !container;
+      descP.hidden = !customDesc || _customEditOpen; descEdit.hidden = true; notesEl.hidden = !container;
       if (customDesc) descP.innerHTML = customDesc;
       if (container) {
         notesEl.value = slotData.notes || '';
