@@ -16,6 +16,7 @@ const hexPingRef     = database.ref('hexPing');
 const hexSelectedRef = database.ref('hexSelected');
 const hexFocusRef    = database.ref('hexFocus');
 const hexFlagsRef    = database.ref('hexFlags');
+const hexDescRef     = database.ref('hexDescriptions');
 const pingSound      = new Audio('sounds/ping.ogg');
 
 // Get elements
@@ -32,8 +33,9 @@ const hexInspNameIn  = document.getElementById('hex-insp-name-input');
 const hexEditBtn     = document.getElementById('hex-edit-btn');
 const hexInspRegion  = document.getElementById('hex-insp-region');
 const hexInspCoords  = document.getElementById('hex-insp-coords');
-const hexInspDesc    = document.getElementById('hex-insp-desc');
-const hexInspNotes   = document.getElementById('hex-insp-notes');
+const hexInspDesc     = document.getElementById('hex-insp-desc');
+const hexInspDescEdit = document.getElementById('hex-insp-desc-edit');
+const hexInspNotes    = document.getElementById('hex-insp-notes');
 
 let _hexEditMode    = false;
 let _hexHasLocation = false;
@@ -60,12 +62,14 @@ function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey) {
     hexInspCoords.textContent = coords;
     hexInspRegion.textContent = regionName || '';
     hexInspRegion.hidden = !regionName;
-    hexEditBtn.hidden    = !isDMView;
+    hexEditBtn.hidden    = !isDMView || hasLocation;
 
     // Set static content (always, regardless of mode)
     if (hasLocation) {
         hexInspName.textContent = name;
         hexInspDesc.textContent = desc;
+    } else {
+        hexInspDesc.textContent = ''; // _onHexDesc will fill if custom desc exists
     }
 
     // Apply whichever mode is current (preserves edit state on redraw)
@@ -77,14 +81,15 @@ function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey) {
 
 function _applyHexEditMode() {
     hexEditBtn.classList.toggle('active', _hexEditMode);
-    hexInspNameIn.hidden = !_hexEditMode || _hexHasLocation;
-    hexInspNotes.hidden  = !_hexEditMode;
+    hexInspNameIn.hidden   = !_hexEditMode || _hexHasLocation;
+    hexInspDescEdit.hidden = !_hexEditMode;
+    hexInspNotes.hidden    = !_hexEditMode;
     if (_hexEditMode) {
         hexInspName.hidden = true;
         hexInspDesc.hidden = true;
     } else {
         hexInspName.hidden = _hexHasLocation ? false : !hexInspName.textContent;
-        hexInspDesc.hidden = !_hexJsonDesc;
+        hexInspDesc.hidden = !_hexJsonDesc && !hexInspDesc.textContent;
         _autoResizeNotes();
     }
 }
@@ -101,9 +106,11 @@ hexEditBtn.addEventListener('click', () => {
 function hideHexInfo() {
     _hexEditMode = false;
     _hexPanelKey = null;
-    hexInspSect.hidden = true;
-    hexInspRegion.hidden = true;
-    hexInspNotes.hidden = true;
+    hexInspSect.hidden     = true;
+    hexInspRegion.hidden   = true;
+    hexInspNotes.hidden    = true;
+    hexInspDescEdit.hidden = true;
+    attachHexDesc(null);
     document.getElementById('hex-flag-row').innerHTML = '';
     refreshDetailPanel();
 }
@@ -256,6 +263,37 @@ hexInspNameIn.addEventListener('input', () => {
         const val = hexInspNameIn.value;
         if (val) database.ref(`/hexCustomNames/${_hexCustomNameKey}`).set(val);
         else     database.ref(`/hexCustomNames/${_hexCustomNameKey}`).remove();
+    }, 600);
+});
+
+let _hexDescKey = null, _hexDescFireRef = null, _hexDescSaveTimer = null;
+
+function attachHexDesc(key) {
+    if (_hexDescKey === key) return;
+    if (_hexDescFireRef) { _hexDescFireRef.off('value', _onHexDesc); _hexDescFireRef = null; }
+    _hexDescKey = key;
+    hexInspDescEdit.value = '';
+    if (!key) { hexInspDesc.textContent = ''; return; }
+    _hexDescFireRef = hexDescRef.child(key);
+    _hexDescFireRef.on('value', _onHexDesc);
+}
+
+function _onHexDesc(snap) {
+    const val = snap.val() || '';
+    if (document.activeElement !== hexInspDescEdit) hexInspDescEdit.value = val;
+    if (!_hexEditMode) {
+        hexInspDesc.textContent = val;
+        hexInspDesc.hidden = !val;
+    }
+}
+
+hexInspDescEdit.addEventListener('input', () => {
+    clearTimeout(_hexDescSaveTimer);
+    _hexDescSaveTimer = setTimeout(() => {
+        if (!_hexDescKey) return;
+        const val = hexInspDescEdit.value;
+        if (val) hexDescRef.child(_hexDescKey).set(val);
+        else     hexDescRef.child(_hexDescKey).remove();
     }, 600);
 });
 
@@ -620,11 +658,13 @@ function drawGrid(hoveredHex = null) {
         showHexInfo(name, `${hoveredHex.col}, ${hoveredHex.row}`, desc, hasLocation, regionName, notesKey);
         attachHexNotes(notesKey);
         attachHexCustomName(hasLocation ? null : notesKey);
+        attachHexDesc(hasLocation ? null : notesKey);
         updateFlagRow(hoveredHex.col, hoveredHex.row);
     } else {
         hideHexInfo();
         attachHexNotes(null);
         attachHexCustomName(null);
+        attachHexDesc(null);
     }
 }
 
