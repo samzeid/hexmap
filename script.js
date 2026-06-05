@@ -514,16 +514,6 @@ function drawGrid(hoveredHex = null) {
                 });
             }
 
-            // Small dot for hexes with notes
-            if (hexNotesCache.has(`${col}_${row}`)) {
-                canvasContext.save();
-                canvasContext.fillStyle = 'rgba(255,255,255,0.8)';
-                canvasContext.beginPath();
-                canvasContext.arc(x, y, 1.8, 0, Math.PI * 2);
-                canvasContext.fill();
-                canvasContext.restore();
-            }
-
             // Flag marker
             const _flagKey = `${col}_${row}`;
             const _flagColor = hexFlags.get(_flagKey);
