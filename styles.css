@@ -345,6 +345,10 @@ body             #item-insp-section { display: none !important; }
 
 .hex-flag-off-btn i { font-size: 13px; color: #c8c8e0; opacity: 0.45; }
 
+.hex-vis-btn i { font-size: 13px; color: rgba(255,255,255,0.4); }
+.hex-vis-btn.active { border-color: rgba(255,90,90,0.5); }
+.hex-vis-btn.active i { color: rgba(255,90,90,0.85); }
+
 .hex-flag-color-btn i { font-size: 13px; color: var(--fc); }
 .hex-flag-color-btn.active { border-color: var(--fc); }
 

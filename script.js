@@ -16,6 +16,7 @@ const hexPingRef     = database.ref('hexPing');
 const hexSelectedRef = database.ref('hexSelected');
 const hexFocusRef    = database.ref('hexFocus');
 const hexFlagsRef    = database.ref('hexFlags');
+const hexHiddenRef   = database.ref('hexHidden');
 const hexDescRef     = database.ref('hexDescriptions');
 const pingSound      = new Audio('sounds/ping.ogg');
 
@@ -138,6 +139,19 @@ function updateFlagRow(col, row) {
         else hexFlagsRef.child(key).remove();
     });
     hexFlagRow.appendChild(btn);
+
+    if (isDMView) {
+        const hidden = hexHiddenCache.has(key);
+        const eyeBtn = document.createElement('button');
+        eyeBtn.className = 'hex-flag-btn hex-vis-btn' + (hidden ? ' active' : '');
+        eyeBtn.title = hidden ? 'Hidden from players — click to show' : 'Visible to players — click to hide';
+        eyeBtn.innerHTML = `<i class="fas fa-eye${hidden ? '-slash' : ''}"></i>`;
+        eyeBtn.addEventListener('click', () => {
+            if (hidden) hexHiddenRef.child(key).remove();
+            else hexHiddenRef.child(key).set(true);
+        });
+        hexFlagRow.appendChild(eyeBtn);
+    }
 }
 
 function drawFlag(x, y, color) {
@@ -189,6 +203,7 @@ let _hexCustomNameSaveTimer = null;
 const hexNotesCache       = new Map(); // col_row → true
 const hexCustomNamesCache = new Map(); // col_row → true
 const hexDescCache        = new Map(); // col_row → true
+const hexHiddenCache      = new Map(); // col_row → true (hidden from players)
 const hexFlags            = new Map(); // col_row → color string
 let   isDMView            = false;
 
@@ -217,6 +232,13 @@ hexFlagsRef.on('value', snap => {
     hexFlags.clear();
     const val = snap.val();
     if (val) Object.entries(val).forEach(([k, c]) => hexFlags.set(k, c));
+    drawGridLatestActive();
+});
+
+hexHiddenRef.on('value', snap => {
+    hexHiddenCache.clear();
+    const val = snap.val();
+    if (val) Object.keys(val).forEach(k => hexHiddenCache.set(k, true));
     drawGridLatestActive();
 });
 
@@ -673,7 +695,16 @@ function drawGrid(hoveredHex = null) {
             }
         }
 
-        showHexInfo(name, `${hoveredHex.col}, ${hoveredHex.row}`, desc, hasLocation, regionName, notesKey);
+        // Non-DM: hide name/desc/region for locations marked hidden by DM
+        const isHiddenForPlayer = !isDMView && hexHiddenCache.has(notesKey);
+        showHexInfo(
+            isHiddenForPlayer ? '' : name,
+            `${hoveredHex.col}, ${hoveredHex.row}`,
+            isHiddenForPlayer ? '' : desc,
+            isHiddenForPlayer ? false : hasLocation,
+            isHiddenForPlayer ? '' : regionName,
+            notesKey
+        );
         attachHexNotes(notesKey);
         attachHexCustomName(hasLocation ? null : notesKey);
         attachHexDesc(hasLocation ? null : notesKey);
