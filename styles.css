@@ -153,17 +153,16 @@ body {
   overflow-y: auto;
   color: #e8e8f0;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), height 0.22s ease;
 }
 #detail-panel.detail-collapsed {
   transform: translateY(100%);
   overflow: hidden;
 }
+#detail-panel.no-transition { transition: none !important; }
 
 /* Hex section only in hexmap mode; item section reserved for future cross-page use */
-#app:not(.hexmap-mode) #detail-panel      { display: none !important; }
-#app:not(.hexmap-mode) #hex-insp-section  { display: none !important; }
-body                   #item-insp-section { display: none !important; }
+#app:not(.hexmap-mode) #hex-insp-section { display: none !important; }
 
 /* Hex section */
 #hex-insp-section.hex-location-hidden #hex-insp-name,

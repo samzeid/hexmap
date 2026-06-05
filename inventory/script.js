@@ -258,6 +258,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   const containersEl = document.getElementById('containers');
   const dropdownEl   = document.getElementById('autocomplete-dropdown');
   const inspectorEl  = document.getElementById('inspector');
+  const detailPanelEl = document.getElementById('detail-panel');
 
   // Active autocomplete context
   let acContainer = null, acRow = -1, acCol = -1, acInput = null;
@@ -347,7 +348,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     // Refresh inspector name if panel is open for an inventory slot
     if (inspectorItemKey && !inspectorItemKey.startsWith('shop-')
-        && !inspectorEl.classList.contains('inspector-collapsed')) {
+        && !detailPanelEl.classList.contains('detail-collapsed')) {
       const lastH = inspectorItemKey.lastIndexOf('-');
       const prevH = inspectorItemKey.lastIndexOf('-', lastH - 1);
       const cid = inspectorItemKey.substring(0, prevH);
@@ -513,7 +514,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     if (slotData) {
       const itemKey = `${container.id}-${r}-${c}`;
-      const isInspected = inspectorItemKey === itemKey && !inspectorEl.classList.contains('inspector-collapsed');
+      const isInspected = inspectorItemKey === itemKey && !detailPanelEl.classList.contains('detail-collapsed');
 
       const label = document.createElement('span');
       const isContainerItem2 = isNoCarry(slotData);
@@ -885,6 +886,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   // ── INSPECTOR ────────────────────────────────────────────────────────────
   function showInspector(slotData, container, r, c, packIdx) {
+    const _panelOpen = !detailPanelEl.classList.contains('detail-collapsed');
+    const _prevH = _panelOpen ? detailPanelEl.offsetHeight : 0;
     const lib = getLibraryItem(slotData.name);
 
     // ── Name ──
@@ -1640,25 +1643,31 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       varsEl.parentNode.insertBefore(panel, varsEl);
     }
 
-    inspectorEl.classList.remove('inspector-collapsed');
+    detailPanelEl.classList.remove('no-transition', 'detail-collapsed');
+    if (_prevH) {
+      detailPanelEl.style.height = _prevH + 'px';
+      requestAnimationFrame(() => { detailPanelEl.style.height = detailPanelEl.scrollHeight + 'px'; });
+    }
   }
 
   function refreshInspectorCollapsed() {
     if (inspectorItemKey === null) {
-      inspectorEl.classList.add('inspector-collapsed');
+      detailPanelEl.classList.add('detail-collapsed');
     }
   }
 
-  function hideInspector() {
-    if (document.querySelector('#insp-props .insp-select.flash-required')) return;
-    if (document.querySelector('#insp-props .chip-flash-required')) return;
+  function hideInspector(force) {
+    if (!force) {
+      if (document.querySelector('#insp-props .insp-select.flash-required')) return;
+      if (document.querySelector('#insp-props .chip-flash-required')) return;
+    }
     inspectorItemKey = null;
     _customEditKey = null; _customEditOpen = false;
     refreshInspectorCollapsed();
   }
 
   function toggleInspectorFor(key, slotData, container, r, c) {
-    if (inspectorItemKey === key && !inspectorEl.classList.contains('inspector-collapsed')) {
+    if (inspectorItemKey === key && !detailPanelEl.classList.contains('detail-collapsed')) {
       hideInspector();
     } else {
       showInspector(slotData, container, r, c);
@@ -1675,10 +1684,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   document.addEventListener('pointerdown', e => {
     if (inspectorItemKey !== null
-        && !inspectorEl.classList.contains('inspector-collapsed')
+        && !detailPanelEl.classList.contains('detail-collapsed')
         && !inspectorEl.contains(e.target)
         && !e.target.closest('.slot')
-        && !e.target.closest('.shop-item-row')) {
+        && !e.target.closest('.shop-item-row')
+        && !e.target.closest('.char-tab')
+        && !e.target.closest('#inv-close-btn')
+        && !e.target.closest('#shop-tab-btn')) {
       hideInspector();
       render();
     }
@@ -2105,7 +2117,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (slotData._unresolved) {
       if (slotData._shopItem) {
         const key = `shop-${slotData.name}`;
-        if (inspectorItemKey !== key || inspectorEl.classList.contains('inspector-collapsed')) {
+        if (inspectorItemKey !== key || detailPanelEl.classList.contains('detail-collapsed')) {
           showInspector(slotData, null, -1, -1);
           inspectorItemKey = key;
         }
@@ -2314,6 +2326,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     deductCost(costStr)   { deductCost(costStr); },
     deductCostCp(costCp) { deductCostCp(costCp); },
 
+    closeInspector() {
+      hideInspector(true);
+      render();
+    },
+    collapsePanelInstant() {
+      detailPanelEl.classList.add('no-transition', 'detail-collapsed');
+      detailPanelEl.style.height = '';
+    },
     cancelDrag() {
       if (!dragState) return;
       dragScrollVel = 0;
@@ -2324,14 +2344,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       dragState = null;
       render();
     },
-    loadState(newState) {
+    loadState(newState, opts) {
       if (dragState) {
         // cancelDrag() should have been called before loadState; just clean up UI
         if (ghostEl) { ghostEl.remove(); ghostEl = null; }
         document.body.classList.remove('is-dragging');
         dragState = null;
       }
-      hideInspector();
+      if (!(opts && opts.keepInspector)) hideInspector(true);
       closeDropdown();
       state.charName      = newState.charName      || '';
       state.carryCapacity = newState.carryCapacity || '';
@@ -2404,11 +2424,12 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   _closeBtn.addEventListener('click', () => {
-    if (_shopFromHexmap && shopOpen) {
+    if (shopOpen) {
       closeShop();
       return;
     }
     _hexmapMode = !_hexmapMode;
+    inv.collapsePanelInstant();
     _applyViewMode();
     if (_hexmapMode) window.hexOnGoToHexmap && window.hexOnGoToHexmap();
     else window.hexOnGoToInventory && window.hexOnGoToInventory();
@@ -3010,10 +3031,7 @@ window.CharacterManager = ({ auth, database }) => {
     shopTabBtn.classList.add('active');
     invScrollEl.hidden = true;
     shopPanel.hidden   = false;
-    document.getElementById('shop-search').value = '';
-    document.getElementById('shop-category').value = '';
-    updateShopWallet();
-    buildShop();
+    inv.collapsePanelInstant();
     if (_hexmapMode) {
       _shopFromHexmap = true;
       _hexmapMode = false;
@@ -3021,6 +3039,11 @@ window.CharacterManager = ({ auth, database }) => {
       window.hexOnGoToInventory && window.hexOnGoToInventory();
       ensureCharSelected();
     }
+    inv.closeInspector();
+    document.getElementById('shop-search').value = '';
+    document.getElementById('shop-category').value = '';
+    updateShopWallet();
+    buildShop();
   }
 
   function closeShop() {
@@ -3032,8 +3055,12 @@ window.CharacterManager = ({ auth, database }) => {
       _shopFromHexmap = false;
       deselectChar();
       _hexmapMode = true;
+      inv.collapsePanelInstant();
       _applyViewMode();
       window.hexOnGoToHexmap && window.hexOnGoToHexmap();
+    } else {
+      inv.collapsePanelInstant();
+      inv.closeInspector();
     }
   }
 
@@ -3366,7 +3393,7 @@ window.CharacterManager = ({ auth, database }) => {
     dirty = false;
     currentCharId = charId;
     suppressSave = true;
-    try { inv.loadState(allChars[charId].state); } catch (e) { console.warn('loadState error:', e); }
+    try { inv.loadState(allChars[charId].state, { keepInspector: shopOpen }); } catch (e) { console.warn('loadState error:', e); }
     suppressSave = false;
     setFieldsOpen(false);
     updateCharHideBtn();
@@ -3648,12 +3675,14 @@ window.CharacterManager = ({ auth, database }) => {
             if (shopOpen) {
               closeShop();
             } else if (!_hexmapMode) {
+              inv.collapsePanelInstant();
               deselectChar();
               _hexmapMode = true;
               _applyViewMode();
               window.hexOnGoToHexmap && window.hexOnGoToHexmap();
             }
           } else {
+            if (!shopOpen) inv.collapsePanelInstant();
             if (_hexmapMode) {
               _hexmapMode = false;
               _applyViewMode();
@@ -3747,7 +3776,11 @@ window.CharacterManager = ({ auth, database }) => {
   })();
 
   window.invGoToHexmap = function() {
+    inv.collapsePanelInstant();
     _hexmapMode = true;
     _applyViewMode();
+    _customEditKey = null;
+    _customEditOpen = false;
+    inv.closeInspector();
   };
 };

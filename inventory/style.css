@@ -1449,27 +1449,6 @@ main {
 .ac-tag.ranged    { background: rgba(255, 130, 60,0.18); color: #ff8844; }
 
 /* ── INSPECTOR ───────────────────────────────────────────────── */
-#inspector {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  background: rgba(18,18,28,0.92);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-top: 1px solid rgba(255,255,255,0.12);
-  border-radius: 18px 18px 0 0;
-  padding: 14px 14px env(safe-area-inset-bottom, 12px);
-  max-height: 55vh;
-  overflow-y: auto;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-#inspector.inspector-collapsed {
-  transform: translateY(100%);
-  overflow: hidden;
-}
 
 #insp-header {
   display: flex;

@@ -27,6 +27,9 @@ const canvas = document.getElementById("canvas");
 const canvasContext = canvas.getContext("2d");
 
 const detailPanel    = document.getElementById('detail-panel');
+detailPanel.addEventListener('transitionend', e => {
+    if (e.propertyName === 'height') detailPanel.style.height = '';
+});
 const hexInspSect    = document.getElementById('hex-insp-section');
 const hexInspName    = document.getElementById('hex-insp-name');
 const hexInspNameIn  = document.getElementById('hex-insp-name-input');
@@ -47,11 +50,13 @@ function sendToFrame(msg) {
 }
 
 function refreshDetailPanel() {
-    if (hexInspSect.hidden && document.getElementById('item-insp-section').hidden)
+    if (hexInspSect.hidden)
         detailPanel.classList.add('detail-collapsed');
 }
 
 function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey, isGreyed) {
+    const _panelOpen = !detailPanel.classList.contains('detail-collapsed');
+    const _prevH = _panelOpen ? detailPanel.offsetHeight : 0;
     if (hexKey !== _hexPanelKey) {
         // New hex — reset everything
         _hexEditMode    = false;
@@ -76,7 +81,11 @@ function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey, isGrey
     hexInspSect.classList.toggle('hex-location-hidden', !!isGreyed);
     _applyHexEditMode();
     hexInspSect.hidden = false;
-    detailPanel.classList.remove('detail-collapsed');
+    detailPanel.classList.remove('no-transition', 'detail-collapsed');
+    if (_prevH) {
+        detailPanel.style.height = _prevH + 'px';
+        requestAnimationFrame(() => { detailPanel.style.height = detailPanel.scrollHeight + 'px'; });
+    }
 }
 
 function _applyHexEditMode() {
@@ -725,8 +734,8 @@ function drawGrid(hoveredHex = null) {
         }
     }
 
-    // Show hex description in inspector panel.
-    if (hoveredHex) {
+    // Show hex description in inspector panel (only while in hexmap mode).
+    if (hoveredHex && appEl.classList.contains('hexmap-mode')) {
         const key = `${hoveredHex.col},${hoveredHex.row}`;
         const hexInfo = hexData.get(key);
         const notesKey = `${hoveredHex.col}_${hoveredHex.row}`;
@@ -1251,12 +1260,14 @@ document.addEventListener("keydown", (e) => {
 
 // ── BRIDGE GLOBALS (called directly by inventory/script.js) ──────────────────
 window.hexOnGoToInventory = function() {
+    detailPanel.classList.add('no-transition', 'detail-collapsed');
+    detailPanel.style.height = '';
     hideHexInfo();
     attachHexNotes(null);
     attachHexCustomName(null);
 };
 window.hexOnGoToHexmap = function() {
-    // drawGridLatestActive restores panel from latestInspectorHex
+    detailPanel.classList.add('no-transition', 'detail-collapsed');
 };
 window.hexSetDmStatus = function(isDM) {
     isDMView = isDM;

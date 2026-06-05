@@ -110,34 +110,9 @@
 
     <div id="drag-trash-btn" hidden><i class="fa-solid fa-trash"></i></div>
 
-    <!-- Inventory item inspector -->
-    <div id="inspector" class="inspector-collapsed">
-      <div id="insp-header">
-        <div id="insp-name-row">
-          <div id="insp-top">
-            <h2 id="insp-name"></h2>
-            <span id="insp-cost" hidden></span>
-            <div id="insp-inline-vars"></div>
-          </div>
-          <div id="insp-props" hidden></div>
-        </div>
-        <button id="insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
-      </div>
-      <p id="insp-warn" hidden></p>
-      <div id="insp-container-rows-row" hidden class="insp-toggle-row">
-        <span class="insp-toggle-label">Container rows</span>
-        <input type="number" id="insp-container-rows" value="2" min="1" max="20" class="insp-num" style="width:60px" />
-      </div>
-      <div id="insp-vars"></div>
-      <p id="insp-desc"></p>
-      <textarea id="insp-desc-edit" hidden placeholder="Description..."></textarea>
-      <textarea id="insp-notes" hidden placeholder="Notes..."></textarea>
-      <button id="insp-copy" hidden>Copy item</button>
-      <button id="insp-remove">Remove item</button>
-    </div>
-
-    <!-- Hex detail panel (hexmap mode only) -->
+    <!-- Shared detail panel — hex inspector in hexmap mode, item inspector in inventory mode -->
     <div id="detail-panel" class="detail-collapsed">
+      <!-- Hex section (hexmap mode) -->
       <div id="hex-insp-section" hidden>
         <div id="hex-insp-header">
           <div id="hex-insp-name-col">
@@ -156,12 +131,30 @@
         <textarea id="hex-insp-desc-edit" hidden placeholder="Description…"></textarea>
         <textarea id="hex-insp-notes" placeholder="Notes…"></textarea>
       </div>
-      <div id="item-insp-section" hidden>
-        <div id="item-insp-header">
-          <h2 id="item-insp-name"></h2>
-          <button id="item-insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
+      <!-- Item inspector section (inventory mode) -->
+      <div id="inspector">
+        <div id="insp-header">
+          <div id="insp-name-row">
+            <div id="insp-top">
+              <h2 id="insp-name"></h2>
+              <span id="insp-cost" hidden></span>
+              <div id="insp-inline-vars"></div>
+            </div>
+            <div id="insp-props" hidden></div>
+          </div>
+          <button id="insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
         </div>
-        <p id="item-insp-desc"></p>
+        <p id="insp-warn" hidden></p>
+        <div id="insp-container-rows-row" hidden class="insp-toggle-row">
+          <span class="insp-toggle-label">Container rows</span>
+          <input type="number" id="insp-container-rows" value="2" min="1" max="20" class="insp-num" style="width:60px" />
+        </div>
+        <div id="insp-vars"></div>
+        <p id="insp-desc"></p>
+        <textarea id="insp-desc-edit" hidden placeholder="Description..."></textarea>
+        <textarea id="insp-notes" hidden placeholder="Notes..."></textarea>
+        <button id="insp-copy" hidden>Copy item</button>
+        <button id="insp-remove">Remove item</button>
       </div>
     </div>
 
