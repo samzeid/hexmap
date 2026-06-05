@@ -88,6 +88,8 @@ function _applyHexEditMode() {
         hexInspName.hidden = true;
         hexInspDesc.hidden = true;
     } else {
+        // Sync display text from edit textarea in case DM made changes
+        if (!_hexHasLocation) hexInspDesc.textContent = hexInspDescEdit.value;
         hexInspName.hidden = _hexHasLocation ? false : !hexInspName.textContent;
         hexInspDesc.hidden = !_hexJsonDesc && !hexInspDesc.textContent;
         _autoResizeNotes();
@@ -281,7 +283,9 @@ function attachHexDesc(key) {
 function _onHexDesc(snap) {
     const val = snap.val() || '';
     if (document.activeElement !== hexInspDescEdit) hexInspDescEdit.value = val;
-    if (!_hexEditMode) {
+    if (_hexEditMode) {
+        hexInspDesc.hidden = true;
+    } else {
         hexInspDesc.textContent = val;
         hexInspDesc.hidden = !val;
     }
