@@ -221,6 +221,22 @@ body             #item-insp-section { display: none !important; }
 }
 #hex-insp-name-input::placeholder { color: rgba(255,255,255,0.3); font-weight: 400; }
 #hex-insp-name-input:focus { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.1); }
+#hex-edit-btn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.35);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+#hex-edit-btn:hover  { color: rgba(255,255,255,0.8); background: rgba(255,255,255,0.08); }
+#hex-edit-btn:active { background: rgba(255,255,255,0.12); }
+#hex-edit-btn.active { color: rgba(140,200,255,0.9); background: rgba(100,160,255,0.12); }
+#hex-edit-btn.active:hover { background: rgba(100,160,255,0.2); }
+
 #hex-insp-region {
   font-size: 11px;
   color: rgba(255,255,255,0.4);

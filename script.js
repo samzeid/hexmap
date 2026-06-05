@@ -29,10 +29,15 @@ const detailPanel    = document.getElementById('detail-panel');
 const hexInspSect    = document.getElementById('hex-insp-section');
 const hexInspName    = document.getElementById('hex-insp-name');
 const hexInspNameIn  = document.getElementById('hex-insp-name-input');
+const hexEditBtn     = document.getElementById('hex-edit-btn');
 const hexInspRegion  = document.getElementById('hex-insp-region');
 const hexInspCoords  = document.getElementById('hex-insp-coords');
 const hexInspDesc    = document.getElementById('hex-insp-desc');
 const hexInspNotes   = document.getElementById('hex-insp-notes');
+
+let _hexEditMode    = false;
+let _hexHasLocation = false;
+let _hexJsonDesc    = '';
 
 function sendToFrame(msg) {
     document.getElementById('inv-frame')?.contentWindow?.postMessage(msg, '*');
@@ -44,27 +49,64 @@ function refreshDetailPanel() {
 }
 
 function showHexInfo(name, coords, desc, hasLocation, regionName) {
+    _hexEditMode    = false;
+    _hexHasLocation = hasLocation;
+    _hexJsonDesc    = desc;
+
     hexInspCoords.textContent = coords;
     hexInspRegion.textContent = regionName || '';
     hexInspRegion.hidden = !regionName;
+
+    // Always start in view mode
+    hexInspNameIn.hidden = true;
+    hexInspNotes.hidden  = true;
+    hexEditBtn.hidden    = !isDMView;
+    hexEditBtn.classList.remove('active');
+
     if (hasLocation) {
         hexInspName.textContent = name;
         hexInspName.hidden = false;
-        hexInspNameIn.hidden = true;
         hexInspDesc.textContent = desc;
         hexInspDesc.hidden = !desc;
     } else {
-        hexInspName.hidden = true;
-        hexInspNameIn.hidden = false;
+        hexInspName.hidden = true; // _onHexCustomName will show it if a custom name exists
         hexInspDesc.hidden = true;
     }
+
     hexInspSect.hidden = false;
     detailPanel.classList.remove('detail-collapsed');
 }
 
+function _applyHexEditMode() {
+    hexEditBtn.classList.toggle('active', _hexEditMode);
+    hexInspNameIn.hidden = !_hexEditMode || _hexHasLocation;
+    hexInspNotes.hidden  = !_hexEditMode;
+    // In edit mode hide static display; in view mode restore it
+    if (_hexEditMode) {
+        hexInspName.hidden = true;
+        hexInspDesc.hidden = true;
+    } else {
+        hexInspName.hidden = _hexHasLocation ? false : !hexInspName.textContent;
+        hexInspDesc.hidden = !_hexJsonDesc;
+        if (_hexJsonDesc) hexInspDesc.textContent = _hexJsonDesc;
+        _autoResizeNotes();
+    }
+}
+
+hexEditBtn.addEventListener('click', () => {
+    _hexEditMode = !_hexEditMode;
+    _applyHexEditMode();
+    if (_hexEditMode) {
+        _autoResizeNotes();
+        hexInspNameIn.focus();
+    }
+});
+
 function hideHexInfo() {
+    _hexEditMode = false;
     hexInspSect.hidden = true;
     hexInspRegion.hidden = true;
+    hexInspNotes.hidden = true;
     document.getElementById('hex-flag-row').innerHTML = '';
     refreshDetailPanel();
 }
@@ -191,7 +233,12 @@ function attachHexCustomName(key) {
 }
 
 function _onHexCustomName(snap) {
-    if (document.activeElement !== hexInspNameIn) hexInspNameIn.value = snap.val() || '';
+    const val = snap.val() || '';
+    if (document.activeElement !== hexInspNameIn) hexInspNameIn.value = val;
+    if (!_hexEditMode && !_hexHasLocation) {
+        hexInspName.textContent = val;
+        hexInspName.hidden = !val;
+    }
 }
 
 hexInspNotes.addEventListener('input', () => {
@@ -520,7 +567,7 @@ function drawGrid(hoveredHex = null) {
             if (_flagColor) {
                 drawFlag(x, y, _flagColor);
             } else if (isDMView && hexNotesCache.has(_flagKey)) {
-                drawFlag(x, y, 'rgba(200,200,200,0.3)');
+                drawFlag(x, y, 'rgba(200,200,200,0.72)');
             }
         }
     }
@@ -575,7 +622,7 @@ function drawGrid(hoveredHex = null) {
 
         showHexInfo(name, `${hoveredHex.col}, ${hoveredHex.row}`, desc, hasLocation, regionName);
         attachHexNotes(notesKey);
-        attachHexCustomName(notesKey);
+        attachHexCustomName(hasLocation ? null : notesKey);
         updateFlagRow(hoveredHex.col, hoveredHex.row);
     } else {
         hideHexInfo();
