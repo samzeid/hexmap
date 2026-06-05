@@ -539,12 +539,16 @@ function drawHex(x, y, options = {}) {
 
 const canvasContainer = canvas.parentElement;
 
+let _kbTimer = null;
 function fitContainer() {
     const vv = window.visualViewport;
     const h = vv ? vv.height : window.innerHeight;
     const offsetTop = vv ? vv.offsetTop : 0;
     const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inv-header-h')) || 0;
     const ty = offsetTop ? `translateY(${offsetTop}px)` : '';
+    document.body.classList.add('kb-animating');
+    clearTimeout(_kbTimer);
+    _kbTimer = setTimeout(() => document.body.classList.remove('kb-animating'), 300);
     invFrameWrap.style.transform    = ty;
     invSeparator.style.transform    = ty;
     canvasContainer.style.transform = ty;

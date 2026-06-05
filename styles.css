@@ -406,6 +406,12 @@ body.inv-open #inv-frame-wrap {
 }
 
 
+/* ── KEYBOARD ANIMATION ─────────────────────────────────────────── */
+body.kb-animating #container,
+body.kb-animating #inv-frame-wrap,
+body.kb-animating #inv-separator,
+body.kb-animating #detail-panel { transition: none !important; }
+
 /* ── MOBILE ─────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
 
