@@ -239,6 +239,7 @@ hexHiddenRef.on('value', snap => {
     hexHiddenCache.clear();
     const val = snap.val();
     if (val) Object.keys(val).forEach(k => hexHiddenCache.set(k, true));
+    _hexPanelKey = null;
     drawGridLatestActive();
 });
 
@@ -1222,6 +1223,7 @@ window.addEventListener("message", (e) => {
     }
     if (e.data.type === "dmStatus") {
         isDMView = !!e.data.isDM;
+        _hexPanelKey = null;
         drawGridLatestActive();
     }
     if (e.data.type === "headerHeight") {
