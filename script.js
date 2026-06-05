@@ -547,6 +547,7 @@ function fitContainer() {
     const offsetTop = vv ? vv.offsetTop : 0;
     const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inv-header-h')) || 0;
     const ty = offsetTop ? `translateY(${offsetTop}px)` : '';
+    const invOpen = document.body.classList.contains('inv-open');
     // Snapshot zoom/pan before keyboard animation alters canvas size
     if (!document.body.classList.contains('kb-animating')) {
         _kbSavedZoom = zoom; _kbSavedPanX = panX; _kbSavedPanY = panY;
@@ -571,10 +572,14 @@ function fitContainer() {
             drawGridLatestActive();
         }
     }, 300);
-    invFrameWrap.style.transform    = ty;
-    invSeparator.style.transform    = ty;
-    canvasContainer.style.transform = ty;
-    canvasContainer.style.height    = (h - headerH) + 'px';
+    // In full-screen inventory mode the iframe fills the screen and handles
+    // its own keyboard layout — don't fight it with the hexmap compensation.
+    if (!invOpen) {
+        invFrameWrap.style.transform    = ty;
+        invSeparator.style.transform    = ty;
+        canvasContainer.style.transform = ty;
+        canvasContainer.style.height    = (h - headerH) + 'px';
+    }
 }
 if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', fitContainer);
