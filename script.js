@@ -38,6 +38,7 @@ const hexInspNotes   = document.getElementById('hex-insp-notes');
 let _hexEditMode    = false;
 let _hexHasLocation = false;
 let _hexJsonDesc    = '';
+let _hexPanelKey    = null;
 
 function sendToFrame(msg) {
     document.getElementById('inv-frame')?.contentWindow?.postMessage(msg, '*');
@@ -48,8 +49,11 @@ function refreshDetailPanel() {
         detailPanel.classList.add('detail-collapsed');
 }
 
-function showHexInfo(name, coords, desc, hasLocation, regionName) {
-    _hexEditMode    = false;
+function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey) {
+    if (hexKey !== _hexPanelKey) {
+        _hexEditMode = false;
+        _hexPanelKey = hexKey;
+    }
     _hexHasLocation = hasLocation;
     _hexJsonDesc    = desc;
 
@@ -104,6 +108,7 @@ hexEditBtn.addEventListener('click', () => {
 
 function hideHexInfo() {
     _hexEditMode = false;
+    _hexPanelKey = null;
     hexInspSect.hidden = true;
     hexInspRegion.hidden = true;
     hexInspNotes.hidden = true;
@@ -620,7 +625,7 @@ function drawGrid(hoveredHex = null) {
             }
         }
 
-        showHexInfo(name, `${hoveredHex.col}, ${hoveredHex.row}`, desc, hasLocation, regionName);
+        showHexInfo(name, `${hoveredHex.col}, ${hoveredHex.row}`, desc, hasLocation, regionName, notesKey);
         attachHexNotes(notesKey);
         attachHexCustomName(hasLocation ? null : notesKey);
         updateFlagRow(hoveredHex.col, hoveredHex.row);
