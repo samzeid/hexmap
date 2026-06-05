@@ -640,9 +640,11 @@ function drawGrid(hoveredHex = null) {
             // Flag marker
             const _flagKey = `${col}_${row}`;
             const _flagColor = hexFlags.get(_flagKey);
-            if (_flagColor) {
+            const _isHidden = hexHiddenCache.has(_flagKey);
+            const _hasData  = hexNotesCache.has(_flagKey) || hexCustomNamesCache.has(_flagKey) || hexDescCache.has(_flagKey);
+            if (_flagColor && (isDMView || !_isHidden)) {
                 drawFlag(x, y, _flagColor);
-            } else if (isDMView && (hexNotesCache.has(_flagKey) || hexCustomNamesCache.has(_flagKey) || hexDescCache.has(_flagKey))) {
+            } else if (_hasData && (isDMView || !_isHidden)) {
                 drawFlag(x, y, '#ffffff');
             }
         }
@@ -696,19 +698,21 @@ function drawGrid(hoveredHex = null) {
             }
         }
 
-        // Non-DM: hide name/desc/region for locations marked hidden by DM
-        const isHiddenForPlayer = !isDMView && hexHiddenCache.has(notesKey);
+        // Hide name/desc/region when location is marked hidden and viewer isn't DM
+        const isHidden = hexHiddenCache.has(notesKey);
+        const canSeeLocation = isDMView || !isHidden;
         showHexInfo(
-            isHiddenForPlayer ? '' : name,
+            canSeeLocation ? name : '',
             `${hoveredHex.col}, ${hoveredHex.row}`,
-            isHiddenForPlayer ? '' : desc,
-            isHiddenForPlayer ? false : hasLocation,
-            isHiddenForPlayer ? '' : regionName,
+            canSeeLocation ? desc : '',
+            canSeeLocation ? hasLocation : false,
+            canSeeLocation ? regionName : '',
             notesKey
         );
-        attachHexNotes(notesKey);
-        attachHexCustomName(hasLocation ? null : notesKey);
-        attachHexDesc(hasLocation ? null : notesKey);
+        // Notes and custom fields are DM-only or hidden from players on hidden locations
+        attachHexNotes(isDMView ? notesKey : null);
+        attachHexCustomName(canSeeLocation && !hasLocation ? notesKey : null);
+        attachHexDesc(canSeeLocation && !hasLocation ? notesKey : null);
         updateFlagRow(hoveredHex.col, hoveredHex.row);
     } else {
         hideHexInfo();
