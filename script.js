@@ -646,7 +646,7 @@ function drawGrid(hoveredHex = null) {
             const _flagColor = hexFlags.get(_flagKey);
             const _isHidden  = hexHiddenCache.has(_flagKey);
             const _hasData   = hexNotesCache.has(_flagKey) || hexCustomNamesCache.has(_flagKey) || hexDescCache.has(_flagKey);
-            const _dimAlpha  = (_isHidden && isDMView) ? 0.3 : 1;
+            const _dimAlpha  = (_isHidden && isDMView) ? 0.55 : 1;
             if (_flagColor && (isDMView || !_isHidden)) {
                 drawFlag(x, y, _flagColor, _dimAlpha);
             } else if (_hasData && (isDMView || !_isHidden)) {
