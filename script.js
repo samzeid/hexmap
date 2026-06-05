@@ -1251,6 +1251,7 @@ window.addEventListener("message", (e) => {
     }
     if (e.data.type === "headerHeight") {
         document.documentElement.style.setProperty('--inv-header-h', e.data.height + 'px');
+        fitContainer();
     }
     if (e.data.type === "hexAction") {
         switch (e.data.action) {
