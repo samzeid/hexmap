@@ -135,8 +135,9 @@ function updateFlagRow(col, row) {
     }
     btn.addEventListener('click', () => {
         const next = states[(states.indexOf(current) + 1) % states.length];
-        if (next) hexFlagsRef.child(key).set(next);
-        else hexFlagsRef.child(key).remove();
+        if (next) { hexFlags.set(key, next); hexFlagsRef.child(key).set(next); }
+        else       { hexFlags.delete(key);   hexFlagsRef.child(key).remove(); }
+        drawGridLatestActive();
     });
     hexFlagRow.appendChild(btn);
 
@@ -147,8 +148,15 @@ function updateFlagRow(col, row) {
         eyeBtn.title = hidden ? 'Hidden from players — click to show' : 'Visible to players — click to hide';
         eyeBtn.innerHTML = `<i class="fas fa-eye${hidden ? '-slash' : ''}"></i>`;
         eyeBtn.addEventListener('click', () => {
-            if (hidden) hexHiddenRef.child(key).remove();
-            else hexHiddenRef.child(key).set(true);
+            if (hidden) {
+                hexHiddenCache.delete(key);
+                hexHiddenRef.child(key).remove();
+            } else {
+                hexHiddenCache.set(key, true);
+                hexHiddenRef.child(key).set(true);
+            }
+            _hexPanelKey = null;
+            drawGridLatestActive();
         });
         hexFlagRow.appendChild(eyeBtn);
     }
