@@ -181,6 +181,11 @@ body.inv-open    #hex-insp-section  { display: none !important; }
 body             #item-insp-section { display: none !important; }
 
 /* Hex section */
+#hex-insp-section.hex-location-hidden #hex-insp-name,
+#hex-insp-section.hex-location-hidden #hex-insp-name-input,
+#hex-insp-section.hex-location-hidden #hex-insp-region,
+#hex-insp-section.hex-location-hidden #hex-insp-desc,
+#hex-insp-section.hex-location-hidden #hex-insp-desc-edit { opacity: 0.35; }
 
 #hex-insp-header {
   display: flex;

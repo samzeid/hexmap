@@ -52,7 +52,7 @@ function refreshDetailPanel() {
         detailPanel.classList.add('detail-collapsed');
 }
 
-function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey) {
+function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey, isGreyed) {
     if (hexKey !== _hexPanelKey) {
         // New hex — reset everything
         _hexEditMode    = false;
@@ -68,13 +68,13 @@ function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey) {
             hexInspName.textContent = name;
             hexInspDesc.textContent = desc;
         } else {
-            // Clear stale text; Firebase listeners will repopulate
             hexInspName.textContent = '';
             hexInspDesc.textContent = '';
         }
     }
-    // Same hex redraw: don't touch content — Firebase listeners own it
 
+    // Apply greyed state on every draw (changes without hex key changing)
+    hexInspSect.classList.toggle('hex-location-hidden', !!isGreyed);
     _applyHexEditMode();
     hexInspSect.hidden = false;
     detailPanel.classList.remove('detail-collapsed');
@@ -162,9 +162,10 @@ function updateFlagRow(col, row) {
     }
 }
 
-function drawFlag(x, y, color) {
+function drawFlag(x, y, color, alpha = 1) {
     const size = Math.round(hexSize * 0.55);
     canvasContext.save();
+    canvasContext.globalAlpha = alpha;
     canvasContext.font = `900 ${size}px "Font Awesome 6 Free"`;
     canvasContext.fillStyle = color;
     canvasContext.textAlign = 'center';
@@ -646,14 +647,15 @@ function drawGrid(hoveredHex = null) {
             }
 
             // Flag marker
-            const _flagKey = `${col}_${row}`;
+            const _flagKey   = `${col}_${row}`;
             const _flagColor = hexFlags.get(_flagKey);
-            const _isHidden = hexHiddenCache.has(_flagKey);
-            const _hasData  = hexNotesCache.has(_flagKey) || hexCustomNamesCache.has(_flagKey) || hexDescCache.has(_flagKey);
+            const _isHidden  = hexHiddenCache.has(_flagKey);
+            const _hasData   = hexNotesCache.has(_flagKey) || hexCustomNamesCache.has(_flagKey) || hexDescCache.has(_flagKey);
+            const _dimAlpha  = (_isHidden && isDMView) ? 0.3 : 1;
             if (_flagColor && (isDMView || !_isHidden)) {
-                drawFlag(x, y, _flagColor);
+                drawFlag(x, y, _flagColor, _dimAlpha);
             } else if (_hasData && (isDMView || !_isHidden)) {
-                drawFlag(x, y, '#ffffff');
+                drawFlag(x, y, '#ffffff', _dimAlpha);
             }
         }
     }
@@ -706,8 +708,8 @@ function drawGrid(hoveredHex = null) {
             }
         }
 
-        // Hide name/desc/region when location is marked hidden and viewer isn't DM
         const isHidden = hexHiddenCache.has(notesKey);
+        // DM always sees content (greyed when hidden); players see nothing when hidden
         const canSeeLocation = isDMView || !isHidden;
         showHexInfo(
             canSeeLocation ? name : '',
@@ -715,7 +717,8 @@ function drawGrid(hoveredHex = null) {
             canSeeLocation ? desc : '',
             canSeeLocation ? hasLocation : false,
             canSeeLocation ? regionName : '',
-            notesKey
+            notesKey,
+            isDMView && isHidden  // greyed: DM sees but dimmed
         );
         // Notes and custom fields are DM-only or hidden from players on hidden locations
         attachHexNotes(isDMView ? notesKey : null);
