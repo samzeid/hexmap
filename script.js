@@ -60,22 +60,16 @@ function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey) {
     hexInspCoords.textContent = coords;
     hexInspRegion.textContent = regionName || '';
     hexInspRegion.hidden = !regionName;
-
-    // Always start in view mode
-    hexInspNameIn.hidden = true;
-    hexInspNotes.hidden  = true;
     hexEditBtn.hidden    = !isDMView;
-    hexEditBtn.classList.remove('active');
 
+    // Set static content (always, regardless of mode)
     if (hasLocation) {
         hexInspName.textContent = name;
-        hexInspName.hidden = false;
         hexInspDesc.textContent = desc;
-        hexInspDesc.hidden = !desc;
-    } else {
-        hexInspName.hidden = true; // _onHexCustomName will show it if a custom name exists
-        hexInspDesc.hidden = true;
     }
+
+    // Apply whichever mode is current (preserves edit state on redraw)
+    _applyHexEditMode();
 
     hexInspSect.hidden = false;
     detailPanel.classList.remove('detail-collapsed');
@@ -85,14 +79,12 @@ function _applyHexEditMode() {
     hexEditBtn.classList.toggle('active', _hexEditMode);
     hexInspNameIn.hidden = !_hexEditMode || _hexHasLocation;
     hexInspNotes.hidden  = !_hexEditMode;
-    // In edit mode hide static display; in view mode restore it
     if (_hexEditMode) {
         hexInspName.hidden = true;
         hexInspDesc.hidden = true;
     } else {
         hexInspName.hidden = _hexHasLocation ? false : !hexInspName.textContent;
         hexInspDesc.hidden = !_hexJsonDesc;
-        if (_hexJsonDesc) hexInspDesc.textContent = _hexJsonDesc;
         _autoResizeNotes();
     }
 }
