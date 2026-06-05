@@ -540,7 +540,8 @@ const canvasContainer = canvas.parentElement;
 
 function fitContainer() {
     const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
-    canvasContainer.style.height = h + 'px';
+    const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inv-header-h')) || 0;
+    canvasContainer.style.height = (h - headerH) + 'px';
 }
 if (window.visualViewport) window.visualViewport.addEventListener('resize', fitContainer);
 window.addEventListener('resize', fitContainer);
