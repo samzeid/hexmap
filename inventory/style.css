@@ -545,6 +545,9 @@ input, textarea, select { font-size: max(16px, 1em); }
   border-left: 2px solid rgba(255, 80, 80, 0.6) !important;
   background: rgba(255, 60, 60, 0.06) !important;
 }
+.shop-item-unaffordable .cost-gp,
+.shop-item-unaffordable .cost-sp,
+.shop-item-unaffordable .cost-cp { color: rgba(255, 80, 80, 0.85); }
 
 .shop-mat-btn {
   background: rgba(255,255,255,0.06);

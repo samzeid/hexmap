@@ -2856,10 +2856,7 @@ window.CharacterManager = ({ auth, database }) => {
         if (e.button !== 0) return;
         lpX = e.clientX; lpY = e.clientY; lpPointerId = e.pointerId;
         lpScrolling = false; lpTracking = true;
-        const blocked = !window._isDM && (
-          !isItemAvailable(item.name) ||
-          row.classList.contains('shop-item-unaffordable')
-        );
+        const blocked = !window._isDM && !isItemAvailable(item.name);
         const flashText = () => {
           [nameSpan, ...Array.from(costSpan.children)].forEach(el => {
             el.classList.remove('shop-item-flash');
@@ -2875,6 +2872,10 @@ window.CharacterManager = ({ auth, database }) => {
         lpTimer = setTimeout(() => {
           lpTimer = null;
           lpScrolling = false;
+          if (!window._isDM && row.classList.contains('shop-item-unaffordable')) {
+            flashText();
+            return;
+          }
           if (cachedSlotData._unresolved) {
             flashText();
             inv.showShopItem(getSlotData(), `shop-${item.name}`);
