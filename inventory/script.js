@@ -2429,7 +2429,7 @@ window.CharacterManager = ({ auth, database }) => {
 
   function _applyViewMode() {
     document.getElementById('app').classList.toggle('hexmap-mode', _hexmapMode);
-    _closeBtnI.className = _hexmapMode ? 'fa-solid fa-bag-shopping' : 'fa-solid fa-map';
+    _closeBtnI.className = _hexmapMode ? 'fa-solid fa-fw fa-bag-shopping' : 'fa-solid fa-fw fa-map';
     _closeBtn.title      = _hexmapMode ? 'Inventory' : 'Map view';
   }
 
