@@ -727,6 +727,16 @@ function drawGrid(hoveredHex = null) {
         }
     }
 
+    // Fade-to-black at the bottom edge of the map image (drawn before ping so ping renders on top)
+    const imgBottomY = panY + image.naturalHeight * zoom;
+    canvasContext.setTransform(1, 0, 0, 1, 0, 0);
+    const fadeGrad = canvasContext.createLinearGradient(0, imgBottomY - 40, 0, imgBottomY);
+    fadeGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    fadeGrad.addColorStop(1, 'rgba(0,0,0,1)');
+    canvasContext.fillStyle = fadeGrad;
+    canvasContext.fillRect(0, imgBottomY - 40, canvas.width, 40);
+    canvasContext.setTransform(zoom, 0, 0, zoom, panX, panY);
+
     // Circular ping pulse rings
     if (_flashHex && _flashStart !== null) {
         const elapsed = performance.now() - _flashStart;
@@ -799,18 +809,13 @@ function drawGrid(hoveredHex = null) {
         attachHexDesc(null);
     }
 
-    // Fade-to-black at the bottom edge of the map image
-    const imgBottomY = panY + image.naturalHeight * zoom;
-    canvasContext.setTransform(1, 0, 0, 1, 0, 0);
-    const fadeGrad = canvasContext.createLinearGradient(0, imgBottomY - 40, 0, imgBottomY);
-    fadeGrad.addColorStop(0, 'rgba(0,0,0,0)');
-    fadeGrad.addColorStop(1, 'rgba(0,0,0,1)');
-    canvasContext.fillStyle = fadeGrad;
-    canvasContext.fillRect(0, imgBottomY - 40, canvas.width, 40);
 }
 
 // Calculate which hex coordinates a given (x,y) on the canvas corresponds to
 function getHexAtPosition(screenX, screenY) {
+    // Reject clicks in the black padding area below the map image
+    if (screenY > panY + image.naturalHeight * zoom) return { col: -1, row: -1 };
+
     // Convert screen coords to world coords (account for pan/zoom)
     const x = (screenX - panX) / zoom;
     const y = (screenY - panY) / zoom;
@@ -1119,7 +1124,7 @@ function setPan(x, y) {
     const maxPanX = 0;
     const maxPanY = 0;
     const minPanX = canvas.width - imageWidth;
-    const minPanY = canvas.height - imageHeight - 300;
+    const minPanY = canvas.height - imageHeight - 100 * zoom;
 
     panX = clamp(x, minPanX, maxPanX);
     panY = clamp(y, minPanY, maxPanY);
