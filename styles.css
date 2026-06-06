@@ -111,7 +111,6 @@ body {
 
 /* ── APP / HEX VIEW ────────────────────────────────────────────── */
 #app { will-change: transform; }
-#inv-close-btn { display: none !important; }
 
 #hex-view {
   flex: 1;
