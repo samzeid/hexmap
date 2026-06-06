@@ -362,16 +362,16 @@ const DRAW_HATCH  = {
 
 let activeDrawColor = DRAW_COLORS[0];
 
-const hexSize = 27.05;
-const hexWidth = 54.55;
+const hexSize = 13.525;
+const hexWidth = 27.275;
 const hexHeight = Math.sqrt(3) * hexSize;
 const hexVertSpacing = hexHeight;
 const hexHorizSpacing = (3 / 4) * hexWidth;
 
 const maxZoomScale = 3;
 
-let offsetX = -22;
-let offsetY = 2;
+let offsetX = -11;
+let offsetY = 1;
 
 let lastHex = null;
 let latestInspectorHex = null;
