@@ -727,14 +727,33 @@ function drawGrid(hoveredHex = null) {
         }
     }
 
-    // Fade-to-black at the bottom edge of the map image (drawn before ping so ping renders on top)
-    const imgBottomY = panY + image.naturalHeight * zoom;
-    canvasContext.setTransform(1, 0, 0, 1, 0, 0);
-    const fadeGrad = canvasContext.createLinearGradient(0, imgBottomY - 40, 0, imgBottomY);
-    fadeGrad.addColorStop(0, 'rgba(0,0,0,0)');
-    fadeGrad.addColorStop(1, 'rgba(0,0,0,1)');
-    canvasContext.fillStyle = fadeGrad;
-    canvasContext.fillRect(0, imgBottomY - 40, canvas.width, 40);
+    // Irregular hand-drawn edge — black fill whose top follows overlapping sine waves.
+    // Clamped to [0, imgW] so the sides of the map stay clean.
+    {
+        const imgH = image.naturalHeight;
+        const imgW = image.naturalWidth;
+
+        canvasContext.setTransform(zoom, 0, 0, zoom, panX, panY);
+        canvasContext.fillStyle = 'black';
+        canvasContext.beginPath();
+        canvasContext.moveTo(0, imgH + 300);
+
+        // Shift baseline up by total amplitude so the wave always cuts into the map
+        // and never dips below the natural edge (where it would be invisible on black).
+        const A = 4 + 2 + 1 + 0.4; // sum of amplitudes
+        for (let wx = 0; wx <= imgW; wx += 2) {
+            const ey = (imgH - A)
+                + Math.sin(wx / 84)       * 4
+                + Math.sin(wx / 31 + 1.7) * 2
+                + Math.sin(wx / 13 + 3.1) * 1
+                + Math.sin(wx /  5 + 0.8) * 0.4;
+            canvasContext.lineTo(wx, ey);
+        }
+
+        canvasContext.lineTo(imgW, imgH + 300);
+        canvasContext.closePath();
+        canvasContext.fill();
+    }
     canvasContext.setTransform(zoom, 0, 0, zoom, panX, panY);
 
     // Circular ping pulse rings
