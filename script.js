@@ -362,6 +362,9 @@ const DRAW_HATCH  = {
 
 let activeDrawColor = DRAW_COLORS[0];
 
+const mapWidth = 1600;
+const mapHeight = 1200;
+
 const hexSize = 13.525;
 const hexWidth = 27.275;
 const hexHeight = Math.sqrt(3) * hexSize;
@@ -405,15 +408,15 @@ const hexData = new Map();
 
 image.onload = () => {
     // Calculate minimum zoom to fit image to canvas
-    const zoomX = canvas.width / image.naturalWidth;
-    const zoomY = canvas.height / image.naturalHeight;
+    const zoomX = canvas.width / mapWidth;
+    const zoomY = canvas.height / mapHeight;
     minZoom = Math.max(zoomX, zoomY);
     maxZoom = minZoom * maxZoomScale;
 
     // Set initial zoom and reset pan
     zoom = minZoom;
-    panX = 0;//(canvas.width - image.naturalWidth * zoom) / 2;
-    panY = 0;//(canvas.height - image.naturalHeight * zoom) / 2;
+    panX = 0;//(canvas.width - mapWidth * zoom) / 2;
+    panY = 0;//(canvas.height - mapHeight * zoom) / 2;
 
     drawGridLatestActive();
 };
@@ -565,8 +568,8 @@ function fitContainer() {
         if (w && cH && (w !== canvas.width || cH !== canvas.height)) {
             canvas.width  = w;
             canvas.height = cH;
-            const zoomX = w  / image.naturalWidth;
-            const zoomY = cH / image.naturalHeight;
+            const zoomX = w  / mapWidth;
+            const zoomY = cH / mapHeight;
             minZoom = Math.max(zoomX, zoomY);
             maxZoom = minZoom * maxZoomScale;
             zoom = clamp(_kbSavedZoom, minZoom, maxZoom);
@@ -589,8 +592,8 @@ function fitContainer() {
             if (growing) {
                 // Canvas got larger (desktop resize / keyboard close): recalc zoom bounds
                 // and re-clamp pan so the image always covers the full canvas.
-                const zoomX = w / image.naturalWidth;
-                const zoomY = cH / image.naturalHeight;
+                const zoomX = w / mapWidth;
+                const zoomY = cH / mapHeight;
                 minZoom = Math.max(zoomX, zoomY);
                 maxZoom = minZoom * maxZoomScale;
                 zoom = clamp(zoom, minZoom, maxZoom);
@@ -615,8 +618,8 @@ function resizeCanvas() {
     canvas.width  = w;
     canvas.height = h;
 
-    const zoomX = w / image.naturalWidth;
-    const zoomY = h / image.naturalHeight;
+    const zoomX = w / mapWidth;
+    const zoomY = h / mapHeight;
     minZoom = Math.max(zoomX, zoomY);
     maxZoom = minZoom * maxZoomScale;
 
@@ -646,14 +649,14 @@ resizeCanvas();
 
 // Draw the entire hex grid, optionally highlighting a hovered hex
 function drawGrid(hoveredHex = null) {
-    if (!image.naturalWidth) return;
+    if (!mapWidth) return;
     canvasContext.setTransform(1, 0, 0, 1, 0, 0);
     canvasContext.clearRect(0, 0, canvas.width, canvas.height);
     canvasContext.setTransform(zoom, 0, 0, zoom, panX, panY);
-    canvasContext.drawImage(image, 0, 0, image.naturalWidth, image.naturalHeight);
+    canvasContext.drawImage(image, 0, 0, mapWidth, mapHeight);
 
-    const cols = Math.ceil(image.width / hexHorizSpacing);
-    const rows = Math.ceil(image.height / hexHeight);
+    const cols = Math.ceil(mapWidth / hexHorizSpacing);
+    const rows = Math.ceil(mapHeight / hexHeight);
 
     for (let col = 0; col < cols; col++) {
         for (let row = 0; row < rows; row++) {
@@ -730,8 +733,8 @@ function drawGrid(hoveredHex = null) {
     // Irregular hand-drawn edge — black fill whose top follows overlapping sine waves.
     // Clamped to [0, imgW] so the sides of the map stay clean.
     {
-        const imgH = image.naturalHeight;
-        const imgW = image.naturalWidth;
+        const imgH = mapHeight;
+        const imgW = mapWidth;
 
         canvasContext.setTransform(zoom, 0, 0, zoom, panX, panY);
         canvasContext.fillStyle = 'black';
@@ -833,7 +836,7 @@ function drawGrid(hoveredHex = null) {
 // Calculate which hex coordinates a given (x,y) on the canvas corresponds to
 function getHexAtPosition(screenX, screenY) {
     // Reject clicks in the black padding area below the map image
-    if (screenY > panY + image.naturalHeight * zoom) return { col: -1, row: -1 };
+    if (screenY > panY + mapHeight * zoom) return { col: -1, row: -1 };
 
     // Convert screen coords to world coords (account for pan/zoom)
     const x = (screenX - panX) / zoom;
@@ -1137,8 +1140,8 @@ function clamp(value, min, max) {
 
 function setPan(x, y) {
     // Clamp pan to image boundaries
-    const imageWidth = image.naturalWidth * zoom;
-    const imageHeight = image.naturalHeight * zoom;
+    const imageWidth = mapWidth * zoom;
+    const imageHeight = mapHeight * zoom;
 
     const maxPanX = 0;
     const maxPanY = 0;
