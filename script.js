@@ -22,7 +22,7 @@ const pingSound      = new Audio('sounds/ping.ogg');
 
 // Get elements
 const image = new Image();
-image.src = "map.png";
+image.src = "map.webp";
 const canvas = document.getElementById("canvas");
 const canvasContext = canvas.getContext("2d");
 
