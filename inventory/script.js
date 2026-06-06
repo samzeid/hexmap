@@ -3254,18 +3254,21 @@ window.CharacterManager = ({ auth, database }) => {
       }
 
       if (!currentCharId || !allChars[currentCharId]) {
-        // Pick this user's most recent char; DMs fall back to any char; else create
-        const mine = Object.values(allChars)
-          .filter(c => c.ownerUid === currentUser.uid)
-          .sort((a, b) => b.createdAt - a.createdAt);
-        if (mine.length) {
-          switchToChar(mine[0].id, true);
-        } else if (window._isDM) {
-          const any = Object.values(allChars).sort((a, b) => b.createdAt - a.createdAt);
-          if (any.length) switchToChar(any[0].id, true);
-          else            createChar();
+        // Only auto-select when already in inventory mode; if in hexmap mode the
+        // user will open the inventory themselves and ensureCharSelected fires then.
+        if (!_hexmapMode) {
+          const mine = Object.values(allChars)
+            .filter(c => c.ownerUid === currentUser.uid)
+            .sort((a, b) => b.createdAt - a.createdAt);
+          if (mine.length) {
+            switchToChar(mine[0].id, true);
+          } else if (window._isDM) {
+            const any = Object.values(allChars).sort((a, b) => b.createdAt - a.createdAt);
+            if (any.length) switchToChar(any[0].id, true);
+            else            createChar();
+          }
+          // Players with no assigned character wait — DM assigns one
         }
-        // Players with no assigned character wait — DM assigns one
       }
     });
   }
@@ -3689,6 +3692,11 @@ window.CharacterManager = ({ auth, database }) => {
           if (char.id === currentCharId) {
             if (shopOpen) {
               closeShop();
+              if (_hexmapMode) {
+                _hexmapMode = false;
+                _applyViewMode();
+                window.hexOnGoToInventory && window.hexOnGoToInventory();
+              }
             } else if (!_hexmapMode) {
               inv.collapsePanelInstant();
               deselectChar();
