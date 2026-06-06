@@ -646,6 +646,7 @@ resizeCanvas();
 
 // Draw the entire hex grid, optionally highlighting a hovered hex
 function drawGrid(hoveredHex = null) {
+    if (!image.naturalWidth) return;
     canvasContext.setTransform(1, 0, 0, 1, 0, 0);
     canvasContext.clearRect(0, 0, canvas.width, canvas.height);
     canvasContext.setTransform(zoom, 0, 0, zoom, panX, panY);
