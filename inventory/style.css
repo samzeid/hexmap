@@ -52,7 +52,7 @@ input, textarea, select { font-size: max(16px, 1em); }
   background: rgba(255,255,255,0.02);
   border-bottom: 1px solid var(--card-border);
   flex-shrink: 0;
-  min-height: 48px;
+  height: 48px;
 }
 
 #tab-bar-left {
@@ -90,7 +90,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 }
 
 #shop-tab-btn,
-#inv-close-btn { border-radius: 0; }
+#inv-close-btn { border-radius: 0; width: 48px; }
 
 #inv-close-btn:hover, #add-char-btn:hover,
 #shop-tab-btn:hover,  #role-btn:hover {
@@ -199,13 +199,10 @@ input, textarea, select { font-size: max(16px, 1em); }
 .char-tab.tab-hidden.active { opacity: 0.75; }
 
 .char-tab-hidden-icon {
-  position: absolute;
-  top: 4px;
-  right: 4px;
   font-size: 9px;
   color: rgba(255, 90, 90, 0.75);
   pointer-events: none;
-  line-height: 1;
+  margin-right: 4px;
 }
 
 .char-tab-info {
@@ -291,10 +288,10 @@ input, textarea, select { font-size: max(16px, 1em); }
   font-size: 18px;
   cursor: pointer;
   min-width: 44px;
-  min-height: 44px;
   padding: 0 8px 0 4px;
   line-height: 1;
   flex-shrink: 0;
+  align-self: stretch;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2104,6 +2101,8 @@ body.is-dragging #inv-scroll {
   box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
 }
 
+#hex-overlay-btn { width: 32px; height: 32px; padding: 0; }
+#hex-overlay-btn i { width: 1em; text-align: center; }
 #hex-erase-btn { color: rgba(255,255,255,0.5); font-size: 13px; }
 #hex-erase-btn::after { display: none; }
 #hex-erase-btn.active-color { color: #e8e8f0; background: rgba(255,255,255,0.12); }

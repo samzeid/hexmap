@@ -2429,7 +2429,7 @@ window.CharacterManager = ({ auth, database }) => {
 
   function _applyViewMode() {
     document.getElementById('app').classList.toggle('hexmap-mode', _hexmapMode);
-    _closeBtnI.className = _hexmapMode ? 'fa-solid fa-fw fa-bag-shopping' : 'fa-solid fa-fw fa-map';
+    _closeBtnI.className = _hexmapMode ? 'ra ra-fw ra-axe' : 'fa-solid fa-fw fa-compass';
     _closeBtn.title      = _hexmapMode ? 'Inventory' : 'Map view';
   }
 
@@ -2484,7 +2484,7 @@ window.CharacterManager = ({ auth, database }) => {
     if (!e.data) return;
     if (e.data.type === 'hexState') {
       if (e.data.toolIcon)    _hexToolBtn.querySelector('i').className    = `fa-solid fa-fw ${e.data.toolIcon}`;
-      if (e.data.overlayIcon) _hexOverlayBtn.querySelector('i').className = `fa-solid fa-fw ${e.data.overlayIcon}`;
+      if (e.data.overlayIcon) _hexOverlayBtn.querySelector('i').className = e.data.overlayIcon;
       _hexToolBtn.classList.toggle('active', !!e.data.toolActive);
       document.getElementById('hexmap-toolbar').classList.toggle('tool-active', !!e.data.toolActive);
       document.getElementById('hexmap-toolbar').classList.toggle('show-colors', !!e.data.showColors);
@@ -3555,7 +3555,12 @@ window.CharacterManager = ({ auth, database }) => {
     const tab = document.querySelector(`[data-char-id="${currentCharId}"]`);
     if (tab) {
       const nameEl = tab.querySelector('.char-tab-name');
-      if (nameEl) nameEl.textContent = inv.getState().charName || 'Unnamed';
+      if (nameEl) {
+        const textNode = [...nameEl.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
+        const newName = inv.getState().charName || 'Unnamed';
+        if (textNode) textNode.textContent = newName;
+        else nameEl.appendChild(document.createTextNode(newName));
+      }
     }
     if (shopOpen) updateShopWallet();
     saveChar(currentCharId);
@@ -3655,23 +3660,19 @@ window.CharacterManager = ({ auth, database }) => {
         infoDiv.className = 'char-tab-info';
 
         const nameSpan = document.createElement('span');
-        nameSpan.className   = 'char-tab-name';
-        nameSpan.textContent = char.state.charName || 'Unnamed';
+        nameSpan.className = 'char-tab-name';
+        if (window._isDM && char.hiddenFromPlayers) {
+          const hiddenIcon = document.createElement('i');
+          hiddenIcon.className = 'fas fa-eye-slash char-tab-hidden-icon';
+          nameSpan.appendChild(hiddenIcon);
+        }
+        nameSpan.appendChild(document.createTextNode(char.state.charName || 'Unnamed'));
         infoDiv.appendChild(nameSpan);
-
-
 
         tab.appendChild(infoDiv);
 
         // DM-only controls
         if (window._isDM) {
-          // Hidden indicator
-          if (char.hiddenFromPlayers) {
-            const hiddenIcon = document.createElement('span');
-            hiddenIcon.className = 'char-tab-hidden-icon';
-            hiddenIcon.innerHTML = '<i class="fas fa-eye-slash"></i>';
-            tab.appendChild(hiddenIcon);
-          }
 
           // Delete button
           const del = document.createElement('button');

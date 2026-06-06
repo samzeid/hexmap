@@ -1274,7 +1274,7 @@ canvas.addEventListener("touchend", (e) => {
 // Tool cycle: pan ↔ select (erase is a swatch button inside select mode)
 const toolStates = ['pan', 'select'];
 const toolIcons = {
-    pan:    'fa-arrows-up-down-left-right',
+    pan:    'fa-hand',
     select: 'fa-paintbrush',
 };
 
@@ -1288,7 +1288,7 @@ function setActiveTool(toolName) {
 
 // Overlay cycle: none → territory → environment → none
 const overlayStates = [null, 'political', 'environmental'];
-const overlayIcons  = ['fa-layer-group', 'fa-circle-user', 'fa-tree'];
+const overlayIcons  = ['fa-solid fa-fw fa-compass', 'ra ra-fw ra-tower', 'fa-solid fa-fw fa-tree'];
 let overlayIndex = 0;
 
 function sendHexState() {
