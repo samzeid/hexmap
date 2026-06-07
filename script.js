@@ -1159,6 +1159,7 @@ let touchStartY = 0;
 
 let initialPinchDistance = null;
 let initialZoom = zoom;
+let _wasPinching = false;
 
 canvas.addEventListener("touchstart", (e) => {
     if (e.touches.length === 1) {
@@ -1186,6 +1187,7 @@ canvas.addEventListener("touchstart", (e) => {
         isDragging = false;
         isPanning = false;
         hasDragged = true;
+        _wasPinching = true;
         cancelPingTimer();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -1247,8 +1249,11 @@ canvas.addEventListener("touchend", (e) => {
     if (e.touches.length < 2) {
         initialPinchDistance = null;
     }
+    if (e.touches.length === 0) {
+        _wasPinching = false;
+    }
     cancelPingTimer();
-    if (!hasDragged && !_pingFired && startCol >= 0 && startRow >= 0) {
+    if (!hasDragged && !_wasPinching && !_pingFired && startCol >= 0 && startRow >= 0) {
         if (activeTool === 'select') {
             const _sk = `${startCol},${startRow}`;
             if (eraseMode) {
