@@ -1249,31 +1249,31 @@ canvas.addEventListener("touchend", (e) => {
     if (e.touches.length < 2) {
         initialPinchDistance = null;
     }
+    cancelPingTimer();
     if (e.touches.length === 0) {
         _wasPinching = false;
-    }
-    cancelPingTimer();
-    if (!hasDragged && !_wasPinching && !_pingFired && startCol >= 0 && startRow >= 0) {
-        if (activeTool === 'select') {
-            const _sk = `${startCol},${startRow}`;
-            if (eraseMode) {
-                setHexSelected(_sk, false);
+        if (!hasDragged && !_pingFired && startCol >= 0 && startRow >= 0) {
+            if (activeTool === 'select') {
+                const _sk = `${startCol},${startRow}`;
+                if (eraseMode) {
+                    setHexSelected(_sk, false);
+                } else {
+                    setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
+                }
             } else {
-                setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
-            }
-        } else {
-            if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
-                clearLocalFocus();
-            } else {
-                setLocalFocus(startCol, startRow);
+                if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
+                    clearLocalFocus();
+                } else {
+                    setLocalFocus(startCol, startRow);
+                }
             }
         }
+        isDragging = false;
+        isPanning = false;
+        hasDragged = false;
+        _pingFired = false;
+        lastHex = null;
     }
-    isDragging = false;
-    isPanning = false;
-    hasDragged = false;
-    _pingFired = false;
-    lastHex = null;
 });
 
 // Tool cycle: pan ↔ select (erase is a swatch button inside select mode)
