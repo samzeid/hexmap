@@ -1171,17 +1171,23 @@ canvas.addEventListener("touchstart", (e) => {
         const x = touch.clientX - rect.left - offsetX;
         const y = touch.clientY - rect.top - offsetY;
         const { col, row } = getHexAtPosition(x, y);
-        startRow = row;
-        startCol = col;
-        const key = `${col},${row}`;
 
-        hasDragged = false;
         isPanning = true;
         startPanX = panX;
         startPanY = panY;
-        if (col >= 0 && row >= 0) {
-            lastHex = key;
-            startPingTimer(col, row);
+
+        // Skip fresh-tap setup if a pinch is still unwinding — iOS can fire a
+        // spurious touchstart(1) between the two touchend events of a pinch,
+        // which would reset hasDragged/startCol and cause an accidental selection.
+        if (!_wasPinching) {
+            startRow = row;
+            startCol = col;
+            const key = `${col},${row}`;
+            hasDragged = false;
+            if (col >= 0 && row >= 0) {
+                lastHex = key;
+                startPingTimer(col, row);
+            }
         }
     } else if (e.touches.length === 2) {
         isDragging = false;
@@ -1251,8 +1257,7 @@ canvas.addEventListener("touchend", (e) => {
     }
     cancelPingTimer();
     if (e.touches.length === 0) {
-        _wasPinching = false;
-        if (!hasDragged && !_pingFired && startCol >= 0 && startRow >= 0) {
+        if (!hasDragged && !_wasPinching && !_pingFired && startCol >= 0 && startRow >= 0) {
             if (activeTool === 'select') {
                 const _sk = `${startCol},${startRow}`;
                 if (eraseMode) {
@@ -1272,6 +1277,7 @@ canvas.addEventListener("touchend", (e) => {
         isPanning = false;
         hasDragged = false;
         _pingFired = false;
+        _wasPinching = false;
         lastHex = null;
     }
 });
