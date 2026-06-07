@@ -36,12 +36,31 @@ input, textarea, select { font-size: max(16px, 1em); }
   -webkit-user-select: none;
 }
 
-#inv-scroll {
+#char-panels {
   flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+#inv-scroll,
+#stats-panel {
+  position: absolute;
+  inset: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 280px;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+#inv-scroll { padding-bottom: 280px; }
+
+/* Default: stats visible (left), inventory off to the right */
+#stats-panel { transform: translateX(0); }
+#inv-scroll  { transform: translateX(100%); }
+
+/* show-inventory: inventory slides in from right, stats slides out to left */
+#char-panels.show-inventory #stats-panel { transform: translateX(-100%); }
+#char-panels.show-inventory #inv-scroll  { transform: translateX(0); }
 
 /* ── AUTH BAR ────────────────────────────────────────────────── */
 
@@ -93,13 +112,13 @@ input, textarea, select { font-size: max(16px, 1em); }
 #inv-close-btn { border-radius: 0; width: 48px; }
 
 #inv-close-btn:hover, #add-char-btn:hover,
-#shop-tab-btn:hover,  #role-btn:hover {
+#shop-tab-btn:hover, #role-btn:hover {
   background: rgba(255,255,255,0.1);
   color: var(--text);
 }
 
 #inv-close-btn:active, #add-char-btn:active,
-#shop-tab-btn:active,  #role-btn:active {
+#shop-tab-btn:active, #role-btn:active {
   transform: scale(0.92);
   background: rgba(255,255,255,0.08);
 }
@@ -681,7 +700,8 @@ input, textarea, select { font-size: max(16px, 1em); }
   color: var(--muted);
 }
 
-.char-field input {
+.char-field input,
+#stats-panel .char-name-row input {
   background: rgba(255,255,255,0.07);
   border: 1px solid var(--card-border);
   border-radius: 8px;
@@ -693,7 +713,8 @@ input, textarea, select { font-size: max(16px, 1em); }
   width: 100%;
 }
 
-.char-field input:focus {
+.char-field input:focus,
+#stats-panel .char-name-row input:focus {
   border-color: rgba(255,255,255,0.25);
   background: rgba(255,255,255,0.1);
 }
@@ -702,16 +723,24 @@ input, textarea, select { font-size: max(16px, 1em); }
   display: flex;
   align-items: center;
   gap: 6px;
-  overflow: hidden;
-  max-height: 60px;
-  opacity: 1;
-  transition: max-height 0.2s ease, opacity 0.15s ease;
+  padding: 12px 16px 8px;
 }
 
-#char-header.fields-collapsed .char-name-row {
-  max-height: 0;
-  opacity: 0;
+/* Character sheet edit mode */
+#stats-panel .char-name-row input {
   pointer-events: none;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text);
+}
+#stats-panel.editing .char-name-row input {
+  pointer-events: auto;
+  background: rgba(255,255,255,0.07);
+  border-color: var(--card-border);
+}
+#char-fields-edit-btn.active {
+  color: var(--text);
+  background: rgba(255,255,255,0.08);
 }
 
 .carry-compact-label {
@@ -1075,9 +1104,9 @@ main {
   min-height: 24px;
 }
 
-#char-fields-edit-btn {
+#char-fields-edit-btn,
+#char-sheet-toggle-btn {
   position: absolute;
-  right: 0;
   top: 50%;
   transform: translateY(-50%);
   background: none;
@@ -1090,8 +1119,12 @@ main {
   -webkit-tap-highlight-color: transparent;
   transition: color 0.15s, background 0.15s;
 }
-#char-fields-edit-btn:hover  { color: var(--text); }
-#char-fields-edit-btn:active { background: rgba(255,255,255,0.08); }
+#char-fields-edit-btn { right: 0; }
+#char-sheet-toggle-btn { left: 0; }
+#char-fields-edit-btn:hover,
+#char-sheet-toggle-btn:hover  { color: var(--text); }
+#char-fields-edit-btn:active,
+#char-sheet-toggle-btn:active { background: rgba(255,255,255,0.08); }
 
 #coin-counter {
   display: flex;
@@ -2109,7 +2142,7 @@ body.is-dragging #inv-scroll {
 
 
 /* ── HEXMAP MODE (header bar only, inventory panels hidden) ── */
-#app.hexmap-mode #inv-scroll,
+#app.hexmap-mode #char-panels,
 #app.hexmap-mode #shop-panel,
 #app.hexmap-mode #inspector,
 #app.hexmap-mode #drag-trash-btn { display: none !important; }

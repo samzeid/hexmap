@@ -1707,7 +1707,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   });
 
   // ── CHARACTER FIELDS ──────────────────────────────────────────────────────
-  document.getElementById('char-name').addEventListener('input', e => { state.charName = e.target.value; });
+  document.getElementById('char-name').addEventListener('input', e => {
+    state.charName = e.target.value;
+    if (onChange) onChange();
+  });
   document.getElementById('char-carry').addEventListener('input', e => {
     state.carryCapacity = e.target.value;
     updateCarryDisplay();
@@ -2429,15 +2432,12 @@ window.CharacterManager = ({ auth, database }) => {
 
   function _applyViewMode() {
     document.getElementById('app').classList.toggle('hexmap-mode', _hexmapMode);
-    _closeBtnI.className = _hexmapMode ? 'ra ra-fw ra-axe' : 'fa-solid fa-fw fa-compass';
+    _closeBtnI.className = _hexmapMode ? 'fa-solid fa-fw fa-user' : 'fa-solid fa-fw fa-compass';
     _closeBtn.title      = _hexmapMode ? 'Inventory' : 'Map view';
   }
 
   _closeBtn.addEventListener('click', () => {
-    if (shopOpen) {
-      closeShop();
-      return;
-    }
+    if (shopOpen) { closeShop(); return; }
     _hexmapMode = !_hexmapMode;
     inv.collapsePanelInstant();
     _applyViewMode();
@@ -2501,20 +2501,50 @@ window.CharacterManager = ({ auth, database }) => {
     }
   });
 
-  // ── SHOP ────────────────────────────────────────────────────────────────
+  // ── STATS ───────────────────────────────────────────────────────────────
+  let statsOpen    = true;
+  let statsEditing = false;
+  const statsPanelEl       = document.getElementById('stats-panel');
+  const charPanelsEl       = document.getElementById('char-panels');
+  const charSheetToggleBtn = document.getElementById('char-sheet-toggle-btn');
+  const charSheetToggleI   = charSheetToggleBtn.querySelector('i');
+  const charFieldsEditBtn  = document.getElementById('char-fields-edit-btn');
+
+  function setStatsEditing(on) {
+    statsEditing = on;
+    statsPanelEl.classList.toggle('editing', on);
+    charFieldsEditBtn.classList.toggle('active', on);
+  }
+
+  function openStats() {
+    statsOpen = true;
+    charPanelsEl.classList.remove('show-inventory');
+    charSheetToggleI.className = 'fa-solid fa-sack-xmark';
+    charSheetToggleBtn.title   = 'Inventory';
+    charFieldsEditBtn.hidden   = false;
+  }
+
+  function closeStats() {
+    statsOpen = false;
+    setStatsEditing(false);
+    charPanelsEl.classList.add('show-inventory');
+    charSheetToggleI.className = 'fa-solid fa-scroll';
+    charSheetToggleBtn.title   = 'Character sheet';
+    charFieldsEditBtn.hidden   = true;
+  }
+
+  charSheetToggleBtn.addEventListener('click', () => {
+    if (statsOpen) closeStats(); else openStats();
+  });
+
+  charFieldsEditBtn.addEventListener('click', () => {
+    setStatsEditing(!statsEditing);
+  });
+
   let shopOpen = false;
   const shopTabBtn  = document.getElementById('shop-tab-btn');
   const shopPanel   = document.getElementById('shop-panel');
-  const invScrollEl = document.getElementById('inv-scroll');
   const charHeaderEl= document.getElementById('char-header');
-
-  function setFieldsOpen(open) {
-    charHeaderEl.classList.toggle('fields-collapsed', !open);
-  }
-
-  document.getElementById('char-fields-edit-btn').addEventListener('click', () => {
-    setFieldsOpen(charHeaderEl.classList.contains('fields-collapsed'));
-  });
 
 
   let shopVisibility = {};
@@ -3040,8 +3070,10 @@ window.CharacterManager = ({ auth, database }) => {
   function openShop() {
     shopOpen = true;
     shopTabBtn.classList.add('active');
-    invScrollEl.hidden = true;
-    shopPanel.hidden   = false;
+    charPanelsEl.hidden         = true;
+    charSheetToggleBtn.hidden   = true;
+    charFieldsEditBtn.hidden    = true;
+    shopPanel.hidden            = false;
     inv.collapsePanelInstant();
     if (_hexmapMode) {
       _shopFromHexmap = true;
@@ -3060,8 +3092,10 @@ window.CharacterManager = ({ auth, database }) => {
   function closeShop() {
     shopOpen = false;
     shopTabBtn.classList.remove('active');
-    shopPanel.hidden   = true;
-    invScrollEl.hidden = false;
+    shopPanel.hidden          = true;
+    charPanelsEl.hidden         = false;
+    charSheetToggleBtn.hidden   = false;
+    charFieldsEditBtn.hidden    = !statsOpen;
     if (_shopFromHexmap) {
       _shopFromHexmap = false;
       deselectChar();
@@ -3230,8 +3264,6 @@ window.CharacterManager = ({ auth, database }) => {
           suppressSave = true;
           try { inv.loadState(allChars[currentCharId].state); } catch (e) { console.warn('loadState error:', e); }
           suppressSave = false;
-          const _s = inv.getState();
-          setFieldsOpen(!_s.charName || !_s.carryCapacity);
         }
       }
 
@@ -3396,7 +3428,7 @@ window.CharacterManager = ({ auth, database }) => {
     suppressSave = true;
     try { inv.loadState(blankState()); } catch(e) {}
     suppressSave = false;
-    setFieldsOpen(false);
+
     updateCharHideBtn();
     renderTabs();
   }
@@ -3409,7 +3441,7 @@ window.CharacterManager = ({ auth, database }) => {
     suppressSave = true;
     try { inv.loadState(allChars[charId].state, { keepInspector: shopOpen }); } catch (e) { console.warn('loadState error:', e); }
     suppressSave = false;
-    setFieldsOpen(false);
+
     updateCharHideBtn();
     renderTabs();
     if (shopOpen) {
@@ -3488,6 +3520,7 @@ window.CharacterManager = ({ auth, database }) => {
     const state = inv.getState();
     if (allChars[charId]) allChars[charId].state = state;
     const saveState = JSON.parse(JSON.stringify(state));
+    if (!saveState.charName) saveState.charName = 'Unnamed';
     compactContainerSlots(saveState.containers);
     database.ref(`/inventory_characters/${charId}`).update({
       state: JSON.stringify(saveState),
@@ -3722,6 +3755,9 @@ window.CharacterManager = ({ auth, database }) => {
     const addBtn = document.getElementById('add-char-btn');
     addBtn.hidden  = !window._isDM;
     addBtn.onclick = createChar;
+
+    const activeTab = tabsEl.querySelector('.char-tab.active');
+    if (activeTab) activeTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   // Highlight tab on hover during inventory-item drag
