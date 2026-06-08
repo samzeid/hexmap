@@ -3685,3 +3685,102 @@ body.is-dragging #inv-scroll {
   background: var(--bg, #1a1a2e);
   color: var(--text);
 }
+
+/* ── CALCULATOR OVERLAY ──────────────────────────────────────────────────── */
+#cs-calc-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: transparent;
+}
+#cs-calc-backdrop.cs-calc-open { display: block; }
+
+#cs-calc-overlay {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgb(18, 18, 28);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+  transform: translateY(100%);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  -webkit-user-select: none;
+}
+#cs-calc-overlay.cs-calc-open { transform: translateY(0); }
+
+.cs-calc-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255,255,255,0.3);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.cs-calc-display {
+  background: rgba(255,255,255,0.05);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+}
+.cs-calc-main {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+.cs-calc-sub {
+  font-size: 14px;
+  color: rgba(255,255,255,0.4);
+  line-height: 1;
+  min-height: 14px;
+}
+
+.cs-calc-keys {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.cs-calc-keys button {
+  padding: 0;
+  height: 52px;
+  font-size: 20px;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background 0.08s;
+}
+.cs-calc-keys button:active { background: rgba(255,255,255,0.22); }
+.cs-calc-op {
+  background: rgb(var(--ac) / 0.15) !important;
+  color: rgb(var(--ac));
+}
+.cs-calc-op:active { background: rgb(var(--ac) / 0.35) !important; }
+.cs-calc-fn {
+  font-size: 14px;
+  color: rgba(255,255,255,0.5);
+}
+.cs-calc-wide { grid-column: span 2; }
+.cs-calc-eq {
+  background: rgb(var(--ac) / 0.25) !important;
+  color: rgb(var(--ac));
+  font-size: 22px;
+}
+.cs-calc-eq:active { background: rgb(var(--ac) / 0.5) !important; }

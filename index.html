@@ -437,6 +437,32 @@
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <div id="cs-calc-backdrop"></div>
+  <div id="cs-calc-overlay" role="dialog" aria-modal="true">
+    <div class="cs-calc-header" id="cs-calc-header"></div>
+    <div class="cs-calc-display">
+      <div class="cs-calc-main" id="cs-calc-main">0</div>
+      <div class="cs-calc-sub" id="cs-calc-sub"></div>
+    </div>
+    <div class="cs-calc-keys">
+      <button type="button" data-key="7">7</button>
+      <button type="button" data-key="8">8</button>
+      <button type="button" data-key="9">9</button>
+      <button type="button" data-key="+" class="cs-calc-op">+</button>
+      <button type="button" data-key="4">4</button>
+      <button type="button" data-key="5">5</button>
+      <button type="button" data-key="6">6</button>
+      <button type="button" data-key="-" class="cs-calc-op">−</button>
+      <button type="button" data-key="1">1</button>
+      <button type="button" data-key="2">2</button>
+      <button type="button" data-key="3">3</button>
+      <button type="button" data-key="back" class="cs-calc-fn">⌫</button>
+      <button type="button" data-key="0" class="cs-calc-wide">0</button>
+      <button type="button" data-key="clear" class="cs-calc-fn">C</button>
+      <button type="button" data-key="=" class="cs-calc-eq">=</button>
+    </div>
+  </div>
+
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
   <script src="script.js"></script>
   <script src="inventory/items.js"></script>

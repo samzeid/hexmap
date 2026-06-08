@@ -2072,6 +2072,115 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     el.addEventListener('keydown', e => { if (e.key === 'Enter') { applyEval(); el.blur(); } });
   });
 
+  // ── CALCULATOR OVERLAY (touch devices) ───────────────────────────────────
+  (function () {
+    const overlay   = document.getElementById('cs-calc-overlay');
+    const backdrop  = document.getElementById('cs-calc-backdrop');
+    const headerEl  = document.getElementById('cs-calc-header');
+    const mainEl    = document.getElementById('cs-calc-main');
+    const subEl     = document.getElementById('cs-calc-sub');
+    if (!overlay) return;
+
+    const CALC_FIELDS = {
+      'cs-hp':                 'Current HP',
+      'cs-temp-hp':            'Temp HP',
+      'cs-hit-dice-remaining': 'Hit Dice',
+    };
+
+    let targetEl = null;
+    let baseVal  = 0;
+    let op       = '';   // '+' | '-' | ''
+    let numStr   = '';
+
+    function renderDisplay() {
+      if (!op) {
+        mainEl.textContent = numStr || String(baseVal);
+        subEl.textContent  = '';
+      } else {
+        const sym = op === '-' ? '−' : '+';
+        mainEl.textContent = `${baseVal} ${sym} ${numStr || '_'}`;
+        if (numStr) {
+          const res = Math.max(0, op === '-' ? baseVal - parseInt(numStr) : baseVal + parseInt(numStr));
+          subEl.textContent = `= ${res}`;
+        } else {
+          subEl.textContent = '';
+        }
+      }
+    }
+
+    function show(el) {
+      targetEl = el;
+      baseVal  = parseInt(el.value) || 0;
+      op       = '';
+      numStr   = '';
+      headerEl.textContent = CALC_FIELDS[el.id] || '';
+      renderDisplay();
+      overlay.classList.add('cs-calc-open');
+      backdrop.classList.add('cs-calc-open');
+      el.readOnly = true;
+    }
+
+    function hide() {
+      overlay.classList.remove('cs-calc-open');
+      backdrop.classList.remove('cs-calc-open');
+      if (targetEl) { targetEl.readOnly = false; targetEl = null; }
+      op = ''; numStr = '';
+    }
+
+    function commit() {
+      if (!targetEl) return;
+      let result;
+      if (!op) {
+        result = numStr !== '' ? parseInt(numStr) : baseVal;
+      } else {
+        result = numStr !== ''
+          ? (op === '-' ? baseVal - parseInt(numStr) : baseVal + parseInt(numStr))
+          : baseVal;
+      }
+      result = Math.max(0, result);
+      targetEl.value = String(result);
+      state[CS_ID_TO_KEY[targetEl.id]] = String(result);
+      updateCsCalculations();
+      if (onChange) onChange();
+      hide();
+    }
+
+    overlay.addEventListener('pointerdown', e => {
+      const key = e.target.closest('[data-key]')?.dataset.key;
+      if (!key) return;
+      e.preventDefault();
+      if (key === '=') {
+        commit();
+      } else if (key === 'back') {
+        if (numStr)        numStr = numStr.slice(0, -1);
+        else if (op)       op = '';
+      } else if (key === 'clear') {
+        op = ''; numStr = '';
+      } else if (key === '+' || key === '-') {
+        if (op && !numStr) { op = key; }
+        else if (op && numStr) { commit(); return; }
+        else { op = key; numStr = ''; }
+      } else {
+        numStr += key;
+      }
+      renderDisplay();
+    });
+
+    backdrop.addEventListener('pointerdown', () => hide());
+
+    const CALC_IDS = Object.keys(CALC_FIELDS);
+    CALC_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('pointerdown', e => {
+        if (e.pointerType !== 'mouse') {
+          e.preventDefault();
+          show(el);
+        }
+      });
+    });
+  })();
+
   // ── ATTACKS ───────────────────────────────────────────────────────────────
   const attacksList = document.getElementById('cs-attacks-list');
   const attacksAddBtn = document.getElementById('cs-attacks-add');
