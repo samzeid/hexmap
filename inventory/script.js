@@ -176,16 +176,24 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       else el.value = v || '';
     }
 
+    const exhPenalty = state.exhaustion || 0;
+
     Object.entries(SAVE_AB).forEach(([saveKey, ab]) => {
       const mod = mods[ab];
-      const auto = mod !== null ? mod + (state[saveKey + 'Prof'] ? prof : 0) : null;
+      const base = mod !== null ? mod + (state[saveKey + 'Prof'] ? prof : 0) : null;
+      const auto = base !== null ? base - exhPenalty : null;
       applyAuto(CS_ID_MAP[saveKey], saveKey, auto);
+      const el = document.getElementById(CS_ID_MAP[saveKey]);
+      if (el) el.classList.toggle('cs-exh-penalty', exhPenalty > 0 && mod !== null);
     });
 
     Object.entries(SKILL_AB).forEach(([skill, ab]) => {
       const mod = mods[ab];
-      const auto = mod !== null ? mod + (state[skill + 'Prof'] ? prof : 0) : null;
+      const base = mod !== null ? mod + (state[skill + 'Prof'] ? prof : 0) : null;
+      const auto = base !== null ? base - exhPenalty : null;
       applyAuto(CS_ID_MAP[skill], skill, auto);
+      const el = document.getElementById(CS_ID_MAP[skill]);
+      if (el) el.classList.toggle('cs-exh-penalty', exhPenalty > 0 && mod !== null);
     });
 
     [
@@ -202,8 +210,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         ? autoSkill
         : parseInt(state[skill]);
       el.textContent = (effectiveSkill !== null && !isNaN(effectiveSkill))
-        ? String(10 + effectiveSkill)
+        ? String(10 + effectiveSkill - exhPenalty)
         : '—';
+      el.classList.toggle('cs-exh-penalty', exhPenalty > 0 && mod !== null);
     });
 
     // Initiative = DEX modifier
@@ -284,13 +293,20 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       acEl.classList.remove('cs-auto');
     }
 
-    // Speed: default 30ft
+    // Speed: default 30ft, every 2 exhaustion levels = -5ft
     const speedEl = document.getElementById('cs-speed');
     if (speedEl && document.activeElement !== speedEl) {
       const isEmpty = state.speed === '' || state.speed == null;
-      speedEl.classList.toggle('cs-auto', isEmpty);
-      if (isEmpty) speedEl.value = '30';
-      else speedEl.value = state.speed;
+      const baseSpeed = isEmpty ? 30 : parseInt(state.speed);
+      const speedPenalty = Math.floor(exhPenalty / 2) * 5;
+      if (!isNaN(baseSpeed)) {
+        speedEl.value = String(Math.max(0, baseSpeed - speedPenalty));
+        speedEl.classList.toggle('cs-auto', isEmpty || speedPenalty > 0);
+        speedEl.classList.toggle('cs-exh-penalty', speedPenalty > 0);
+      } else {
+        speedEl.value = state.speed || '';
+        speedEl.classList.remove('cs-auto', 'cs-exh-penalty');
+      }
     }
 
     renderAttacks();
@@ -2093,7 +2109,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const damageDice = diceMatch ? diceMatch[1] : null;
     const typeMatch  = afterBr.match(/^\d+d\d+\s+(\w+)/);
     const damageType = typeMatch ? typeMatch[1] : null;
-    return { isRanged, isFinesse, damageDice, damageType };
+    const rangeMatch = afterBr.match(/(?:Thrown|Ammunition)\s*\((\d+\/\d+)\)/i);
+    const range = rangeMatch ? rangeMatch[1] : 'Melee';
+    const isThrown = /Thrown\s*\(/i.test(afterBr);
+    const rangeType = isThrown ? 'Thrown' : isRanged ? 'Ranged' : null;
+    return { isRanged, isFinesse, damageDice, damageType, range, rangeType };
   }
 
   function computeWeaponAutoStats(slotData) {
@@ -2111,11 +2131,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (info.isRanged)       mod = dexMod;
     else if (info.isFinesse) mod = Math.max(strMod, dexMod);
     else                     mod = strMod;
-    const toHitVal = mod + profBonus;
+    const toHitVal = mod + profBonus - (state.exhaustion || 0);
     const toHit  = toHitVal >= 0 ? `+${toHitVal}` : `${toHitVal}`;
     const modStr = mod > 0 ? `+${mod}` : mod < 0 ? `${mod}` : '';
     const damage = `${info.damageDice}${modStr}`;
-    return { toHit, damage, damageType: info.damageType };
+    return { toHit, damage, damageType: info.damageType, range: info.range, rangeType: info.rangeType };
   }
 
   function computeUnarmedStrike() {
@@ -2125,10 +2145,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       : (parseInt(state.proficiency) || 2);
     const strScore = parseInt(state.str);
     const strMod = !isNaN(strScore) ? Math.floor((strScore - 10) / 2) : 0;
-    const toHitVal = strMod + profBonus;
+    const toHitVal = strMod + profBonus - (state.exhaustion || 0);
     const toHit = toHitVal >= 0 ? `+${toHitVal}` : `${toHitVal}`;
     const damage = String(Math.max(1, 1 + strMod));
-    return { toHit, damage };
+    return { toHit, damage, range: 'Melee' };
   }
 
   function syncEquippedContainer() {
@@ -2170,34 +2190,36 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   function initAttackDrag(handle, rowEl, listEl) {
     handle.addEventListener('pointerdown', e => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
       e.preventDefault();
-      handle.setPointerCapture(e.pointerId);
       rowEl.classList.add('cs-attack-dragging');
 
       const onMove = ev => {
         const allRows = [...listEl.querySelectorAll('[data-attack-key]')];
+        let inserted = false;
         for (let i = 0; i < allRows.length; i++) {
           if (allRows[i] === rowEl) continue;
           const rect = allRows[i].getBoundingClientRect();
           if (ev.clientY < rect.top + rect.height / 2) {
             listEl.insertBefore(rowEl, allRows[i]);
-            return;
+            inserted = true;
+            break;
           }
         }
-        listEl.appendChild(rowEl);
+        if (!inserted) listEl.appendChild(rowEl);
       };
 
       const onUp = () => {
         rowEl.classList.remove('cs-attack-dragging');
-        handle.removeEventListener('pointermove', onMove);
-        handle.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
         const allRows = [...listEl.querySelectorAll('[data-attack-key]')];
         state.attackOrder = allRows.map(r => r.dataset.attackKey);
         if (onChange) onChange();
       };
 
-      handle.addEventListener('pointermove', onMove);
-      handle.addEventListener('pointerup', onUp);
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
     });
   }
 
@@ -2210,9 +2232,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const isAuto = !saved && !!auto;
     input.value = isAuto ? auto : saved;
     input.classList.toggle('cs-auto', isAuto);
+    if (field === 'toHit' && isAuto && state.exhaustion > 0) input.classList.add('cs-exh-penalty');
     input.addEventListener('input', () => {
       savedObj[field] = input.value;
-      input.classList.remove('cs-auto');
+      input.classList.remove('cs-auto', 'cs-exh-penalty');
       if (onChange) onChange();
     });
     input.addEventListener('blur', () => {
@@ -2220,21 +2243,36 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         savedObj[field] = '';
         input.value = auto;
         input.classList.add('cs-auto');
+        if (state.exhaustion > 0) input.classList.add('cs-exh-penalty');
       }
     });
     return input;
   }
 
-  const DMG_TYPE_ABBR = {
-    Bludgeoning: 'Bludg', Slashing: 'Slash', Piercing: 'Pierc',
-    Lightning: 'Ltng', Necrotic: 'Necro', Psychic: 'Psych',
-    Thunder: 'Thund', Radiant: 'Radi',
-  };
-  function makeDmgTypeCell(damageType) {
-    const span = document.createElement('span');
-    span.className = 'cs-attack-dmg-type';
-    if (damageType) span.textContent = DMG_TYPE_ABBR[damageType] || damageType;
-    return span;
+  function makeRangeCell(savedObj, rangeVal, rangeType) {
+    const cell = document.createElement('div');
+    cell.className = 'cs-attack-range-cell';
+    cell.appendChild(makeAttackInput('Melee', savedObj, 'range', rangeVal));
+    if (rangeType) {
+      const badge = document.createElement('span');
+      badge.className = 'cs-attack-dmg-type-badge';
+      badge.textContent = rangeType;
+      cell.appendChild(badge);
+    }
+    return cell;
+  }
+
+  function makeInvDamageCell(placeholder, savedObj, field, autoVal, damageType) {
+    const cell = document.createElement('div');
+    cell.className = 'cs-attack-dmg-cell';
+    cell.appendChild(makeAttackInput(placeholder, savedObj, field, autoVal));
+    if (damageType) {
+      const badge = document.createElement('span');
+      badge.className = 'cs-attack-dmg-type-badge';
+      badge.textContent = damageType;
+      cell.appendChild(badge);
+    }
+    return cell;
   }
 
   function renderAttacks() {
@@ -2255,9 +2293,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     unarmedLbl.textContent = 'Unarmed Strike';
     unarmedNameCell.appendChild(unarmedLbl);
     unarmedRow.appendChild(unarmedNameCell);
+    unarmedRow.appendChild(makeRangeCell(unarmedData, unarmedStats.range, null));
     unarmedRow.appendChild(makeAttackInput('+0', unarmedData, 'toHit', unarmedStats.toHit));
-    unarmedRow.appendChild(makeAttackInput('1', unarmedData, 'damage', unarmedStats.damage));
-    unarmedRow.appendChild(makeDmgTypeCell('Bludgeoning'));
+    unarmedRow.appendChild(makeInvDamageCell('1', unarmedData, 'damage', unarmedStats.damage, 'Bludgeoning'));
     unarmedRow.appendChild(document.createElement('span'));
     attacksList.appendChild(unarmedRow);
 
@@ -2312,9 +2350,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if (!state.weaponAttackData[weapon.displayName]) state.weaponAttackData[weapon.displayName] = {};
         const wepData = state.weaponAttackData[weapon.displayName];
         const autoStats = computeWeaponAutoStats(weapon.slotData);
+        row.appendChild(makeRangeCell(wepData, autoStats ? autoStats.range : 'Melee', autoStats ? autoStats.rangeType : null));
         row.appendChild(makeAttackInput('+0', wepData, 'toHit', autoStats ? autoStats.toHit : ''));
-        row.appendChild(makeAttackInput('1d6', wepData, 'damage', autoStats ? autoStats.damage : ''));
-        row.appendChild(makeDmgTypeCell(autoStats ? autoStats.damageType : null));
+        row.appendChild(makeInvDamageCell('1d6', wepData, 'damage', autoStats ? autoStats.damage : '', autoStats ? autoStats.damageType : null));
         row.appendChild(document.createElement('span'));
 
       } else {
@@ -2323,8 +2361,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         row.className = 'cs-attack-row';
         row.dataset.attackKey = item.key;
 
-        ['name', 'toHit'].forEach(field => {
-          const ph = field === 'name' ? 'Attack name' : '+0';
+        ['name', 'range', 'toHit'].forEach(field => {
+          const ph = field === 'name' ? 'Attack name' : field === 'range' ? 'Range' : '+0';
           const input = document.createElement('input');
           input.type = 'text'; input.placeholder = ph; input.autocomplete = 'off';
           input.value = atk[field] || '';
@@ -2337,8 +2375,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         dmgInput.value = atk.damage || '';
         dmgInput.addEventListener('input', () => { state.attacks[i].damage = dmgInput.value; if (onChange) onChange(); });
         row.appendChild(dmgInput);
-
-        row.appendChild(document.createElement('span'));
         const del = document.createElement('button');
         del.className = 'cs-attack-del';
         del.title = 'Remove';
@@ -2358,11 +2394,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   if (attacksAddBtn) {
     attacksAddBtn.addEventListener('click', () => {
-      state.attacks.push({ id: Date.now(), name: '', toHit: '', damage: '' });
+      state.attacks.push({ id: Date.now(), name: '', range: '', toHit: '', damage: '' });
       renderAttacks();
       if (onChange) onChange();
       const inputs = attacksList.querySelectorAll('.cs-attack-row input');
-      if (inputs.length) inputs[inputs.length - 3].focus();
+      if (inputs.length) inputs[inputs.length - 4].focus();
     });
   }
 
@@ -2593,6 +2629,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       dot.classList.toggle('cs-on-success', isSuccess && filled);
       dot.classList.toggle('cs-on-failure',  !isSuccess && filled);
     });
+    const anyActive = state.deathSaves.successes > 0 || state.deathSaves.failures > 0;
+    const skull = document.querySelector('.cs-ds-skull');
+    if (skull) skull.classList.toggle('cs-ds-active', anyActive);
+    document.querySelector('.cs-death-saves')?.classList.toggle('cs-ds-active', anyActive);
   }
   document.querySelectorAll('.cs-death-save-dot').forEach(dot => {
     dot.addEventListener('click', () => {
@@ -2608,18 +2648,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   // ── EXHAUSTION ────────────────────────────────────────────────
   function updateExhaustionDisplay() {
-    document.querySelectorAll('.cs-exhaustion-pip').forEach(pip => {
-      pip.classList.toggle('cs-on', +pip.dataset.level <= state.exhaustion);
-    });
+    const exh = state.exhaustion;
+    const countEl = document.getElementById('cs-exh-count');
+    if (countEl) countEl.textContent = exh;
+    document.getElementById('cs-exh-minus')?.toggleAttribute('disabled', exh <= 0);
+    document.getElementById('cs-exh-plus') ?.toggleAttribute('disabled', exh >= 6);
+    document.querySelector('.cs-exhaustion')?.classList.toggle('cs-exh-warning', exh > 0);
   }
-  document.querySelectorAll('.cs-exhaustion-pip').forEach(pip => {
-    pip.addEventListener('click', () => {
-      const lvl = +pip.dataset.level;
-      state.exhaustion = state.exhaustion === lvl ? lvl - 1 : lvl;
-      updateExhaustionDisplay();
-      updateCsCalculations();
-      if (onChange) onChange();
-    });
+  document.getElementById('cs-exh-minus')?.addEventListener('click', () => {
+    if (state.exhaustion > 0) { state.exhaustion--; updateExhaustionDisplay(); updateCsCalculations(); if (onChange) onChange(); }
+  });
+  document.getElementById('cs-exh-plus')?.addEventListener('click', () => {
+    if (state.exhaustion < 6) { state.exhaustion++; updateExhaustionDisplay(); updateCsCalculations(); if (onChange) onChange(); }
   });
   updateExhaustionDisplay();
 

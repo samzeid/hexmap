@@ -323,13 +323,10 @@
               <label>Death Saves</label>
             </div>
             <div class="cs-exhaustion">
-              <div class="cs-exhaustion-pips">
-                <button type="button" class="cs-exhaustion-pip" data-level="1"></button>
-                <button type="button" class="cs-exhaustion-pip" data-level="2"></button>
-                <button type="button" class="cs-exhaustion-pip" data-level="3"></button>
-                <button type="button" class="cs-exhaustion-pip" data-level="4"></button>
-                <button type="button" class="cs-exhaustion-pip" data-level="5"></button>
-                <button type="button" class="cs-exhaustion-pip" data-level="6"></button>
+              <div class="cs-exhaustion-stepper">
+                <button type="button" class="cs-exh-btn" id="cs-exh-minus">−</button>
+                <span class="cs-exh-count" id="cs-exh-count">0</span>
+                <button type="button" class="cs-exh-btn" id="cs-exh-plus">+</button>
               </div>
               <label>Exhaustion</label>
             </div>
@@ -349,9 +346,9 @@
             <div class="cs-attacks-col-labels">
               <span></span>
               <span>Name</span>
+              <span>Range</span>
               <span>To Hit</span>
               <span>Damage</span>
-              <span>Type</span>
               <span></span>
             </div>
             <div class="cs-attacks-list" id="cs-attacks-list"></div>
