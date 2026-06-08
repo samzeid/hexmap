@@ -134,6 +134,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     armorActive: true,
     equippedShield: '',
     shieldActive: false,
+    inspiration: false,
+    deathSaves: { successes: 0, failures: 0 },
+    exhaustion: 0,
   };
 
   function updateProfButtons() {
@@ -279,6 +282,15 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
     } else if (acEl && state.ac !== '' && state.ac != null) {
       acEl.classList.remove('cs-auto');
+    }
+
+    // Speed: default 30ft
+    const speedEl = document.getElementById('cs-speed');
+    if (speedEl && document.activeElement !== speedEl) {
+      const isEmpty = state.speed === '' || state.speed == null;
+      speedEl.classList.toggle('cs-auto', isEmpty);
+      if (isEmpty) speedEl.value = '30';
+      else speedEl.value = state.speed;
     }
 
     renderAttacks();
@@ -2018,6 +2030,15 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     });
   });
 
+  // When the user focuses speed, restore the base speed so they edit the real value
+  const _speedEl = document.getElementById('cs-speed');
+  if (_speedEl) {
+    _speedEl.addEventListener('focus', () => {
+      _speedEl.value = state.speed || '';
+      _speedEl.classList.remove('cs-auto');
+    });
+  }
+
   const CS_ID_TO_KEY = Object.fromEntries(CS_FIELDS.map(([id, k]) => [id, k]));
   ['cs-hp', 'cs-hp-max', 'cs-temp-hp', 'cs-hit-dice-remaining'].forEach(id => {
     const el = document.getElementById(id);
@@ -2040,19 +2061,20 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   const attacksAddBtn = document.getElementById('cs-attacks-add');
 
   function getInventoryWeapons() {
-    const equipped = state.containers.find(c => c.id === 'equipped');
-    if (!equipped) return [];
+    const containers = state.containers.filter(c => c.id === 'equipped' || c.id === 'strapped');
     const seen = new Set();
     const weapons = [];
-    for (let r = 0; r < equipped.slots.length; r++) {
-      for (let c = 0; c < equipped.slots[r].length; c++) {
-        const slot = equipped.slots[r][c];
-        if (!slot) continue;
-        if (getEffectiveCategory(slot) !== 'weapon') continue;
-        const displayName = computeDisplayName(slot);
-        if (seen.has(displayName)) continue;
-        seen.add(displayName);
-        weapons.push({ slotData: slot, container: equipped, r, c, key: `${equipped.id}-${r}-${c}`, displayName });
+    for (const container of containers) {
+      for (let r = 0; r < container.slots.length; r++) {
+        for (let c = 0; c < container.slots[r].length; c++) {
+          const slot = container.slots[r][c];
+          if (!slot) continue;
+          if (getEffectiveCategory(slot) !== 'weapon') continue;
+          const displayName = computeDisplayName(slot);
+          if (seen.has(displayName)) continue;
+          seen.add(displayName);
+          weapons.push({ slotData: slot, container, r, c, key: `${container.id}-${r}-${c}`, displayName });
+        }
       }
     }
     return weapons;
@@ -2110,16 +2132,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
   function syncEquippedContainer() {
-    const equipped = state.containers.find(c => c.id === 'equipped');
-    if (!equipped) return;
+    const containers = state.containers.filter(c => c.id === 'equipped' || c.id === 'strapped');
+    if (!containers.length) return;
     let foundArmor = null;
     let foundShield = null;
-    for (const row of equipped.slots) {
-      for (const slot of row) {
-        if (!slot) continue;
-        const cat = getEffectiveCategory(slot);
-        if (!foundArmor && cat === 'armor') foundArmor = computeDisplayName(slot);
-        if (!foundShield && cat === 'shield') foundShield = computeDisplayName(slot);
+    for (const container of containers) {
+      for (const row of container.slots) {
+        for (const slot of row) {
+          if (!slot) continue;
+          const cat = getEffectiveCategory(slot);
+          if (!foundArmor && cat === 'armor') foundArmor = computeDisplayName(slot);
+          if (!foundShield && cat === 'shield') foundShield = computeDisplayName(slot);
+        }
       }
     }
     let changed = false;
@@ -2545,6 +2569,59 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       otherProfsToggle.classList.toggle('cs-other-profs-open', open);
     });
   }
+
+  // ── INSPIRATION ───────────────────────────────────────────────
+  function updateInspirationDisplay() {
+    const btn = document.getElementById('cs-inspiration-toggle');
+    if (btn) btn.classList.toggle('cs-on', state.inspiration);
+  }
+  const inspirationBtn = document.getElementById('cs-inspiration-toggle');
+  if (inspirationBtn) {
+    inspirationBtn.addEventListener('click', () => {
+      state.inspiration = !state.inspiration;
+      updateInspirationDisplay();
+      if (onChange) onChange();
+    });
+  }
+  updateInspirationDisplay();
+
+  // ── DEATH SAVES ───────────────────────────────────────────────
+  function updateDeathSavesDisplay() {
+    document.querySelectorAll('.cs-death-save-dot').forEach(dot => {
+      const isSuccess = dot.dataset.type === 'success';
+      const filled = +dot.dataset.level <= (isSuccess ? state.deathSaves.successes : state.deathSaves.failures);
+      dot.classList.toggle('cs-on-success', isSuccess && filled);
+      dot.classList.toggle('cs-on-failure',  !isSuccess && filled);
+    });
+  }
+  document.querySelectorAll('.cs-death-save-dot').forEach(dot => {
+    dot.addEventListener('click', () => {
+      const isSuccess = dot.dataset.type === 'success';
+      const key = isSuccess ? 'successes' : 'failures';
+      const lvl = +dot.dataset.level;
+      state.deathSaves[key] = state.deathSaves[key] === lvl ? lvl - 1 : lvl;
+      updateDeathSavesDisplay();
+      if (onChange) onChange();
+    });
+  });
+  updateDeathSavesDisplay();
+
+  // ── EXHAUSTION ────────────────────────────────────────────────
+  function updateExhaustionDisplay() {
+    document.querySelectorAll('.cs-exhaustion-pip').forEach(pip => {
+      pip.classList.toggle('cs-on', +pip.dataset.level <= state.exhaustion);
+    });
+  }
+  document.querySelectorAll('.cs-exhaustion-pip').forEach(pip => {
+    pip.addEventListener('click', () => {
+      const lvl = +pip.dataset.level;
+      state.exhaustion = state.exhaustion === lvl ? lvl - 1 : lvl;
+      updateExhaustionDisplay();
+      updateCsCalculations();
+      if (onChange) onChange();
+    });
+  });
+  updateExhaustionDisplay();
 
   function autoResizeTextarea(ta) {
     ta.style.height = 'auto';
@@ -3182,6 +3259,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         armorActive:    state.armorActive,
         equippedShield: state.equippedShield,
         shieldActive:   state.shieldActive,
+        inspiration:  state.inspiration,
+        deathSaves:   state.deathSaves,
+        exhaustion:   state.exhaustion,
         ...csState,
         ...profState,
       }));
@@ -3282,6 +3362,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       state.armorActive    = newState.armorActive != null ? !!newState.armorActive : true;
       state.equippedShield = newState.equippedShield || '';
       state.shieldActive   = !!newState.shieldActive;
+      state.inspiration = !!newState.inspiration;
+      const _ds = newState.deathSaves;
+      const _toCount = v => Array.isArray(v) ? v.filter(Boolean).length : (typeof v === 'number' ? Math.max(0, Math.min(3, v)) : 0);
+      state.deathSaves = _ds && typeof _ds === 'object'
+        ? { successes: _toCount(_ds.successes), failures: _toCount(_ds.failures) }
+        : { successes: 0, failures: 0 };
+      state.exhaustion = typeof newState.exhaustion === 'number' ? Math.max(0, Math.min(6, newState.exhaustion)) : 0;
+      updateInspirationDisplay();
+      updateDeathSavesDisplay();
+      updateExhaustionDisplay();
       if (armorSelectEl)  armorSelectEl.value  = state.equippedArmor;
       if (shieldSelectEl) shieldSelectEl.value = state.equippedShield;
       updateArmorDisplay();
