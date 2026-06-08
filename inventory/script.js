@@ -8,7 +8,230 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     ];
   }
 
-  const state = { charName: '', carryCapacity: '', containers: createDefaultContainers() };
+  const CS_FIELDS = [
+    ['cs-class','charClass'],['cs-race','race'],['cs-level','level'],
+    ['cs-str','str'],['cs-dex','dex'],['cs-con','con'],['cs-int','int'],['cs-wis','wis'],['cs-cha','cha'],
+    ['cs-str-save','strSave'],['cs-dex-save','dexSave'],['cs-con-save','conSave'],
+    ['cs-int-save','intSave'],['cs-wis-save','wisSave'],['cs-cha-save','chaSave'],
+    ['cs-athletics','athletics'],
+    ['cs-acrobatics','acrobatics'],['cs-sleight-of-hand','sleightOfHand'],['cs-stealth','stealth'],
+    ['cs-arcana','arcana'],['cs-history','history'],['cs-investigation','investigation'],
+    ['cs-nature','nature'],['cs-religion','religion'],
+    ['cs-animal-handling','animalHandling'],['cs-insight','insight'],['cs-medicine','medicine'],
+    ['cs-perception','perception'],['cs-survival','survival'],
+    ['cs-deception','deception'],['cs-intimidation','intimidation'],
+    ['cs-performance','performance'],['cs-persuasion','persuasion'],
+    ['cs-hp','hp'],['cs-hp-max','hpMax'],['cs-ac','ac'],['cs-temp-hp','tempHp'],
+    ['cs-hit-dice-remaining','hitDiceRemaining'],['cs-hit-dice-count','hitDiceCount'],['cs-hit-dice-type','hitDiceType'],
+    ['cs-speed','speed'],['cs-initiative','initiative'],
+    ['cs-proficiency','proficiency'],
+    ['cs-languages','languages'],['cs-tools-prof','toolsProf'],
+    ['cs-weapons-prof','weaponsProf'],['cs-armor-prof','armorProf'],
+  ];
+
+  const CLASS_HIT_DIE = {
+    artificer:8, barbarian:12, bard:8, cleric:8, druid:8,
+    fighter:10, monk:8, paladin:10, ranger:10, rogue:8,
+    sorcerer:6, warlock:8, wizard:6,
+  };
+
+  const CLASS_SAVE_PROFS = {
+    artificer:  ['con','int'],
+    barbarian:  ['str','con'],
+    bard:       ['dex','cha'],
+    cleric:     ['wis','cha'],
+    druid:      ['int','wis'],
+    fighter:    ['str','con'],
+    monk:       ['str','dex'],
+    paladin:    ['wis','cha'],
+    ranger:     ['str','dex'],
+    rogue:      ['dex','int'],
+    sorcerer:   ['con','cha'],
+    warlock:    ['wis','cha'],
+    wizard:     ['int','wis'],
+  };
+
+  const CS_ID_MAP = Object.fromEntries(CS_FIELDS.map(([id, k]) => [k, id]));
+
+  const PROF_KEYS = [
+    'strSaveProf','dexSaveProf','conSaveProf','intSaveProf','wisSaveProf','chaSaveProf',
+    'athleticsProf','acrobaticsProf','sleightOfHandProf','stealthProf',
+    'arcanaProf','historyProf','investigationProf','natureProf','religionProf',
+    'animalHandlingProf','insightProf','medicineProf','perceptionProf','survivalProf',
+    'deceptionProf','intimidationProf','performanceProf','persuasionProf',
+  ];
+
+  const SKILL_AB = {
+    athletics:'str',
+    acrobatics:'dex', sleightOfHand:'dex', stealth:'dex',
+    arcana:'int', history:'int', investigation:'int', nature:'int', religion:'int',
+    animalHandling:'wis', insight:'wis', medicine:'wis', perception:'wis', survival:'wis',
+    deception:'cha', intimidation:'cha', performance:'cha', persuasion:'cha',
+  };
+
+  const SAVE_AB = {
+    strSave:'str', dexSave:'dex', conSave:'con', intSave:'int', wisSave:'wis', chaSave:'cha',
+  };
+
+  function evalMath(str) {
+    const s = String(str).trim();
+    if (!s) return null;
+    if (!/^[0-9+\-*/(). ]+$/.test(s)) return null;
+    try {
+      const result = Function('"use strict"; return (' + s + ')')();
+      if (typeof result !== 'number' || !isFinite(result)) return null;
+      return Math.round(result);
+    } catch { return null; }
+  }
+
+  function abilityMod(score) {
+    const n = parseInt(score);
+    if (isNaN(n)) return '—';
+    const mod = Math.floor((n - 10) / 2);
+    return mod >= 0 ? `+${mod}` : `${mod}`;
+  }
+
+  function fmtMod(n) { return n >= 0 ? `+${n}` : `${n}`; }
+
+  const _csDefaults = Object.fromEntries(CS_FIELDS.map(([, k]) => [k, '']));
+  const _profDefaults = Object.fromEntries(PROF_KEYS.map(k => [k, false]));
+  const state = {
+    charName: '', carryCapacity: '', containers: createDefaultContainers(),
+    ..._csDefaults, ..._profDefaults,
+  };
+
+  function updateProfButtons() {
+    document.querySelectorAll('.cs-skill-dot[data-prof-key]').forEach(btn => {
+      const key = btn.dataset.profKey;
+      const proficient = !!state[key];
+      btn.classList.toggle('cs-proficient', proficient);
+      const isSave = btn.closest('.cs-save') !== null;
+      btn.textContent = isSave ? (proficient ? '■' : '□') : (proficient ? '●' : '○');
+    });
+  }
+
+  function updateCsCalculations() {
+    const level = parseInt(state.level);
+    const classKey = String(state.charClass || '').toLowerCase().trim();
+    const dieSides = CLASS_HIT_DIE[classKey] || null;
+
+    // Proficiency bonus: auto from level (2024 5e: ceil(level/4)+1), or manual
+    const profAuto = !isNaN(level) && level >= 1 ? Math.ceil(level / 4) + 1 : null;
+    const prof = (state.proficiency === '' || state.proficiency == null) && profAuto !== null
+      ? profAuto : (parseInt(state.proficiency) || 0);
+
+    const mods = {};
+    ['str','dex','con','int','wis','cha'].forEach(ab => {
+      const n = parseInt(state[ab]);
+      mods[ab] = isNaN(n) ? null : Math.floor((n - 10) / 2);
+    });
+
+    function applyAuto(id, stateKey, autoVal, rawNum) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const v = state[stateKey];
+      const isAuto = (v === '' || v == null) && autoVal !== null;
+      el.classList.toggle('cs-auto', isAuto);
+      if (document.activeElement === el) return;
+      if (isAuto) el.value = rawNum ? String(autoVal) : fmtMod(autoVal);
+      else el.value = v || '';
+    }
+
+    Object.entries(SAVE_AB).forEach(([saveKey, ab]) => {
+      const mod = mods[ab];
+      const auto = mod !== null ? mod + (state[saveKey + 'Prof'] ? prof : 0) : null;
+      applyAuto(CS_ID_MAP[saveKey], saveKey, auto);
+    });
+
+    Object.entries(SKILL_AB).forEach(([skill, ab]) => {
+      const mod = mods[ab];
+      const auto = mod !== null ? mod + (state[skill + 'Prof'] ? prof : 0) : null;
+      applyAuto(CS_ID_MAP[skill], skill, auto);
+    });
+
+    [
+      { id: 'cs-passive-perc',       skill: 'perception', ab: 'wis' },
+      { id: 'cs-passive-insight',    skill: 'insight',    ab: 'wis' },
+      { id: 'cs-passive-deception',  skill: 'deception',  ab: 'cha' },
+      { id: 'cs-passive-stealth',    skill: 'stealth',    ab: 'dex' },
+    ].forEach(({ id, skill, ab }) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const mod = mods[ab];
+      const autoSkill = mod !== null ? mod + (state[skill + 'Prof'] ? prof : 0) : null;
+      const effectiveSkill = (state[skill] === '' || state[skill] == null)
+        ? autoSkill
+        : parseInt(state[skill]);
+      el.textContent = (effectiveSkill !== null && !isNaN(effectiveSkill))
+        ? String(10 + effectiveSkill)
+        : '—';
+    });
+
+    // Initiative = DEX modifier
+    const initiativeAuto = mods['dex'] !== null ? mods['dex'] : null;
+    applyAuto('cs-initiative', 'initiative', initiativeAuto);
+
+    // Carry capacity = STR + 4
+    const strScore = parseInt(state.str);
+    const carryAutoVal = !isNaN(strScore) ? strScore : null;
+    const carryEl = document.getElementById('char-carry');
+    if (carryEl && document.activeElement !== carryEl) {
+      const isCarryAuto = (state.carryCapacity === '' || state.carryCapacity == null) && carryAutoVal !== null;
+      carryEl.classList.toggle('cs-auto', isCarryAuto);
+      if (isCarryAuto) carryEl.value = String(carryAutoVal);
+      else carryEl.value = state.carryCapacity || '';
+    }
+
+    // Proficiency bonus display
+    applyAuto('cs-proficiency', 'proficiency', profAuto);
+
+    // Hit die type from class
+    const dieTypeAuto = dieSides ? `d${dieSides}` : null;
+    applyAuto('cs-hit-dice-type', 'hitDiceType', dieTypeAuto, true);
+
+    // Hit dice count = level
+    const hitDiceCountAuto = !isNaN(level) && level >= 1 ? level : null;
+    applyAuto('cs-hit-dice-count', 'hitDiceCount', hitDiceCountAuto, true);
+
+    // Hit dice remaining defaults to max
+    const effectiveMax = (state.hitDiceCount === '' || state.hitDiceCount == null) && hitDiceCountAuto !== null
+      ? hitDiceCountAuto : parseInt(state.hitDiceCount);
+    const hitDiceRemainingAuto = !isNaN(effectiveMax) ? effectiveMax : null;
+    applyAuto('cs-hit-dice-remaining', 'hitDiceRemaining', hitDiceRemainingAuto, true);
+
+    // Hit dice display label (non-edit mode: shows max+type only, e.g. "6d8")
+    const dispEl = document.getElementById('cs-hit-dice-display');
+    if (dispEl) {
+      const maxD = !isNaN(effectiveMax) ? effectiveMax : '—';
+      const type = (state.hitDiceType === '' || state.hitDiceType == null) ? (dieTypeAuto || '') : state.hitDiceType;
+      dispEl.textContent = `${maxD}${type}`;
+    }
+
+    // HP max: level 1 = max die + con; each subsequent = ceil((die+1)/2) + con
+    let hpMaxAuto = null;
+    if (dieSides && !isNaN(level) && level >= 1) {
+      const conMod = mods.con !== null ? mods.con : 0;
+      const avgDie = Math.ceil((dieSides + 1) / 2);
+      hpMaxAuto = dieSides + conMod + (level - 1) * (avgDie + conMod);
+    }
+    applyAuto('cs-hp-max', 'hpMax', hpMaxAuto, true);
+
+    // HP low-health tint
+    const hpEl = document.getElementById('cs-hp');
+    const hpContainer = hpEl && hpEl.closest('.cs-stat-big');
+    if (hpContainer) {
+      const hpVal = parseInt(state.hp);
+      const hpMax = (state.hpMax === '' || state.hpMax == null) && hpMaxAuto !== null
+        ? hpMaxAuto : parseInt(state.hpMax);
+      const isLow = !isNaN(hpVal) && !isNaN(hpMax) && hpMax > 0 && hpVal <= hpMax / 2;
+      hpContainer.classList.toggle('cs-hp-low', isLow);
+    }
+  }
+
+  function updateCsNameDisplay() {
+    const el = document.getElementById('cs-char-name-display');
+    if (el) el.textContent = state.charName || '—';
+  }
 
   // ── ITEM LIBRARY (defined in items.js) ──────────────────────────────────
   const Bulk           = window.Bulk;
@@ -158,7 +381,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const usedEl = document.getElementById('carry-used');
     const header = document.getElementById('char-header');
     usedEl.textContent = used;
-    const max  = parseInt(state.carryCapacity);
+    const strScore = parseInt(state.str);
+    const carryAutoVal = !isNaN(strScore) ? strScore : null;
+    const isCarryAuto = (state.carryCapacity === '' || state.carryCapacity == null) && carryAutoVal !== null;
+    const max  = isCarryAuto ? carryAutoVal : parseInt(state.carryCapacity);
     const over = !isNaN(max) && max > 0 && used > max;
     usedEl.classList.toggle('carry-over', over);
     header.classList.toggle('carry-over', over);
@@ -169,7 +395,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       icon.className = 'fas fa-weight-hanging';
       icon.style.cssText = 'font-size:10px;opacity:0.7;';
       compact.appendChild(icon);
-      compact.appendChild(document.createTextNode(` ${used}/${state.carryCapacity || '—'}`));
+      const displayMax = !isNaN(max) ? String(max) : '—';
+      compact.appendChild(document.createTextNode(` ${used}/${displayMax}`));
       compact.classList.toggle('carry-compact-over', over);
     }
   }
@@ -1709,11 +1936,95 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   // ── CHARACTER FIELDS ──────────────────────────────────────────────────────
   document.getElementById('char-name').addEventListener('input', e => {
     state.charName = e.target.value;
+    updateCsNameDisplay();
     if (onChange) onChange();
   });
   document.getElementById('char-carry').addEventListener('input', e => {
     state.carryCapacity = e.target.value;
     updateCarryDisplay();
+  });
+
+  CS_FIELDS.forEach(([id, k]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('blur', () => updateCsCalculations());
+    el.addEventListener('input', e => {
+      state[k] = e.target.value;
+      if (onChange) onChange();
+      updateCsCalculations();
+    });
+  });
+
+  const CS_ID_TO_KEY = Object.fromEntries(CS_FIELDS.map(([id, k]) => [id, k]));
+  ['cs-hp', 'cs-hp-max', 'cs-temp-hp', 'cs-hit-dice-remaining'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    function applyEval() {
+      const result = evalMath(el.value);
+      if (result !== null) {
+        el.value = result;
+        state[CS_ID_TO_KEY[id]] = String(result);
+        updateCsCalculations();
+        if (onChange) onChange();
+      }
+    }
+    el.addEventListener('blur', applyEval);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') { applyEval(); el.blur(); } });
+  });
+
+  const otherProfsToggle = document.getElementById('cs-other-profs-toggle');
+  const otherProfsBody   = document.getElementById('cs-other-profs-body');
+  if (otherProfsToggle && otherProfsBody) {
+    otherProfsToggle.addEventListener('click', () => {
+      const open = otherProfsBody.hidden;
+      otherProfsBody.hidden = !open;
+      otherProfsToggle.setAttribute('aria-expanded', String(open));
+      otherProfsToggle.classList.toggle('cs-other-profs-open', open);
+    });
+  }
+
+  function autoResizeTextarea(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+  }
+  ['cs-languages','cs-tools-prof','cs-weapons-prof','cs-armor-prof'].forEach(id => {
+    const ta = document.getElementById(id);
+    if (!ta) return;
+    ta.addEventListener('input', () => autoResizeTextarea(ta));
+  });
+
+  const classEl = document.getElementById('cs-class');
+  if (classEl) {
+    classEl.addEventListener('input', () => {
+      const classKey = String(state.charClass || '').toLowerCase().trim();
+      const profs = CLASS_SAVE_PROFS[classKey];
+      if (!profs) return;
+      ['str','dex','con','int','wis','cha'].forEach(ab => {
+        state[`${ab}SaveProf`] = profs.includes(ab);
+      });
+      updateProfButtons();
+      updateCsCalculations();
+      if (onChange) onChange();
+    });
+  }
+  ['str','dex','con','int','wis','cha'].forEach(ab => {
+    const scoreEl = document.getElementById(`cs-${ab}`);
+    const modEl   = document.getElementById(`cs-${ab}-mod`);
+    if (!scoreEl || !modEl) return;
+    scoreEl.addEventListener('input', e => {
+      modEl.textContent = abilityMod(e.target.value);
+      updateCsCalculations();
+    });
+  });
+  document.querySelectorAll('.cs-skill-dot[data-prof-key]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!document.getElementById('stats-panel').classList.contains('editing')) return;
+      const key = btn.dataset.profKey;
+      state[key] = !state[key];
+      updateProfButtons();
+      updateCsCalculations();
+      if (onChange) onChange();
+    });
   });
 
   // ── DRAG & DROP ───────────────────────────────────────────────────────────
@@ -2295,13 +2606,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   return {
     getState() {
+      const csState   = Object.fromEntries(CS_FIELDS.map(([, k]) => [k, state[k] || '']));
+      const profState = Object.fromEntries(PROF_KEYS.map(k => [k, !!state[k]]));
       return JSON.parse(JSON.stringify({
         charName:      state.charName,
         carryCapacity: state.carryCapacity,
         containers:    state.containers,
+        ...csState,
+        ...profState,
       }));
     },
     flattenGroups(containers) { flattenPackableGroups(containers); },
+    updateCs() { updateCsCalculations(); },
 
 
     // ── SHOP API ────────────────────────────────────────────────
@@ -2376,6 +2692,26 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           for (const slot of row) ensurePackableQty(slot);
       document.getElementById('char-name').value  = state.charName;
       document.getElementById('char-carry').value = state.carryCapacity;
+      if (newState.hitDice && !newState.hitDiceCount) {
+        const match = String(newState.hitDice).match(/^(\d+)(d\d+)$/i);
+        if (match) { newState = { ...newState, hitDiceCount: match[1], hitDiceType: match[2].toLowerCase() }; }
+      }
+      CS_FIELDS.forEach(([id, k]) => {
+        state[k] = newState[k] || '';
+        const el = document.getElementById(id);
+        if (el) {
+          el.value = state[k];
+          if (el.tagName === 'TEXTAREA') autoResizeTextarea(el);
+        }
+      });
+      PROF_KEYS.forEach(k => { state[k] = !!newState[k]; });
+      ['str','dex','con','int','wis','cha'].forEach(ab => {
+        const modEl = document.getElementById(`cs-${ab}-mod`);
+        if (modEl) modEl.textContent = abilityMod(state[ab]);
+      });
+      updateProfButtons();
+      updateCsCalculations();
+      updateCsNameDisplay();
       render();
     },
   };
@@ -2514,6 +2850,8 @@ window.CharacterManager = ({ auth, database }) => {
     statsEditing = on;
     statsPanelEl.classList.toggle('editing', on);
     charFieldsEditBtn.classList.toggle('active', on);
+    charHeaderEl.classList.toggle('fields-open', on);
+    if (inv) inv.updateCs();
   }
 
   function openStats() {
@@ -2530,7 +2868,6 @@ window.CharacterManager = ({ auth, database }) => {
     charPanelsEl.classList.add('show-inventory');
     charSheetToggleI.className = 'fa-solid fa-scroll';
     charSheetToggleBtn.title   = 'Character sheet';
-    charFieldsEditBtn.hidden   = true;
   }
 
   charSheetToggleBtn.addEventListener('click', () => {
@@ -3069,6 +3406,7 @@ window.CharacterManager = ({ auth, database }) => {
 
   function openShop() {
     shopOpen = true;
+    setStatsEditing(false);
     shopTabBtn.classList.add('active');
     charPanelsEl.hidden         = true;
     charSheetToggleBtn.hidden   = true;
@@ -3095,7 +3433,7 @@ window.CharacterManager = ({ auth, database }) => {
     shopPanel.hidden          = true;
     charPanelsEl.hidden         = false;
     charSheetToggleBtn.hidden   = false;
-    charFieldsEditBtn.hidden    = !statsOpen;
+    charFieldsEditBtn.hidden    = false;
     if (_shopFromHexmap) {
       _shopFromHexmap = false;
       deselectChar();
