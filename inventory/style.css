@@ -2541,6 +2541,123 @@ body.is-dragging #inv-scroll {
   flex-shrink: 0;
 }
 
+/* ── ATTACKS SECTION ─────────────────────────────────────────── */
+.cs-attacks {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.03);
+  margin: 0 8px 6px;
+  overflow: hidden;
+}
+
+.cs-attacks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.cs-attacks-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.cs-attacks-add {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  padding: 2px 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: 4px;
+  line-height: 1;
+}
+.cs-attacks-add:active { background: rgba(255, 255, 255, 0.08); }
+#stats-panel:not(.editing) .cs-attacks-add { display: none; }
+
+.cs-attacks-col-labels {
+  display: grid;
+  grid-template-columns: 1fr 56px 80px 22px;
+  padding: 4px 10px 2px;
+  gap: 4px;
+}
+.cs-attacks-col-labels span {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.cs-attacks-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 8px;
+  gap: 3px;
+}
+
+.cs-attack-row {
+  display: grid;
+  grid-template-columns: 1fr 56px 80px 22px;
+  gap: 4px;
+  align-items: center;
+}
+
+.cs-attack-row input {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 3px 5px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+#stats-panel.editing .cs-attack-row input {
+  pointer-events: auto;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+#stats-panel.editing .cs-attack-row input:focus {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.cs-attack-del {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 10px;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+}
+.cs-attack-del:active { background: rgba(255, 255, 255, 0.08); color: rgba(255, 80, 80, 0.7); }
+#stats-panel.editing .cs-attack-del { display: flex; }
+
+.cs-attacks-empty {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.2);
+  padding: 4px 2px 2px;
+  font-style: italic;
+}
+
+/* ── LANGUAGES / OTHER PROFS ─────────────────────────────────── */
 .cs-other-profs {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius);
@@ -2677,9 +2794,11 @@ body.is-dragging #inv-scroll {
 }
 .cs-stat-col3 > .cs-stat-big {
   flex: 2;
+  min-height: 90px;
 }
 .cs-stat-col3 > .cs-passive-panel {
   flex: 2;
+  min-height: 90px;
 }
 
 .cs-passive-panel {
@@ -2689,7 +2808,7 @@ body.is-dragging #inv-scroll {
   display: flex;
   flex-direction: column;
   padding: 6px 8px;
-  gap: 3px;
+  gap: 1px;
   min-width: 0;
   overflow: hidden;
 }
@@ -2700,7 +2819,9 @@ body.is-dragging #inv-scroll {
   letter-spacing: 0.06em;
   color: rgba(255, 255, 255, 0.45);
   line-height: 1;
-  margin-bottom: 2px;
+  text-align: center;
+  margin-top: auto;
+  padding-top: 4px;
 }
 .cs-passive-row {
   display: flex;
@@ -2781,7 +2902,150 @@ body.is-dragging #inv-scroll {
 }
 .cs-hp-badge > i { color: rgba(220, 60, 80, 0.3); }
 .cs-stat-big.cs-hp-low .cs-hp-badge > i { color: rgba(220, 60, 80, 0.65); }
-.cs-ac-badge > i { color: rgba(255, 255, 255, 0.12); }
+.cs-ac-badge > i { font-size: 36px; color: rgba(255, 255, 255, 0.12); }
+
+
+/* ── Shield selector ──────────────────────────────── */
+.cs-shield-sel {
+  width: 100%;
+}
+#stats-panel.editing .cs-shield-sel input  { display: block; }
+#stats-panel.editing .cs-shield-view       { display: none !important; }
+#stats-panel:not(.editing) .cs-shield-sel input { display: none; }
+
+.cs-shield-sel input {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 9px;
+  font-family: inherit;
+  padding: 2px 5px;
+  outline: none;
+  text-align: center;
+  cursor: text;
+  pointer-events: auto;
+}
+.cs-shield-sel input:focus {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.8);
+}
+.cs-shield-view {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  pointer-events: auto;
+}
+.cs-shield-toggle {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 9px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+.cs-shield-toggle.cs-shield-on { color: rgba(120, 220, 150, 0.9); }
+.cs-shield-toggle:hover { opacity: 0.8; }
+.cs-shield-display {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 2px 2px;
+  font-size: 9px;
+  font-family: inherit;
+  color: rgba(120, 220, 150, 0.85);
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cs-shield-display.cs-item-missing  { color: rgba(255, 255, 255, 0.3); cursor: default; }
+.cs-shield-display.cs-empty         { color: rgba(255, 255, 255, 0.25); cursor: default; }
+.cs-shield-display.cs-disabled      { text-decoration: line-through; opacity: 0.55; }
+.cs-shield-display:not(.cs-item-missing):not(.cs-disabled):not(.cs-empty):hover { color: rgba(120, 220, 150, 1); text-decoration: underline; }
+
+/* ── Armor selector ───────────────────────────────── */
+.cs-armor-sel {
+  width: 100%;
+  margin-top: 4px;
+}
+#stats-panel.editing .cs-armor-sel input  { display: block; }
+#stats-panel.editing .cs-armor-view       { display: none; }
+#stats-panel:not(.editing) .cs-armor-sel input { display: none; }
+#stats-panel:not(.editing) .cs-armor-view { display: flex; }
+
+.cs-armor-sel input {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 9px;
+  font-family: inherit;
+  padding: 2px 5px;
+  outline: none;
+  text-align: center;
+  cursor: text;
+  pointer-events: auto;
+}
+.cs-armor-sel input:focus {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.8);
+}
+.cs-armor-view {
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  pointer-events: auto;
+}
+.cs-armor-toggle {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 9px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+.cs-armor-toggle.cs-armor-on { color: rgba(120, 220, 150, 0.9); }
+.cs-armor-toggle:hover { opacity: 0.8; }
+.cs-armor-display {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 2px 2px;
+  font-size: 9px;
+  font-family: inherit;
+  color: rgba(120, 220, 150, 0.85);
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cs-armor-display.cs-item-missing  { color: rgba(255, 255, 255, 0.3); cursor: default; }
+.cs-armor-display.cs-empty         { color: rgba(255, 255, 255, 0.25); cursor: default; text-align: center; }
+.cs-armor-display.cs-disabled      { text-decoration: line-through; opacity: 0.55; }
+.cs-armor-display:not(.cs-item-missing):not(.cs-disabled):not(.cs-empty):hover { color: rgba(120, 220, 150, 1); text-decoration: underline; }
+
+/* AC badge red tint when armor or shield is disabled */
+.cs-ac-stat.cs-ac-inactive .cs-ac-badge > i { color: rgba(220, 60, 80, 0.65); }
 .cs-stat-icon-badge > input,
 .cs-stat-icon-badge > .cs-hp-fields {
   position: absolute;
@@ -2887,6 +3151,10 @@ body.is-dragging #inv-scroll {
 #stats-panel .cs-combat input,
 #stats-panel .cs-combat select {
   pointer-events: none;
+}
+#stats-panel #cs-hp,
+#stats-panel #cs-hit-dice-remaining {
+  pointer-events: auto;
 }
 #stats-panel.editing .cs-attr-grid input,
 #stats-panel.editing .cs-skills-section input,

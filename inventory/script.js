@@ -84,6 +84,35 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     } catch { return null; }
   }
 
+  // base AC and dex-cap for standard armor (keys match item names in items.js)
+  const ARMOR_AC_TABLE = {
+    'Padded Armor':          { base: 11, dexCap: Infinity },
+    'Leather Armor':         { base: 11, dexCap: Infinity },
+    'Studded Leather Armor': { base: 12, dexCap: Infinity },
+    'Hide Armor':            { base: 12, dexCap: 2 },
+    'Chain Shirt':           { base: 13, dexCap: 2 },
+    'Scale Mail':            { base: 14, dexCap: 2 },
+    'Breastplate':           { base: 14, dexCap: 2 },
+    'Half Plate':            { base: 15, dexCap: 2 },
+    'Ring Mail':             { base: 14, dexCap: 0 },
+    'Chain Mail':            { base: 16, dexCap: 0 },
+    'Splint Armor':          { base: 17, dexCap: 0 },
+    'Full Plate':            { base: 18, dexCap: 0 },
+  };
+
+  function calcArmorAC(armorName, dexMod) {
+    const dex = typeof dexMod === 'number' && isFinite(dexMod) ? dexMod : 0;
+    // Direct match first, then substring match for magical armor (e.g. "Dredge Chain Mail")
+    let entry = ARMOR_AC_TABLE[armorName];
+    if (!entry) {
+      for (const [key, val] of Object.entries(ARMOR_AC_TABLE)) {
+        if (armorName.includes(key)) { entry = val; break; }
+      }
+    }
+    if (!entry) return null;
+    return entry.base + Math.min(dex, entry.dexCap);
+  }
+
   function abilityMod(score) {
     const n = parseInt(score);
     if (isNaN(n)) return '—';
@@ -98,6 +127,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   const state = {
     charName: '', carryCapacity: '', containers: createDefaultContainers(),
     ..._csDefaults, ..._profDefaults,
+    attacks: [],
+    equippedArmor: '',
+    armorActive: true,
+    equippedShield: '',
+    shieldActive: false,
   };
 
   function updateProfButtons() {
@@ -193,11 +227,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const hitDiceCountAuto = !isNaN(level) && level >= 1 ? level : null;
     applyAuto('cs-hit-dice-count', 'hitDiceCount', hitDiceCountAuto, true);
 
-    // Hit dice remaining defaults to max
+    // effectiveMax used only for display label — remaining is always user-controlled
     const effectiveMax = (state.hitDiceCount === '' || state.hitDiceCount == null) && hitDiceCountAuto !== null
       ? hitDiceCountAuto : parseInt(state.hitDiceCount);
-    const hitDiceRemainingAuto = !isNaN(effectiveMax) ? effectiveMax : null;
-    applyAuto('cs-hit-dice-remaining', 'hitDiceRemaining', hitDiceRemainingAuto, true);
 
     // Hit dice display label (non-edit mode: shows max+type only, e.g. "6d8")
     const dispEl = document.getElementById('cs-hit-dice-display');
@@ -225,6 +257,26 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         ? hpMaxAuto : parseInt(state.hpMax);
       const isLow = !isNaN(hpVal) && !isNaN(hpMax) && hpMax > 0 && hpVal <= hpMax / 2;
       hpContainer.classList.toggle('cs-hp-low', isLow);
+    }
+
+    // AC auto-calculation: armor-based or unarmored (10 + Dex), plus shield
+    const acEl = document.getElementById('cs-ac');
+    const acStatEl = acEl && acEl.closest('.cs-ac-stat');
+    const armorInactive = state.equippedArmor && !state.armorActive;
+    const shieldInactive = state.equippedShield && !state.shieldActive;
+    if (acStatEl) acStatEl.classList.toggle('cs-ac-inactive', !!(armorInactive || shieldInactive));
+    if (acEl && document.activeElement !== acEl && (state.ac === '' || state.ac == null)) {
+      const dexMod = mods.dex !== null ? mods.dex : 0;
+      const shieldBonus = (state.equippedShield && state.shieldActive) ? 2 : 0;
+      const useArmor = state.equippedArmor && state.armorActive;
+      const baseAC = useArmor ? calcArmorAC(state.equippedArmor, dexMod) : 10 + dexMod;
+      const autoAC = baseAC !== null ? baseAC + shieldBonus : null;
+      if (autoAC !== null && !isNaN(autoAC)) {
+        acEl.value = String(autoAC);
+        acEl.classList.add('cs-auto');
+      }
+    } else if (acEl && state.ac !== '' && state.ac != null) {
+      acEl.classList.remove('cs-auto');
     }
   }
 
@@ -591,6 +643,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
     }
 
+    populateArmorDatalist();
+    populateShieldDatalist();
     if (onChange) onChange();
   }
 
@@ -1927,7 +1981,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         && !e.target.closest('.shop-item-row')
         && !e.target.closest('.char-tab')
         && !e.target.closest('#inv-close-btn')
-        && !e.target.closest('#shop-tab-btn')) {
+        && !e.target.closest('#shop-tab-btn')
+        && !e.target.closest('#cs-armor-display')
+        && !e.target.closest('#cs-shield-display')) {
       hideInspector();
       render();
     }
@@ -1971,6 +2027,241 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     el.addEventListener('blur', applyEval);
     el.addEventListener('keydown', e => { if (e.key === 'Enter') { applyEval(); el.blur(); } });
   });
+
+  // ── ATTACKS ───────────────────────────────────────────────────────────────
+  const attacksList = document.getElementById('cs-attacks-list');
+  const attacksAddBtn = document.getElementById('cs-attacks-add');
+
+  function renderAttacks() {
+    if (!attacksList) return;
+    attacksList.innerHTML = '';
+    if (!state.attacks.length) {
+      const empty = document.createElement('span');
+      empty.className = 'cs-attacks-empty';
+      empty.textContent = 'No attacks added.';
+      attacksList.appendChild(empty);
+      return;
+    }
+    state.attacks.forEach((atk, i) => {
+      const row = document.createElement('div');
+      row.className = 'cs-attack-row';
+      ['name','toHit','damage'].forEach(field => {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = field === 'name' ? 'Attack name' : field === 'toHit' ? '+0' : '1d6';
+        input.autocomplete = 'off';
+        input.value = atk[field] || '';
+        input.addEventListener('input', () => {
+          state.attacks[i][field] = input.value;
+          if (onChange) onChange();
+        });
+        row.appendChild(input);
+      });
+      const del = document.createElement('button');
+      del.className = 'cs-attack-del';
+      del.title = 'Remove';
+      del.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      del.addEventListener('click', () => {
+        state.attacks.splice(i, 1);
+        renderAttacks();
+        if (onChange) onChange();
+      });
+      row.appendChild(del);
+      attacksList.appendChild(row);
+    });
+  }
+
+  if (attacksAddBtn) {
+    attacksAddBtn.addEventListener('click', () => {
+      state.attacks.push({ name: '', toHit: '', damage: '' });
+      renderAttacks();
+      if (onChange) onChange();
+      const inputs = attacksList.querySelectorAll('.cs-attack-row input');
+      if (inputs.length) inputs[inputs.length - 3].focus();
+    });
+  }
+
+  renderAttacks();
+
+  // ── SHARED HELPERS ────────────────────────────────────────────────────────
+  function findSlotByDisplayName(displayName) {
+    for (const container of state.containers) {
+      for (let r = 0; r < container.slots.length; r++) {
+        for (let c = 0; c < container.slots[r].length; c++) {
+          const slot = container.slots[r][c];
+          if (!slot) continue;
+          if (computeDisplayName(slot) === displayName) {
+            return { slotData: slot, container, r, c, key: `${container.id}-${r}-${c}` };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  function populateCategoryDatalist(datalist, category) {
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    const seen = new Set();
+    for (const container of state.containers) {
+      for (const row of container.slots) {
+        for (const slot of row) {
+          if (!slot) continue;
+          if (getEffectiveCategory(slot) !== category) continue;
+          const displayName = computeDisplayName(slot);
+          if (seen.has(displayName)) continue;
+          seen.add(displayName);
+          const opt = document.createElement('option');
+          opt.value = displayName;
+          datalist.appendChild(opt);
+        }
+      }
+    }
+  }
+
+  // ── SHIELD SELECTOR ───────────────────────────────────────────────────────
+  const shieldSelectEl  = document.getElementById('cs-shield-select');
+  const shieldDatalist  = document.getElementById('cs-shield-options');
+  const shieldViewEl    = document.getElementById('cs-shield-view') || document.querySelector('.cs-shield-view');
+  const shieldToggleBtn = document.getElementById('cs-shield-toggle');
+  const shieldDisplayBtn = document.getElementById('cs-shield-display');
+
+  function populateShieldDatalist() { populateCategoryDatalist(shieldDatalist, 'shield'); }
+
+  function updateShieldDisplay() {
+    if (!shieldViewEl) return;
+    if (state.equippedShield) {
+      shieldViewEl.hidden = false;
+      if (shieldDisplayBtn) {
+        shieldDisplayBtn.textContent = state.equippedShield;
+        shieldDisplayBtn.classList.remove('cs-empty');
+        const found = !!findSlotByDisplayName(state.equippedShield);
+        shieldDisplayBtn.classList.toggle('cs-item-missing', !found);
+        shieldDisplayBtn.classList.toggle('cs-disabled', !state.shieldActive);
+      }
+      if (shieldToggleBtn) {
+        shieldToggleBtn.textContent = state.shieldActive ? '●' : '○';
+        shieldToggleBtn.classList.toggle('cs-shield-on', !!state.shieldActive);
+      }
+    } else {
+      shieldViewEl.hidden = true;
+    }
+  }
+
+  function applyEquippedShield(name) {
+    state.equippedShield = name || '';
+    if (shieldSelectEl) shieldSelectEl.value = state.equippedShield;
+    if (state.equippedShield && !state.shieldActive) state.shieldActive = true;
+    if (!state.equippedShield) state.shieldActive = false;
+    updateShieldDisplay();
+    state.ac = '';
+    updateCsCalculations();
+    if (onChange) onChange();
+  }
+
+  if (shieldSelectEl) {
+    shieldSelectEl.value = state.equippedShield || '';
+    shieldSelectEl.addEventListener('change', () => applyEquippedShield(shieldSelectEl.value.trim()));
+    shieldSelectEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { shieldSelectEl.blur(); applyEquippedShield(shieldSelectEl.value.trim()); }
+    });
+    shieldSelectEl.addEventListener('blur', () => {
+      if (shieldSelectEl.value.trim() === '') applyEquippedShield('');
+    });
+  }
+
+  if (shieldToggleBtn) {
+    shieldToggleBtn.addEventListener('click', () => {
+      state.shieldActive = !state.shieldActive;
+      updateShieldDisplay();
+      state.ac = '';
+      updateCsCalculations();
+      if (onChange) onChange();
+    });
+  }
+
+  if (shieldDisplayBtn) {
+    shieldDisplayBtn.addEventListener('click', () => {
+      const found = findSlotByDisplayName(state.equippedShield);
+      if (!found) return;
+      toggleInspectorFor(found.key, found.slotData, found.container, found.r, found.c);
+    });
+  }
+
+  updateShieldDisplay();
+  populateShieldDatalist();
+
+  // ── ARMOR SELECTOR ────────────────────────────────────────────────────────
+  const armorSelectEl = document.getElementById('cs-armor-select');
+  const armorDatalist = document.getElementById('cs-armor-options');
+
+  function populateArmorDatalist() { populateCategoryDatalist(armorDatalist, 'armor'); }
+
+  const armorToggleBtn  = document.getElementById('cs-armor-toggle');
+  const armorDisplayBtn = document.getElementById('cs-armor-display');
+
+  function updateArmorDisplay() {
+    if (!armorDisplayBtn) return;
+    if (state.equippedArmor) {
+      if (armorToggleBtn) {
+        armorToggleBtn.hidden = false;
+        armorToggleBtn.textContent = state.armorActive ? '●' : '○';
+        armorToggleBtn.classList.toggle('cs-armor-on', !!state.armorActive);
+      }
+      armorDisplayBtn.textContent = state.equippedArmor;
+      const found = !!findSlotByDisplayName(state.equippedArmor);
+      armorDisplayBtn.classList.remove('cs-empty');
+      armorDisplayBtn.classList.toggle('cs-item-missing', !found);
+      armorDisplayBtn.classList.toggle('cs-disabled', !state.armorActive);
+    } else {
+      if (armorToggleBtn) armorToggleBtn.hidden = true;
+      armorDisplayBtn.textContent = '—';
+      armorDisplayBtn.classList.remove('cs-item-missing', 'cs-disabled');
+      armorDisplayBtn.classList.add('cs-empty');
+    }
+  }
+
+  function applyEquippedArmor(name) {
+    state.equippedArmor = name || '';
+    if (state.equippedArmor) state.armorActive = true;
+    if (armorSelectEl) armorSelectEl.value = state.equippedArmor;
+    updateArmorDisplay();
+    state.ac = '';
+    updateCsCalculations();
+    if (onChange) onChange();
+  }
+
+  if (armorSelectEl) {
+    armorSelectEl.value = state.equippedArmor || '';
+    armorSelectEl.addEventListener('change', () => applyEquippedArmor(armorSelectEl.value.trim()));
+    armorSelectEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { armorSelectEl.blur(); applyEquippedArmor(armorSelectEl.value.trim()); }
+    });
+    armorSelectEl.addEventListener('blur', () => {
+      if (armorSelectEl.value.trim() === '') applyEquippedArmor('');
+    });
+  }
+
+  if (armorToggleBtn) {
+    armorToggleBtn.addEventListener('click', () => {
+      state.armorActive = !state.armorActive;
+      updateArmorDisplay();
+      state.ac = '';
+      updateCsCalculations();
+      if (onChange) onChange();
+    });
+  }
+
+  if (armorDisplayBtn) {
+    updateArmorDisplay();
+    armorDisplayBtn.addEventListener('click', () => {
+      const found = findSlotByDisplayName(state.equippedArmor);
+      if (!found) return;
+      toggleInspectorFor(found.key, found.slotData, found.container, found.r, found.c);
+    });
+  }
+
+  populateArmorDatalist();
 
   const otherProfsToggle = document.getElementById('cs-other-profs-toggle');
   const otherProfsBody   = document.getElementById('cs-other-profs-body');
@@ -2612,6 +2903,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         charName:      state.charName,
         carryCapacity: state.carryCapacity,
         containers:    state.containers,
+        attacks:       state.attacks,
+        equippedArmor:  state.equippedArmor,
+        armorActive:    state.armorActive,
+        equippedShield: state.equippedShield,
+        shieldActive:   state.shieldActive,
         ...csState,
         ...profState,
       }));
@@ -2704,6 +3000,15 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           if (el.tagName === 'TEXTAREA') autoResizeTextarea(el);
         }
       });
+      state.attacks = Array.isArray(newState.attacks) ? newState.attacks : [];
+      state.equippedArmor  = newState.equippedArmor  || '';
+      state.armorActive    = newState.armorActive != null ? !!newState.armorActive : true;
+      state.equippedShield = newState.equippedShield || '';
+      state.shieldActive   = !!newState.shieldActive;
+      if (armorSelectEl)  armorSelectEl.value  = state.equippedArmor;
+      if (shieldSelectEl) shieldSelectEl.value = state.equippedShield;
+      updateArmorDisplay();
+      updateShieldDisplay();
       PROF_KEYS.forEach(k => { state[k] = !!newState[k]; });
       ['str','dex','con','int','wis','cha'].forEach(ab => {
         const modEl = document.getElementById(`cs-${ab}-mod`);
@@ -2712,6 +3017,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       updateProfButtons();
       updateCsCalculations();
       updateCsNameDisplay();
+      renderAttacks();
+      populateArmorDatalist();
       render();
     },
   };

@@ -127,11 +127,8 @@
           <div class="cs-char-info-class">
             <input type="text" id="cs-class" list="cs-class-list" placeholder="—" autocomplete="off" />
             <datalist id="cs-class-list">
-              <option value="Artificer"><option value="Barbarian"><option value="Bard">
-              <option value="Cleric"><option value="Druid"><option value="Fighter">
-              <option value="Monk"><option value="Paladin"><option value="Ranger">
-              <option value="Rogue"><option value="Sorcerer"><option value="Warlock">
-              <option value="Wizard">
+              <option value="Barbarian"><option value="Fighter"><option value="Ranger">
+              <option value="Rogue"><option value="Sorcerer">
             </datalist>
             <label>Class</label>
           </div>
@@ -232,10 +229,10 @@
                 <span class="cs-hp-sep">/</span>
                 <input type="text" inputmode="numeric" id="cs-hp-max" placeholder="—" autocomplete="off" />
               </div>
-              <label>HP</label>
+              <label>Hit Points</label>
               <div class="cs-inner-divider"></div>
               <div class="cs-hit-dice-row">
-                <input type="number" id="cs-hit-dice-remaining" placeholder="—" min="0" autocomplete="off" />
+                <input type="text" inputmode="numeric" id="cs-hit-dice-remaining" placeholder="—" autocomplete="off" />
                 <span class="cs-hit-dice-slash">/</span>
                 <div class="cs-hit-dice-max">
                   <span class="cs-hit-dice-display" id="cs-hit-dice-display">—</span>
@@ -257,11 +254,27 @@
                 <label>Speed</label>
               </div>
               <div class="cs-stat-big cs-ac-stat">
+                <div class="cs-shield-sel">
+                  <input type="text" id="cs-shield-select" list="cs-shield-options" placeholder="No shield" autocomplete="off" />
+                  <datalist id="cs-shield-options"></datalist>
+                  <div class="cs-shield-view" hidden>
+                    <button type="button" id="cs-shield-toggle" class="cs-shield-toggle">○</button>
+                    <button type="button" id="cs-shield-display" class="cs-shield-display">—</button>
+                  </div>
+                </div>
                 <div class="cs-stat-icon-badge cs-ac-badge">
                   <i class="fa-solid fa-shield"></i>
                   <input type="number" id="cs-ac" placeholder="—" autocomplete="off" />
                 </div>
-                <label>AC</label>
+                <div class="cs-armor-sel">
+                  <input type="text" id="cs-armor-select" list="cs-armor-options" placeholder="No armor" autocomplete="off" />
+                  <datalist id="cs-armor-options"></datalist>
+                  <div class="cs-armor-view">
+                    <button type="button" id="cs-armor-toggle" class="cs-armor-toggle" hidden>●</button>
+                    <button type="button" id="cs-armor-display" class="cs-armor-display">—</button>
+                  </div>
+                </div>
+                <label>Armor Class</label>
               </div>
             </div>
             <div class="cs-stat-col3">
@@ -270,7 +283,6 @@
                 <label>Initiative</label>
               </div>
               <div class="cs-passive-panel">
-                <span class="cs-passive-title">Passive</span>
                 <div class="cs-passive-row cs-attr-wis">
                   <span class="cs-passive-label">Perception</span>
                   <span id="cs-passive-perc" class="cs-passive-val">—</span>
@@ -287,11 +299,26 @@
                   <span class="cs-passive-label">Stealth</span>
                   <span id="cs-passive-stealth" class="cs-passive-val">—</span>
                 </div>
+                <span class="cs-passive-title">Passive</span>
               </div>
             </div>
           </div>
         </div><!-- /cs-combat -->
         </div><!-- /cs-main-cols -->
+
+        <div class="cs-attacks">
+          <div class="cs-attacks-header">
+            <span class="cs-attacks-title">Attacks</span>
+            <button class="cs-attacks-add" id="cs-attacks-add" title="Add attack"><i class="fa-solid fa-plus"></i></button>
+          </div>
+          <div class="cs-attacks-col-labels">
+            <span>Name</span>
+            <span>To Hit</span>
+            <span>Damage</span>
+            <span></span>
+          </div>
+          <div class="cs-attacks-list" id="cs-attacks-list"></div>
+        </div>
 
         <div class="cs-other-profs">
           <button class="cs-other-profs-toggle" id="cs-other-profs-toggle" aria-expanded="false">
