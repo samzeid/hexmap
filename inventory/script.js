@@ -3702,6 +3702,16 @@ window.CharacterManager = ({ auth, database }) => {
   const charSheetToggleI   = charSheetToggleBtn.querySelector('i');
   const charFieldsEditBtn  = document.getElementById('char-fields-edit-btn');
 
+  function canEditCurrentChar() {
+    if (window._isDM) return true;
+    if (!currentUser || !currentCharId) return false;
+    return (allChars[currentCharId]?.ownerUid || '') === currentUser.uid;
+  }
+
+  function updateEditBtn() {
+    charFieldsEditBtn.hidden = !canEditCurrentChar();
+  }
+
   function setStatsEditing(on) {
     statsEditing = on;
     statsPanelEl.classList.toggle('editing', on);
@@ -3715,7 +3725,7 @@ window.CharacterManager = ({ auth, database }) => {
     charPanelsEl.classList.remove('show-inventory');
     charSheetToggleI.className = 'fa-solid fa-sack-xmark';
     charSheetToggleBtn.title   = 'Inventory';
-    charFieldsEditBtn.hidden   = false;
+    updateEditBtn();
   }
 
   function closeStats() {
@@ -4289,7 +4299,7 @@ window.CharacterManager = ({ auth, database }) => {
     shopPanel.hidden          = true;
     charPanelsEl.hidden         = false;
     charSheetToggleBtn.hidden   = false;
-    charFieldsEditBtn.hidden    = false;
+    updateEditBtn();
     if (_shopFromHexmap) {
       _shopFromHexmap = false;
       deselectChar();
@@ -4377,6 +4387,7 @@ window.CharacterManager = ({ auth, database }) => {
     roleBtn.title        = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
     roleBtn.dataset.role = isDM ? 'dm' : 'player';
     if (isDM) updateCharHideBtn();
+    updateEditBtn();
     if (shopOpen) buildShop();
     // Re-render tabs now that DM status is known (subscribeToChars fires before this resolves)
     if (Object.keys(allChars).length) renderTabs();
@@ -4624,6 +4635,7 @@ window.CharacterManager = ({ auth, database }) => {
     suppressSave = false;
 
     updateCharHideBtn();
+    updateEditBtn();
     renderTabs();
   }
 
@@ -4637,6 +4649,7 @@ window.CharacterManager = ({ auth, database }) => {
     suppressSave = false;
 
     updateCharHideBtn();
+    updateEditBtn();
     renderTabs();
     if (shopOpen) {
       document.querySelectorAll('.shop-item-row').forEach(row => {
