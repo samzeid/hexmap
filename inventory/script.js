@@ -128,6 +128,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     charName: '', carryCapacity: '', containers: createDefaultContainers(),
     ..._csDefaults, ..._profDefaults,
     attacks: [],
+    attackOrder: [],
+    weaponAttackData: {},
     equippedArmor: '',
     armorActive: true,
     equippedShield: '',
@@ -278,6 +280,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     } else if (acEl && state.ac !== '' && state.ac != null) {
       acEl.classList.remove('cs-auto');
     }
+
+    renderAttacks();
   }
 
   function updateCsNameDisplay() {
@@ -645,6 +649,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     populateArmorDatalist();
     populateShieldDatalist();
+    syncEquippedContainer();
+    renderAttacks();
     if (onChange) onChange();
   }
 
@@ -1983,7 +1989,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         && !e.target.closest('#inv-close-btn')
         && !e.target.closest('#shop-tab-btn')
         && !e.target.closest('#cs-armor-display')
-        && !e.target.closest('#cs-shield-display')) {
+        && !e.target.closest('#cs-shield-display')
+        && !e.target.closest('.cs-attack-weapon-name')) {
       hideInspector();
       render();
     }
@@ -2032,48 +2039,302 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   const attacksList = document.getElementById('cs-attacks-list');
   const attacksAddBtn = document.getElementById('cs-attacks-add');
 
+  function getInventoryWeapons() {
+    const equipped = state.containers.find(c => c.id === 'equipped');
+    if (!equipped) return [];
+    const seen = new Set();
+    const weapons = [];
+    for (let r = 0; r < equipped.slots.length; r++) {
+      for (let c = 0; c < equipped.slots[r].length; c++) {
+        const slot = equipped.slots[r][c];
+        if (!slot) continue;
+        if (getEffectiveCategory(slot) !== 'weapon') continue;
+        const displayName = computeDisplayName(slot);
+        if (seen.has(displayName)) continue;
+        seen.add(displayName);
+        weapons.push({ slotData: slot, container: equipped, r, c, key: `${equipped.id}-${r}-${c}`, displayName });
+      }
+    }
+    return weapons;
+  }
+
+  function getWeaponBaseInfo(slotData) {
+    const wv = slotData.variables && slotData.variables.weapon;
+    const baseName = (wv && wv.value) ? wv.value : slotData.name;
+    const lib = getLibraryItem(baseName);
+    if (!lib || !lib.description) return null;
+    const desc = lib.description;
+    const isRanged  = /Simple Ranged|Martial Ranged/i.test(desc);
+    const isFinesse = /Finesse/i.test(desc);
+    const afterBr   = desc.split('<br>')[1] || desc;
+    const diceMatch = afterBr.match(/^(\d+d\d+|\d+)/);
+    const damageDice = diceMatch ? diceMatch[1] : null;
+    const typeMatch  = afterBr.match(/^\d+d\d+\s+(\w+)/);
+    const damageType = typeMatch ? typeMatch[1] : null;
+    return { isRanged, isFinesse, damageDice, damageType };
+  }
+
+  function computeWeaponAutoStats(slotData) {
+    const info = getWeaponBaseInfo(slotData);
+    if (!info || !info.damageDice) return null;
+    const level = parseInt(state.level);
+    const profBonus = (!isNaN(level) && level >= 1)
+      ? Math.ceil(level / 4) + 1
+      : (parseInt(state.proficiency) || 2);
+    const strScore = parseInt(state.str);
+    const dexScore = parseInt(state.dex);
+    const strMod = !isNaN(strScore) ? Math.floor((strScore - 10) / 2) : 0;
+    const dexMod = !isNaN(dexScore) ? Math.floor((dexScore - 10) / 2) : 0;
+    let mod;
+    if (info.isRanged)       mod = dexMod;
+    else if (info.isFinesse) mod = Math.max(strMod, dexMod);
+    else                     mod = strMod;
+    const toHitVal = mod + profBonus;
+    const toHit  = toHitVal >= 0 ? `+${toHitVal}` : `${toHitVal}`;
+    const modStr = mod > 0 ? `+${mod}` : mod < 0 ? `${mod}` : '';
+    const damage = `${info.damageDice}${modStr}`;
+    return { toHit, damage, damageType: info.damageType };
+  }
+
+  function computeUnarmedStrike() {
+    const level = parseInt(state.level);
+    const profBonus = (!isNaN(level) && level >= 1)
+      ? Math.ceil(level / 4) + 1
+      : (parseInt(state.proficiency) || 2);
+    const strScore = parseInt(state.str);
+    const strMod = !isNaN(strScore) ? Math.floor((strScore - 10) / 2) : 0;
+    const toHitVal = strMod + profBonus;
+    const toHit = toHitVal >= 0 ? `+${toHitVal}` : `${toHitVal}`;
+    const damage = String(Math.max(1, 1 + strMod));
+    return { toHit, damage };
+  }
+
+  function syncEquippedContainer() {
+    const equipped = state.containers.find(c => c.id === 'equipped');
+    if (!equipped) return;
+    let foundArmor = null;
+    let foundShield = null;
+    for (const row of equipped.slots) {
+      for (const slot of row) {
+        if (!slot) continue;
+        const cat = getEffectiveCategory(slot);
+        if (!foundArmor && cat === 'armor') foundArmor = computeDisplayName(slot);
+        if (!foundShield && cat === 'shield') foundShield = computeDisplayName(slot);
+      }
+    }
+    let changed = false;
+    const newArmor = foundArmor || '';
+    if (state.equippedArmor !== newArmor) {
+      state.equippedArmor = newArmor;
+      if (newArmor) state.armorActive = true;
+      state.ac = '';
+      if (armorSelectEl) armorSelectEl.value = state.equippedArmor;
+      updateArmorDisplay();
+      changed = true;
+    }
+    const newShield = foundShield || '';
+    if (state.equippedShield !== newShield) {
+      state.equippedShield = newShield;
+      state.shieldActive = !!newShield;
+      state.ac = '';
+      if (shieldSelectEl) shieldSelectEl.value = state.equippedShield;
+      updateShieldDisplay();
+      changed = true;
+    }
+    if (changed) updateCsCalculations();
+  }
+
+  function initAttackDrag(handle, rowEl, listEl) {
+    handle.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      rowEl.classList.add('cs-attack-dragging');
+
+      const onMove = ev => {
+        const allRows = [...listEl.querySelectorAll('[data-attack-key]')];
+        for (let i = 0; i < allRows.length; i++) {
+          if (allRows[i] === rowEl) continue;
+          const rect = allRows[i].getBoundingClientRect();
+          if (ev.clientY < rect.top + rect.height / 2) {
+            listEl.insertBefore(rowEl, allRows[i]);
+            return;
+          }
+        }
+        listEl.appendChild(rowEl);
+      };
+
+      const onUp = () => {
+        rowEl.classList.remove('cs-attack-dragging');
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+        const allRows = [...listEl.querySelectorAll('[data-attack-key]')];
+        state.attackOrder = allRows.map(r => r.dataset.attackKey);
+        if (onChange) onChange();
+      };
+
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onUp);
+    });
+  }
+
+  function makeAttackInput(placeholder, savedObj, field, auto) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = placeholder;
+    input.autocomplete = 'off';
+    const saved = savedObj[field] || '';
+    const isAuto = !saved && !!auto;
+    input.value = isAuto ? auto : saved;
+    input.classList.toggle('cs-auto', isAuto);
+    input.addEventListener('input', () => {
+      savedObj[field] = input.value;
+      input.classList.remove('cs-auto');
+      if (onChange) onChange();
+    });
+    input.addEventListener('blur', () => {
+      if (!input.value.trim() && auto) {
+        savedObj[field] = '';
+        input.value = auto;
+        input.classList.add('cs-auto');
+      }
+    });
+    return input;
+  }
+
+  const DMG_TYPE_ABBR = {
+    Bludgeoning: 'Bludg', Slashing: 'Slash', Piercing: 'Pierc',
+    Lightning: 'Ltng', Necrotic: 'Necro', Psychic: 'Psych',
+    Thunder: 'Thund', Radiant: 'Radi',
+  };
+  function makeDmgTypeCell(damageType) {
+    const span = document.createElement('span');
+    span.className = 'cs-attack-dmg-type';
+    if (damageType) span.textContent = DMG_TYPE_ABBR[damageType] || damageType;
+    return span;
+  }
+
   function renderAttacks() {
     if (!attacksList) return;
     attacksList.innerHTML = '';
-    if (!state.attacks.length) {
-      const empty = document.createElement('span');
-      empty.className = 'cs-attacks-empty';
-      empty.textContent = 'No attacks added.';
-      attacksList.appendChild(empty);
-      return;
-    }
-    state.attacks.forEach((atk, i) => {
+
+    // ── Unarmed Strike (permanent, always first) ──────────────────
+    const unarmedStats = computeUnarmedStrike();
+    if (!state.weaponAttackData['__unarmed__']) state.weaponAttackData['__unarmed__'] = {};
+    const unarmedData = state.weaponAttackData['__unarmed__'];
+    const unarmedRow = document.createElement('div');
+    unarmedRow.className = 'cs-attack-inv-row cs-attack-unarmed';
+    unarmedRow.appendChild(document.createElement('span'));
+    const unarmedNameCell = document.createElement('div');
+    unarmedNameCell.className = 'cs-attack-name-cell';
+    const unarmedLbl = document.createElement('span');
+    unarmedLbl.className = 'cs-attack-unarmed-name';
+    unarmedLbl.textContent = 'Unarmed Strike';
+    unarmedNameCell.appendChild(unarmedLbl);
+    unarmedRow.appendChild(unarmedNameCell);
+    unarmedRow.appendChild(makeAttackInput('+0', unarmedData, 'toHit', unarmedStats.toHit));
+    unarmedRow.appendChild(makeAttackInput('1', unarmedData, 'damage', unarmedStats.damage));
+    unarmedRow.appendChild(makeDmgTypeCell('Bludgeoning'));
+    unarmedRow.appendChild(document.createElement('span'));
+    attacksList.appendChild(unarmedRow);
+
+    // ── Sortable attacks ──────────────────────────────────────────
+    const invWeapons = getInventoryWeapons();
+    if (!invWeapons.length && !state.attacks.length) return;
+
+    const allItems = [
+      ...invWeapons.map(w => ({ type: 'inv', key: 'inv:' + w.displayName, weapon: w })),
+      ...state.attacks.map(atk => ({ type: 'manual', key: 'manual:' + atk.id, atk })),
+    ];
+    const orderMap = new Map(state.attackOrder.map((k, i) => [k, i]));
+    allItems.sort((a, b) => {
+      const ia = orderMap.has(a.key) ? orderMap.get(a.key) : Infinity;
+      const ib = orderMap.has(b.key) ? orderMap.get(b.key) : Infinity;
+      return ia - ib;
+    });
+
+    allItems.forEach(item => {
       const row = document.createElement('div');
-      row.className = 'cs-attack-row';
-      ['name','toHit','damage'].forEach(field => {
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.placeholder = field === 'name' ? 'Attack name' : field === 'toHit' ? '+0' : '1d6';
-        input.autocomplete = 'off';
-        input.value = atk[field] || '';
-        input.addEventListener('input', () => {
-          state.attacks[i][field] = input.value;
+      row.dataset.attackKey = item.key;
+
+      const handle = document.createElement('button');
+      handle.type = 'button';
+      handle.className = 'cs-attack-drag-handle';
+      handle.innerHTML = '<i class="fa-solid fa-grip-vertical"></i>';
+      handle.title = 'Drag to reorder';
+      row.appendChild(handle);
+      initAttackDrag(handle, row, attacksList);
+
+      if (item.type === 'inv') {
+        const weapon = item.weapon;
+        row.className = 'cs-attack-inv-row';
+        row.dataset.attackKey = item.key;
+
+        const nameCell = document.createElement('div');
+        nameCell.className = 'cs-attack-name-cell';
+        const nameBtn = document.createElement('button');
+        nameBtn.type = 'button';
+        nameBtn.className = 'cs-attack-weapon-name';
+        nameBtn.textContent = weapon.displayName;
+        nameBtn.addEventListener('click', () => {
+          toggleInspectorFor(weapon.key, weapon.slotData, weapon.container, weapon.r, weapon.c);
+        });
+        nameCell.appendChild(nameBtn);
+        const nameLabel = document.createElement('span');
+        nameLabel.className = 'cs-attack-weapon-label';
+        nameLabel.textContent = weapon.displayName;
+        nameCell.appendChild(nameLabel);
+        row.appendChild(nameCell);
+
+        if (!state.weaponAttackData[weapon.displayName]) state.weaponAttackData[weapon.displayName] = {};
+        const wepData = state.weaponAttackData[weapon.displayName];
+        const autoStats = computeWeaponAutoStats(weapon.slotData);
+        row.appendChild(makeAttackInput('+0', wepData, 'toHit', autoStats ? autoStats.toHit : ''));
+        row.appendChild(makeAttackInput('1d6', wepData, 'damage', autoStats ? autoStats.damage : ''));
+        row.appendChild(makeDmgTypeCell(autoStats ? autoStats.damageType : null));
+        row.appendChild(document.createElement('span'));
+
+      } else {
+        const atk = item.atk;
+        const i = state.attacks.indexOf(atk);
+        row.className = 'cs-attack-row';
+        row.dataset.attackKey = item.key;
+
+        ['name', 'toHit'].forEach(field => {
+          const ph = field === 'name' ? 'Attack name' : '+0';
+          const input = document.createElement('input');
+          input.type = 'text'; input.placeholder = ph; input.autocomplete = 'off';
+          input.value = atk[field] || '';
+          input.addEventListener('input', () => { state.attacks[i][field] = input.value; if (onChange) onChange(); });
+          row.appendChild(input);
+        });
+
+        const dmgInput = document.createElement('input');
+        dmgInput.type = 'text'; dmgInput.placeholder = '1d6'; dmgInput.autocomplete = 'off';
+        dmgInput.value = atk.damage || '';
+        dmgInput.addEventListener('input', () => { state.attacks[i].damage = dmgInput.value; if (onChange) onChange(); });
+        row.appendChild(dmgInput);
+
+        row.appendChild(document.createElement('span'));
+        const del = document.createElement('button');
+        del.className = 'cs-attack-del';
+        del.title = 'Remove';
+        del.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        del.addEventListener('click', () => {
+          state.attacks.splice(i, 1);
+          state.attackOrder = state.attackOrder.filter(k => k !== item.key);
+          renderAttacks();
           if (onChange) onChange();
         });
-        row.appendChild(input);
-      });
-      const del = document.createElement('button');
-      del.className = 'cs-attack-del';
-      del.title = 'Remove';
-      del.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-      del.addEventListener('click', () => {
-        state.attacks.splice(i, 1);
-        renderAttacks();
-        if (onChange) onChange();
-      });
-      row.appendChild(del);
+        row.appendChild(del);
+      }
+
       attacksList.appendChild(row);
     });
   }
 
   if (attacksAddBtn) {
     attacksAddBtn.addEventListener('click', () => {
-      state.attacks.push({ name: '', toHit: '', damage: '' });
+      state.attacks.push({ id: Date.now(), name: '', toHit: '', damage: '' });
       renderAttacks();
       if (onChange) onChange();
       const inputs = attacksList.querySelectorAll('.cs-attack-row input');
@@ -2262,6 +2523,17 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
   populateArmorDatalist();
+
+  const attacksToggle = document.getElementById('cs-attacks-toggle');
+  const attacksBody   = document.getElementById('cs-attacks-body');
+  if (attacksToggle && attacksBody) {
+    attacksToggle.addEventListener('click', () => {
+      const open = attacksBody.hidden;
+      attacksBody.hidden = !open;
+      attacksToggle.setAttribute('aria-expanded', String(open));
+      attacksToggle.classList.toggle('cs-attacks-open', open);
+    });
+  }
 
   const otherProfsToggle = document.getElementById('cs-other-profs-toggle');
   const otherProfsBody   = document.getElementById('cs-other-profs-body');
@@ -2903,8 +3175,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         charName:      state.charName,
         carryCapacity: state.carryCapacity,
         containers:    state.containers,
-        attacks:       state.attacks,
-        equippedArmor:  state.equippedArmor,
+        attacks:          state.attacks,
+        attackOrder:      state.attackOrder,
+        weaponAttackData: state.weaponAttackData,
+        equippedArmor:    state.equippedArmor,
         armorActive:    state.armorActive,
         equippedShield: state.equippedShield,
         shieldActive:   state.shieldActive,
@@ -3001,6 +3275,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         }
       });
       state.attacks = Array.isArray(newState.attacks) ? newState.attacks : [];
+      state.attacks.forEach(atk => { if (!atk.id) atk.id = Date.now() + Math.floor(Math.random() * 1e6); });
+      state.attackOrder = Array.isArray(newState.attackOrder) ? newState.attackOrder : [];
+      state.weaponAttackData = (newState.weaponAttackData && typeof newState.weaponAttackData === 'object') ? newState.weaponAttackData : {};
       state.equippedArmor  = newState.equippedArmor  || '';
       state.armorActive    = newState.armorActive != null ? !!newState.armorActive : true;
       state.equippedShield = newState.equippedShield || '';

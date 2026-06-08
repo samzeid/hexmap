@@ -308,16 +308,23 @@
 
         <div class="cs-attacks">
           <div class="cs-attacks-header">
-            <span class="cs-attacks-title">Attacks</span>
+            <button class="cs-attacks-toggle cs-attacks-open" id="cs-attacks-toggle" aria-expanded="true">
+              <span class="cs-attacks-title">Attacks</span>
+              <i class="fa-solid fa-chevron-down cs-attacks-chevron"></i>
+            </button>
             <button class="cs-attacks-add" id="cs-attacks-add" title="Add attack"><i class="fa-solid fa-plus"></i></button>
           </div>
-          <div class="cs-attacks-col-labels">
-            <span>Name</span>
-            <span>To Hit</span>
-            <span>Damage</span>
-            <span></span>
+          <div class="cs-attacks-body" id="cs-attacks-body">
+            <div class="cs-attacks-col-labels">
+              <span></span>
+              <span>Name</span>
+              <span>To Hit</span>
+              <span>Damage</span>
+              <span>Type</span>
+              <span></span>
+            </div>
+            <div class="cs-attacks-list" id="cs-attacks-list"></div>
           </div>
-          <div class="cs-attacks-list" id="cs-attacks-list"></div>
         </div>
 
         <div class="cs-other-profs">

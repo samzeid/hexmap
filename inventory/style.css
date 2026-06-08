@@ -2553,11 +2553,27 @@ body.is-dragging #inv-scroll {
 .cs-attacks-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px 6px;
   background: rgba(255, 255, 255, 0.04);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
+
+.cs-attacks-toggle {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.cs-attacks-toggle:active { background: rgba(255, 255, 255, 0.05); }
 
 .cs-attacks-title {
   font-size: 11px;
@@ -2567,23 +2583,36 @@ body.is-dragging #inv-scroll {
   color: rgba(255, 255, 255, 0.55);
 }
 
+.cs-attacks-chevron {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+.cs-attacks-open .cs-attacks-chevron { transform: rotate(180deg); }
+
+.cs-attacks-body {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
 .cs-attacks-add {
   background: none;
   border: none;
   color: rgba(255, 255, 255, 0.35);
   font-size: 11px;
-  padding: 2px 4px;
+  padding: 2px 6px 2px 4px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   border-radius: 4px;
   line-height: 1;
+  flex-shrink: 0;
 }
 .cs-attacks-add:active { background: rgba(255, 255, 255, 0.08); }
 #stats-panel:not(.editing) .cs-attacks-add { display: none; }
 
 .cs-attacks-col-labels {
   display: grid;
-  grid-template-columns: 1fr 56px 80px 22px;
+  grid-template-columns: 16px minmax(0, 90px) 56px 1fr 46px 22px;
   padding: 4px 10px 2px;
   gap: 4px;
 }
@@ -2602,9 +2631,72 @@ body.is-dragging #inv-scroll {
   gap: 3px;
 }
 
+.cs-attack-inv-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 90px) 56px 1fr 46px 22px;
+  gap: 4px;
+  align-items: center;
+}
+.cs-attack-name-cell {
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+.cs-attack-weapon-name {
+  background: none;
+  border: none;
+  padding: 3px 5px;
+  font-size: 11px;
+  font-family: inherit;
+  color: rgba(120, 220, 150, 0.85);
+  cursor: pointer;
+  pointer-events: auto;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+.cs-attack-weapon-name:hover { color: rgba(120, 220, 150, 1); text-decoration: underline; }
+.cs-attack-weapon-label {
+  padding: 3px 5px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+#stats-panel.editing .cs-attack-weapon-name  { display: none; }
+#stats-panel:not(.editing) .cs-attack-weapon-label { display: none; }
+.cs-attack-inv-row input {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 3px 5px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+#stats-panel.editing .cs-attack-inv-row input {
+  pointer-events: auto;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.cs-attack-inv-row input.cs-auto { color: rgba(255, 255, 255, 0.3); }
+#stats-panel.editing .cs-attack-inv-row input:focus {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.07);
+}
+
 .cs-attack-row {
   display: grid;
-  grid-template-columns: 1fr 56px 80px 22px;
+  grid-template-columns: 16px minmax(0, 90px) 56px 1fr 46px 22px;
   gap: 4px;
   align-items: center;
 }
@@ -2649,6 +2741,47 @@ body.is-dragging #inv-scroll {
 }
 .cs-attack-del:active { background: rgba(255, 255, 255, 0.08); color: rgba(255, 80, 80, 0.7); }
 #stats-panel.editing .cs-attack-del { display: flex; }
+
+.cs-attack-drag-handle {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.15);
+  font-size: 9px;
+  padding: 0;
+  cursor: grab;
+  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 22px;
+  border-radius: 3px;
+  touch-action: none;
+}
+.cs-attack-drag-handle:hover { color: rgba(255, 255, 255, 0.4); }
+.cs-attack-dragging { opacity: 0.5; background: rgba(255, 255, 255, 0.03); border-radius: 5px; }
+
+.cs-attack-unarmed { border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+.cs-attack-unarmed-name {
+  padding: 3px 5px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  width: 100%;
+}
+
+.cs-attack-dmg-type {
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.2);
+  padding: 0 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  align-self: center;
+}
 
 .cs-attacks-empty {
   font-size: 10px;
@@ -3005,6 +3138,7 @@ body.is-dragging #inv-scroll {
   color: rgba(255, 255, 255, 0.8);
 }
 .cs-armor-view {
+  display: flex;
   align-items: center;
   gap: 2px;
   width: 100%;
