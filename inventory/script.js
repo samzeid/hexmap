@@ -2172,6 +2172,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     CALC_IDS.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
+      // touchstart preventDefault stops the focus→keyboard chain on iOS
+      el.addEventListener('touchstart', e => {
+        e.preventDefault();
+        el.readOnly = true;
+      }, { passive: false });
       el.addEventListener('pointerdown', e => {
         if (e.pointerType !== 'mouse') {
           e.preventDefault();
