@@ -785,7 +785,7 @@ input, textarea, select { font-size: max(16px, 1em); }
   color: var(--muted);
   padding-left: 4px;
 }
-#cs-class, #cs-race {
+#cs-class, #cs-race, #cs-subclass {
   width: 100%;
   min-width: 0;
   background: transparent;
@@ -799,13 +799,15 @@ input, textarea, select { font-size: max(16px, 1em); }
   pointer-events: none;
 }
 #stats-panel.editing #cs-class,
-#stats-panel.editing #cs-race {
+#stats-panel.editing #cs-race,
+#stats-panel.editing #cs-subclass {
   pointer-events: auto;
   background: rgba(255,255,255,0.07);
   border-color: var(--card-border);
 }
-#cs-class::placeholder, #cs-race::placeholder { color: var(--muted); }
-#cs-class:focus, #cs-race:focus { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.1); }
+#cs-class::placeholder, #cs-race::placeholder, #cs-subclass::placeholder { color: var(--muted); }
+#cs-class:focus, #cs-race:focus, #cs-subclass:focus { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.1); }
+#cs-subclass { font-size: 12px; }
 .cs-char-info-sm {
   display: flex;
   flex-direction: column;

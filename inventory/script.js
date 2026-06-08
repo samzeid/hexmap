@@ -9,7 +9,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
   const CS_FIELDS = [
-    ['cs-class','charClass'],['cs-race','race'],['cs-level','level'],
+    ['cs-class','charClass'],['cs-subclass','subclass'],['cs-race','race'],['cs-level','level'],
     ['cs-str','str'],['cs-dex','dex'],['cs-con','con'],['cs-int','int'],['cs-wis','wis'],['cs-cha','cha'],
     ['cs-str-save','strSave'],['cs-dex-save','dexSave'],['cs-con-save','conSave'],
     ['cs-int-save','intSave'],['cs-wis-save','wisSave'],['cs-cha-save','chaSave'],
@@ -2787,20 +2787,48 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     ta.addEventListener('input', () => autoResizeTextarea(ta));
   });
 
+  const SUBCLASS_MAP = {
+    'Barbarian': ['Path of the Cursed'],
+    'Sorcerer':  ['Spell Drinker'],
+    'Rogue':     ['Vile Fang'],
+    'Ranger':    ['Witch Warden'],
+  };
+
+  const subclassEl   = document.getElementById('cs-subclass');
+  const subclassDl   = document.getElementById('cs-subclass-list');
+
+  function syncSubclassOptions() {
+    if (!subclassEl || !subclassDl) return;
+    const cls      = String(state.charClass || '').trim();
+    const options  = SUBCLASS_MAP[cls] || [];
+    subclassDl.innerHTML = options.map(o => `<option value="${o}">`).join('');
+    if (options.length === 1 && !state.subclass) {
+      subclassEl.value = options[0];
+      state.subclass   = options[0];
+    } else if (!options.includes(state.subclass || '')) {
+      subclassEl.value = '';
+      state.subclass   = '';
+    }
+  }
+
   const classEl = document.getElementById('cs-class');
   if (classEl) {
     classEl.addEventListener('input', () => {
       const classKey = String(state.charClass || '').toLowerCase().trim();
       const profs = CLASS_SAVE_PROFS[classKey];
-      if (!profs) return;
-      ['str','dex','con','int','wis','cha'].forEach(ab => {
-        state[`${ab}SaveProf`] = profs.includes(ab);
-      });
-      updateProfButtons();
-      updateCsCalculations();
+      if (profs) {
+        ['str','dex','con','int','wis','cha'].forEach(ab => {
+          state[`${ab}SaveProf`] = profs.includes(ab);
+        });
+        updateProfButtons();
+        updateCsCalculations();
+      }
+      syncSubclassOptions();
       if (onChange) onChange();
     });
   }
+
+  syncSubclassOptions();
   ['str','dex','con','int','wis','cha'].forEach(ab => {
     const scoreEl = document.getElementById(`cs-${ab}`);
     const modEl   = document.getElementById(`cs-${ab}-mod`);
