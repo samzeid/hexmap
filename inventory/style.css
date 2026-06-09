@@ -2555,7 +2555,7 @@ body.is-dragging #inv-scroll {
 .cs-exhaustion-stepper {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 .cs-exh-btn {
   background: none;
