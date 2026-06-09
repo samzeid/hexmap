@@ -2289,6 +2289,105 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       type: 'spellcasting',
     },
     {
+      id: 'ranger-favored-enemy',
+      name: 'Favored Enemy',
+      class: 'Ranger',
+      level: 1,
+      type: 'text',
+      description: [
+        "You always have the Hunter's Mark spell prepared. You can cast it twice without expending a spell slot, and you regain all expended uses of this ability when you finish a Long Rest.",
+        'The number of times you can cast the spell without a spell slot increases when you reach certain Ranger levels, as shown in the Favored Enemy column of the Ranger Features table.',
+      ],
+    },
+    {
+      id: 'ranger-weapon-mastery',
+      name: 'Weapon Mastery',
+      class: 'Ranger',
+      level: 1,
+      type: 'text',
+      description: [
+        'Your training with weapons allows you to use the mastery properties of two kinds of weapons of your choice with which you have proficiency, such as Longbows and Shortswords.',
+        'Whenever you finish a Long Rest, you can change the kinds of weapons you chose. For example, you could switch to using the mastery properties of Scimitars and Longswords.',
+      ],
+    },
+    {
+      id: 'ranger-deft-explorer',
+      name: 'Deft Explorer',
+      class: 'Ranger',
+      level: 2,
+      type: 'text',
+      description: [
+        'Thanks to your travels, you gain the following benefits.',
+        { boldIntro: 'Expertise.', text: 'Choose one of your skill proficiencies with which you lack Expertise. You gain Expertise in that skill.' },
+        { boldIntro: 'Languages.', text: 'You know two languages of your choice.' },
+      ],
+    },
+    {
+      id: 'ranger-fighting-style',
+      name: 'Fighting Style',
+      class: 'Ranger',
+      level: 2,
+      type: 'fighting-style',
+    },
+    {
+      id: 'ranger-extra-attack',
+      name: 'Extra Attack',
+      class: 'Ranger',
+      level: 5,
+      type: 'text',
+      description: 'You can attack twice instead of once whenever you take the Attack action on your turn.',
+    },
+    {
+      id: 'ranger-roving',
+      name: 'Roving',
+      class: 'Ranger',
+      level: 6,
+      type: 'text',
+      description: "Your Speed increases by 10 feet while you aren't wearing Heavy armor. You also have a Climb Speed and a Swim Speed equal to your Speed.",
+    },
+    {
+      id: 'witch-warden-occult-insight',
+      name: 'Occult Insight',
+      class: 'Ranger',
+      subclass: 'Witch Warden',
+      level: 3,
+      type: 'text',
+      description: "When you mark a creature with hunter's mark, the DM tells you something about its kind likely relevant. This could be its movement types and senses; its resistances, immunities, or vulnerabilities; or an action or ability it is likely to use (such as a breath weapon or spellcasting). You gain this information only the first time you mark a creature of a given kind until you cast the spell again.",
+    },
+    {
+      id: 'witch-warden-witchmarks',
+      name: 'Witchmarks',
+      class: 'Ranger',
+      subclass: 'Witch Warden',
+      level: 3,
+      type: 'text',
+      description: [
+        'You learn to inscribe occult sigils called witchmarks. When you finish a short or long rest, you can inscribe a number of witchmarks on yourself or your allies from the Witchmarks table up to your proficiency bonus. Each type of witchmark can be inscribed only once.',
+        'A witchmark remains inscribed until it is used or you inscribe a new set of witchmarks.',
+        { boldIntro: 'Witching Die.', text: 'Your witching die is a d6. At 6th level it becomes a d8.' },
+        { witchingDie: true },
+        { table: {
+          title: 'Witchmarks',
+          headers: ['Witchmark', 'Effect'],
+          rows: [
+            ['Wands',    'When the bearer casts a spell that requires a creature make a saving throw and they succeed, as a reaction the bearer can expend this witchmark to subtract the witching die from the result.'],
+            ['Cups',     'When a creature hits the bearer with an attack roll, as a reaction they can expend this witchmark to subtract the witching die from that attack roll.'],
+            ['Swords',   'When the bearer hits a creature with an attack, as a reaction they can expend this witchmark to deal additional damage equal to the witching die of any damage type of their choice.'],
+            ['Pentacles','When the bearer fails a saving throw, as a reaction they can expend this witchmark to add the witching die to the roll.'],
+          ],
+        }},
+      ],
+    },
+    {
+      id: 'witch-warden-omen-tracker',
+      name: 'Omen Tracker',
+      class: 'Ranger',
+      subclass: 'Witch Warden',
+      level: 6,
+      type: 'text',
+      description: "You master hunting through omens and divination. When you uncover signs of a creature's presence (such as its tracks, a belonging, or remains) you can cast hunter's mark on that creature even if it is not within sight or range. Also, when your concentration on hunter's mark ends, the effect remains on the last creature marked for one week, but the mark cannot be moved to a new creature.",
+    },
+    {
       id: 'sorcerer-innate-sorcery',
       name: 'Innate Sorcery',
       class: 'Sorcerer',
@@ -2541,6 +2640,91 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         'Your poisons ignore Resistance to Poison damage.',
         { boldIntro: 'Potent (Cost: 1d6).', text: 'The saving throw against the poison applied by this attack is made with disadvantage.' },
       ],
+    },
+    {
+      id: 'barbarian-rage',
+      name: 'Rage',
+      class: 'Barbarian',
+      level: 1,
+      type: 'text',
+      description: [
+        "You can imbue yourself with a primal power called Rage, a force that grants you extraordinary might and resilience. You can enter it as a Bonus Action if you aren't wearing Heavy armor.",
+        "You can enter your Rage the number of times shown for your Barbarian level in the Rages column of the Barbarian Features table. You regain one expended use when you finish a Short Rest, and you regain all expended uses when you finish a Long Rest.",
+        'While active, your Rage follows the rules below.',
+        { boldIntro: 'Damage Resistance.', text: 'You have Resistance to Bludgeoning, Piercing, and Slashing damage.' },
+        { boldIntro: 'Rage Damage.', text: 'When you make an attack using Strength—with either a weapon or an Unarmed Strike—and deal damage to the target, you gain a bonus to the damage that increases as you gain levels as a Barbarian, as shown in the Rage Damage column of the Barbarian Features table.' },
+        { boldIntro: 'Strength Advantage.', text: 'You have Advantage on Strength checks and Strength saving throws.' },
+        { boldIntro: 'No Concentration or Spells.', text: "You can't maintain Concentration, and you can't cast spells." },
+        { boldIntro: 'Duration.', text: 'The Rage lasts until the end of your next turn, and it ends early if you don Heavy armor or have the Incapacitated condition. If your Rage is still active on your next turn, you can extend the Rage for another round by doing one of the following:' },
+        { list: [
+          'Make an attack roll against an enemy.',
+          'Force an enemy to make a saving throw.',
+          'Take a Bonus Action to extend your Rage.',
+        ]},
+        'Each time the Rage is extended, it lasts until the end of your next turn. You can maintain a Rage for up to 10 minutes.',
+      ],
+    },
+    {
+      id: 'barbarian-unarmored-defense',
+      name: 'Unarmored Defense',
+      class: 'Barbarian',
+      level: 1,
+      type: 'text',
+      description: "While you aren't wearing any armor, your base Armor Class equals 10 plus your Dexterity and Constitution modifiers. You can use a Shield and still gain this benefit.",
+    },
+    {
+      id: 'barbarian-weapon-mastery',
+      name: 'Weapon Mastery',
+      class: 'Barbarian',
+      level: 1,
+      type: 'text',
+      description: [
+        'Your training with weapons allows you to use the mastery properties of two kinds of Simple or Martial Melee weapons of your choice, such as Greataxes and Handaxes. Whenever you finish a Long Rest, you can practice weapon drills and change one of those weapon choices.',
+        'When you reach certain Barbarian levels, you gain the ability to use the mastery properties of more kinds of weapons, as shown in the Weapon Mastery column of the Barbarian Features table.',
+      ],
+    },
+    {
+      id: 'barbarian-danger-sense',
+      name: 'Danger Sense',
+      class: 'Barbarian',
+      level: 2,
+      type: 'text',
+      description: "You gain an uncanny sense of when things aren't as they should be, giving you an edge when you dodge perils. You have Advantage on Dexterity saving throws unless you have the Incapacitated condition.",
+    },
+    {
+      id: 'barbarian-reckless-attack',
+      name: 'Reckless Attack',
+      class: 'Barbarian',
+      level: 2,
+      type: 'text',
+      description: 'You can throw aside all concern for defense to attack with increased ferocity. When you make your first attack roll on your turn, you can decide to attack recklessly. Doing so gives you Advantage on attack rolls using Strength until the start of your next turn, but attack rolls against you have Advantage during that time.',
+    },
+    {
+      id: 'barbarian-primal-knowledge',
+      name: 'Primal Knowledge',
+      class: 'Barbarian',
+      level: 3,
+      type: 'text',
+      description: [
+        'You gain proficiency in another skill of your choice from the skill list available to Barbarians at level 1.',
+        'In addition, while your Rage is active, you can channel primal power when you attempt certain tasks; whenever you make an ability check using one of the following skills, you can make it as a Strength check even if it normally uses a different ability: Acrobatics, Intimidation, Perception, Stealth, or Survival. When you use this ability, your Strength represents primal power coursing through you, honing your agility, bearing, and senses.',
+      ],
+    },
+    {
+      id: 'barbarian-extra-attack',
+      name: 'Extra Attack',
+      class: 'Barbarian',
+      level: 5,
+      type: 'text',
+      description: 'You can attack twice instead of once whenever you take the Attack action on your turn.',
+    },
+    {
+      id: 'barbarian-fast-movement',
+      name: 'Fast Movement',
+      class: 'Barbarian',
+      level: 5,
+      type: 'text',
+      description: "Your speed increases by 10 feet while you aren't wearing Heavy armor.",
     },
   ];
 
@@ -3268,6 +3452,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           panel.className = 'cs-feat-save-dc-panel';
           panel.innerHTML = `<span class="cs-feat-spell-stat-val">${count}d6</span><span class="cs-feat-spell-stat-lbl">Sneak Attack</span>`;
           body.appendChild(panel);
+        } else if (part.witchingDie) {
+          const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+          const die = lvl >= 6 ? 'd8' : 'd6';
+          const panel = document.createElement('div');
+          panel.className = 'cs-feat-save-dc-panel';
+          panel.innerHTML = `<span class="cs-feat-spell-stat-val">${die}</span><span class="cs-feat-spell-stat-lbl">Witching Die</span>`;
+          body.appendChild(panel);
         }
       });
     }
@@ -3278,6 +3469,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       body.appendChild(renderMetamagicContent(data, isEditing));
     } else if (feature.type === 'frayed') {
       body.appendChild(renderFrayedContent(isEditing));
+    } else if (feature.type === 'fighting-style') {
+      body.appendChild(renderFightingStyleContent(data, isEditing));
     }
 
     return body;
@@ -3345,6 +3538,57 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         descWrap.appendChild(p);
       });
       wrap.appendChild(descWrap);
+    }
+
+    return wrap;
+  }
+
+  const RANGER_FIGHTING_STYLES = [
+    { value: 'Archery' },
+    { value: 'Defense' },
+    { value: 'Druidic Warrior', description: 'You learn two Druid cantrips of your choice. Guidance and Starry Wisp are recommended. The chosen cantrips count as Ranger spells for you, and Wisdom is your spellcasting ability for them. Whenever you gain a Ranger level, you can replace one of these cantrips with another Druid cantrip.' },
+    { value: 'Dueling' },
+    { value: 'Two-Weapon Fighting' },
+  ];
+
+  function renderFightingStyleContent(data, isEditing) {
+    const wrap = document.createElement('div');
+
+    const p = document.createElement('p');
+    p.className = 'cs-feature-desc';
+    p.textContent = 'You gain a Fighting Style feat of your choice. Instead of choosing one of those feats, you can choose Druidic Warrior.';
+    wrap.appendChild(p);
+
+    const sel = document.createElement('select');
+    sel.className = 'cs-feat-subrace-sel';
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'Choose a Fighting Style…';
+    sel.appendChild(blank);
+    RANGER_FIGHTING_STYLES.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.value;
+      opt.textContent = s.value;
+      if (data.style === s.value) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', e => {
+      e.stopPropagation();
+      data.style = sel.value;
+      if (onChange) onChange();
+      renderFeatures();
+    });
+    wrap.appendChild(sel);
+
+    const chosen = RANGER_FIGHTING_STYLES.find(s => s.value === data.style);
+    if (chosen?.description) {
+      const descP = document.createElement('p');
+      descP.className = 'cs-feature-desc';
+      const strong = document.createElement('strong');
+      strong.textContent = chosen.value + '. ';
+      descP.appendChild(strong);
+      descP.appendChild(document.createTextNode(chosen.description));
+      wrap.appendChild(descP);
     }
 
     return wrap;
@@ -3421,6 +3665,53 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           1,
           newRemaining => {
             data.used = 1 - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          null
+        ));
+      } else if (id === 'barbarian-rage') {
+        const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+        const RAGE_USES = [2,2,3,3,3,4,4,4,4,4,4,5,5,5,5,5,6,6,6,6];
+        const useMax = RAGE_USES[lvl - 1];
+        if (data.used == null) data.used = 0;
+        const used = Math.min(data.used, useMax);
+        toggle.appendChild(makeUseStepper(
+          useMax - used,
+          useMax,
+          newRemaining => {
+            data.used = useMax - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          null
+        ));
+      } else if (id === 'ranger-favored-enemy') {
+        const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+        const FAVORED_ENEMY_USES = [2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6];
+        const useMax = FAVORED_ENEMY_USES[lvl - 1];
+        if (data.used == null) data.used = 0;
+        const used = Math.min(data.used, useMax);
+        toggle.appendChild(makeUseStepper(
+          useMax - used,
+          useMax,
+          newRemaining => {
+            data.used = useMax - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          null
+        ));
+      } else if (id === 'witch-warden-witchmarks') {
+        const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+        const profMax = Math.ceil(lvl / 4) + 1;
+        if (data.used == null) data.used = 0;
+        const used = Math.min(data.used, profMax);
+        toggle.appendChild(makeUseStepper(
+          profMax - used,
+          profMax,
+          newRemaining => {
+            data.used = profMax - newRemaining;
             if (onChange) onChange();
             renderFeatures();
           },
@@ -4164,8 +4455,17 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (state.featureData['ranger-spellcasting']) {
       state.featureData['ranger-spellcasting'].usedSlots = {};
     }
+    if (state.featureData['ranger-favored-enemy']) {
+      state.featureData['ranger-favored-enemy'].used = 0;
+    }
     if (state.featureData['vile-fang-fangs-dripping']) {
       state.featureData['vile-fang-fangs-dripping'].used = 0;
+    }
+    if (state.featureData['witch-warden-witchmarks']) {
+      state.featureData['witch-warden-witchmarks'].used = 0;
+    }
+    if (state.featureData['barbarian-rage']) {
+      state.featureData['barbarian-rage'].used = 0;
     }
     if (state.featureData['sorcerer-innate-sorcery']) {
       state.featureData['sorcerer-innate-sorcery'].innateSorceryUsed = 0;
@@ -4192,6 +4492,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     updateDeathSavesDisplay();
     if (state.featureData['vile-fang-fangs-dripping']) {
       state.featureData['vile-fang-fangs-dripping'].used = 0;
+    }
+    if (state.featureData['witch-warden-witchmarks']) {
+      state.featureData['witch-warden-witchmarks'].used = 0;
+    }
+    if (state.featureData['barbarian-rage']) {
+      const fd = state.featureData['barbarian-rage'];
+      fd.used = Math.max(0, (fd.used || 0) - 1);
     }
     updateCsCalculations();
     renderFeatures();
