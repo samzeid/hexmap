@@ -82,7 +82,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 }
 
 /* ── TAB BAR ACTION BUTTONS ──────────────────────────────────── */
-#inv-close-btn,
+#char-sheet-toggle-btn,
 #add-char-btn,
 #shop-tab-btn,
 #role-btn {
@@ -109,15 +109,15 @@ input, textarea, select { font-size: max(16px, 1em); }
 }
 
 #shop-tab-btn,
-#inv-close-btn { border-radius: 0; width: 48px; }
+#char-sheet-toggle-btn { border-radius: 0; width: 48px; }
 
-#inv-close-btn:hover, #add-char-btn:hover,
+#char-sheet-toggle-btn:hover, #add-char-btn:hover,
 #shop-tab-btn:hover, #role-btn:hover {
   background: rgba(255,255,255,0.1);
   color: var(--text);
 }
 
-#inv-close-btn:active, #add-char-btn:active,
+#char-sheet-toggle-btn:active, #add-char-btn:active,
 #shop-tab-btn:active, #role-btn:active {
   transform: scale(0.92);
   background: rgba(255,255,255,0.08);
@@ -1211,7 +1211,7 @@ main {
   min-height: 24px;
 }
 
-#char-sheet-toggle-btn {
+#char-header .char-coin-row > #inv-close-btn {
   position: absolute;
   left: 0;
   top: 50%;
@@ -1220,14 +1220,15 @@ main {
   border: none;
   color: var(--muted);
   font-size: 13px;
+  width: auto;
   cursor: pointer;
   padding: 4px 6px;
   border-radius: 6px;
   -webkit-tap-highlight-color: transparent;
   transition: color 0.15s, background 0.15s;
 }
-#char-sheet-toggle-btn:hover  { color: var(--text); }
-#char-sheet-toggle-btn:active { background: rgba(255,255,255,0.08); }
+#char-header .char-coin-row > #inv-close-btn:hover  { color: var(--text); }
+#char-header .char-coin-row > #inv-close-btn:active { background: rgba(255,255,255,0.08); transform: translateY(-50%) scale(0.92); }
 
 .char-coin-row-right {
   position: absolute;

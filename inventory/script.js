@@ -5519,23 +5519,39 @@ window.CharacterManager = ({ auth, database }) => {
   let _hexmapMode = true;
   let _shopFromHexmap = false;
   const _closeBtn  = document.getElementById('inv-close-btn');
-  const _closeBtnI = _closeBtn.querySelector('i');
+
+  // Hoisted above _applyViewMode so the initial _applyViewMode() call (which now
+  // refreshes the inventory/character toggle) doesn't hit a temporal-dead-zone.
+  let statsOpen = true;
+  let shopOpen  = false;
+  const charSheetToggleBtn = document.getElementById('char-sheet-toggle-btn');
+  const charSheetToggleI   = charSheetToggleBtn.querySelector('i');
+
+  // The top-left toggle. In inventory/character mode it switches between the two
+  // sub-views; in hexmap/shop mode it shows the view you'd return to (the last
+  // sub-view) so clicking it brings you back there.
+  function updateCharSheetToggle() {
+    const away = _hexmapMode || shopOpen;
+    // `destInventory` = the view a click will land you on, which drives the icon.
+    const destInventory = away ? !statsOpen : statsOpen;
+    charSheetToggleI.className = destInventory ? 'fa-solid fa-sack-xmark' : 'fa-solid fa-user';
+    charSheetToggleBtn.title   = destInventory ? 'Inventory' : 'Character sheet';
+  }
 
   function _applyViewMode() {
     document.getElementById('app').classList.toggle('hexmap-mode', _hexmapMode);
-    _closeBtnI.className = _hexmapMode ? 'fa-solid fa-fw fa-user' : 'fa-solid fa-fw fa-compass';
-    _closeBtn.title      = _hexmapMode ? 'Inventory' : 'Map view';
+    updateCharSheetToggle();
   }
 
+  // Open the hex map, closing the shop/character view. Not a toggle — it only
+  // ever goes to the map (it's hidden while already on the map).
   _closeBtn.addEventListener('click', () => {
-    if (shopOpen) { closeShop(); return; }
-    _hexmapMode = !_hexmapMode;
+    if (shopOpen) { _shopFromHexmap = true; closeShop(); return; }
+    _hexmapMode = true;
     inv.collapsePanelInstant();
     _applyViewMode();
-    if (_hexmapMode) window.hexOnGoToHexmap && window.hexOnGoToHexmap();
-    else window.hexOnGoToInventory && window.hexOnGoToInventory();
-    if (!_hexmapMode) ensureCharSelected();
-    else deselectChar();
+    window.hexOnGoToHexmap && window.hexOnGoToHexmap();
+    deselectChar();
   });
 
   // ── HEXMAP TOOLBAR ──────────────────────────────────────────────────────
@@ -5593,12 +5609,11 @@ window.CharacterManager = ({ auth, database }) => {
   });
 
   // ── STATS ───────────────────────────────────────────────────────────────
-  let statsOpen    = true;
+  // statsOpen / charSheetToggleBtn / charSheetToggleI are declared above (with
+  // the view toggle) so the initial _applyViewMode() can refresh the toggle.
   let statsEditing = false;
   const statsPanelEl       = document.getElementById('stats-panel');
   const charPanelsEl       = document.getElementById('char-panels');
-  const charSheetToggleBtn = document.getElementById('char-sheet-toggle-btn');
-  const charSheetToggleI   = charSheetToggleBtn.querySelector('i');
   const charFieldsEditBtn  = document.getElementById('char-fields-edit-btn');
 
   function canEditCurrentChar() {
@@ -5622,8 +5637,7 @@ window.CharacterManager = ({ auth, database }) => {
   function openStats() {
     statsOpen = true;
     charPanelsEl.classList.remove('show-inventory');
-    charSheetToggleI.className = 'fa-solid fa-sack-xmark';
-    charSheetToggleBtn.title   = 'Inventory';
+    updateCharSheetToggle();
     updateEditBtn();
   }
 
@@ -5631,19 +5645,37 @@ window.CharacterManager = ({ auth, database }) => {
     statsOpen = false;
     setStatsEditing(false);
     charPanelsEl.classList.add('show-inventory');
-    charSheetToggleI.className = 'fa-solid fa-scroll';
-    charSheetToggleBtn.title   = 'Character sheet';
+    updateCharSheetToggle();
+  }
+
+  // Return to the inventory/character view (restoring the last sub-view) from
+  // wherever we are. Used when the toggle is clicked in hexmap or shop mode.
+  function returnToCharView() {
+    if (shopOpen) {
+      _shopFromHexmap = false;   // go back to the character view, not the map
+      closeShop();
+      return;
+    }
+    if (_hexmapMode) {
+      _hexmapMode = false;
+      inv.collapsePanelInstant();
+      _applyViewMode();
+      window.hexOnGoToInventory && window.hexOnGoToInventory();
+      ensureCharSelected();
+    }
   }
 
   charSheetToggleBtn.addEventListener('click', () => {
-    if (statsOpen) closeStats(); else openStats();
+    if (_hexmapMode || shopOpen) returnToCharView();
+    else if (statsOpen) closeStats();
+    else openStats();
   });
 
   charFieldsEditBtn.addEventListener('click', () => {
     setStatsEditing(!statsEditing);
   });
 
-  let shopOpen = false;
+  // shopOpen declared above with the view toggle.
   const shopTabBtn  = document.getElementById('shop-tab-btn');
   const shopPanel   = document.getElementById('shop-panel');
   const charHeaderEl= document.getElementById('char-header');
@@ -6174,7 +6206,6 @@ window.CharacterManager = ({ auth, database }) => {
     setStatsEditing(false);
     shopTabBtn.classList.add('active');
     charPanelsEl.hidden         = true;
-    charSheetToggleBtn.hidden   = true;
     charFieldsEditBtn.hidden    = true;
     shopPanel.hidden            = false;
     inv.collapsePanelInstant();
@@ -6190,6 +6221,7 @@ window.CharacterManager = ({ auth, database }) => {
     document.getElementById('shop-category').value = '';
     updateShopWallet();
     buildShop();
+    updateCharSheetToggle();
   }
 
   function closeShop() {
@@ -6210,6 +6242,7 @@ window.CharacterManager = ({ auth, database }) => {
       inv.collapsePanelInstant();
       inv.closeInspector();
     }
+    updateCharSheetToggle();
   }
 
   shopTabBtn.addEventListener('click', () => {
