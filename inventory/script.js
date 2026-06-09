@@ -137,6 +137,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     inspiration: false,
     deathSaves: { successes: 0, failures: 0 },
     exhaustion: 0,
+    subrace:          '',
     activeFeatures:   [],
     hiddenFeatures:   [],
     featureData:      {},
@@ -1996,6 +1997,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     inspectorItemKey = null;
     _customEditKey = null; _customEditOpen = false;
     _spellDetailActive = null;
+    _metamagicDetailActive = null;
     document.getElementById('spell-insp-section').hidden = true;
     inspectorEl.hidden = false;
     refreshInspectorCollapsed();
@@ -2200,16 +2202,28 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   // ── FEATURES ─────────────────────────────────────────────────────────────
 
   const METAMAGIC_OPTIONS = [
-    { id: 'careful',     name: 'Careful Spell' },
-    { id: 'distant',     name: 'Distant Spell' },
-    { id: 'empowered',   name: 'Empowered Spell' },
-    { id: 'extended',    name: 'Extended Spell' },
-    { id: 'heightened',  name: 'Heightened Spell' },
-    { id: 'quickened',   name: 'Quickened Spell' },
-    { id: 'seeking',     name: 'Seeking Spell' },
-    { id: 'subtle',      name: 'Subtle Spell' },
-    { id: 'transmuted',  name: 'Transmuted Spell' },
-    { id: 'twinned',     name: 'Twinned Spell' },
+    { id: 'careful',    name: 'Careful Spell',    cost: '1 Sorcery Point',
+      desc: 'When you cast a spell that forces other creatures to make a saving throw, you can protect some of those creatures from the spell\'s full force. To do so, spend 1 Sorcery Point and choose a number of those creatures up to your Charisma modifier (minimum of one creature). A chosen creature automatically succeeds on its saving throw against the spell, and it takes no damage if it would normally take half damage on a successful save.' },
+    { id: 'distant',    name: 'Distant Spell',    cost: '1 Sorcery Point',
+      desc: 'When you cast a spell that has a range of at least 5 feet, you can spend 1 Sorcery Point to double the spell\'s range. Or when you cast a spell that has a range of Touch, you can spend 1 Sorcery Point to make the spell\'s range 30 feet.' },
+    { id: 'empowered',  name: 'Empowered Spell',  cost: '1 Sorcery Point',
+      desc: 'When you roll damage for a spell, you can spend 1 Sorcery Point to reroll a number of the damage dice up to your Charisma modifier (minimum of one), and you must use the new rolls.\nYou can use Empowered Spell even if you\'ve already used a different Metamagic option during the casting of the spell.' },
+    { id: 'extended',   name: 'Extended Spell',   cost: '1 Sorcery Point',
+      desc: 'When you cast a spell that has a duration of 1 minute or longer, you can spend 1 Sorcery Point to double its duration to a maximum duration of 24 hours.\nIf the affected spell requires Concentration, you have Advantage on any saving throw you make to maintain that Concentration.' },
+    { id: 'heightened', name: 'Heightened Spell', cost: '2 Sorcery Points',
+      desc: 'When you cast a spell that forces a creature to make a saving throw, you can spend 2 Sorcery Points to give one target of the spell Disadvantage on saves against the spell.' },
+    { id: 'quickened',  name: 'Quickened Spell',  cost: '2 Sorcery Points',
+      desc: 'When you cast a spell that has a casting time of an action, you can spend 2 Sorcery Points to change the casting time to a Bonus Action for this casting. You can\'t modify a spell in this way if you\'ve already cast a level 1+ spell on the current turn, nor can you cast a level 1+ spell on this turn after modifying a spell in this way.' },
+    { id: 'seeking',    name: 'Seeking Spell',    cost: '1 Sorcery Point',
+      desc: 'If you make an attack roll for a spell and miss, you can spend 1 Sorcery Point to reroll the d20, and you must use the new roll.\nYou can use Seeking Spell even if you\'ve already used a different Metamagic option during the casting of the spell.' },
+    { id: 'subtle',     name: 'Subtle Spell',     cost: '1 Sorcery Point',
+      desc: 'When you cast a spell, you can spend 1 Sorcery Point to cast it without any Verbal, Somatic, or Material components, except Material components that are consumed by the spell or that have a cost specified in the spell.' },
+    { id: 'transmuted', name: 'Transmuted Spell', cost: '1 Sorcery Point',
+      desc: 'When you cast a spell that deals a type of damage from the following list, you can spend 1 Sorcery Point to change that damage type to one of the other listed types: Acid, Cold, Fire, Lightning, Poison, Thunder.' },
+    { id: 'twinned',    name: 'Twinned Spell',    cost: '1 Sorcery Point',
+      desc: 'When you cast a spell, such as Charm Person, that can be cast with a higher-level spell slot to target an additional creature, you can spend 1 Sorcery Point to increase the spell\'s effective level by 1.' },
+    { id: 'spell-strike', name: 'Spell Strike', cost: '2 Sorcery Points', subclassOnly: true,
+      desc: 'When you attack a creature with a weapon attack from your magical conduit, you can cast a sorcerer spell or cantrip with a casting time of 1 action as a bonus action. If the attack hit and the spell targets the same creature, its first spell attack automatically hits.\nYou can\'t modify a spell in this way if you\'ve already cast a level 1+ spell on the current turn, nor can you cast a level 1+ spell on this turn after modifying a spell in this way.' },
   ];
 
   // Sorcerer spell slots by character level (levels 1–3)
@@ -2236,11 +2250,41 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     20: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 3, 6: 2, 7: 2, 8: 1, 9: 1 },
   };
 
+  const RANGER_SLOTS = {
+     1: { 1: 2 },
+     2: { 1: 2 },
+     3: { 1: 3 },
+     4: { 1: 3 },
+     5: { 1: 4, 2: 2 },
+     6: { 1: 4, 2: 2 },
+     7: { 1: 4, 2: 3 },
+     8: { 1: 4, 2: 3 },
+     9: { 1: 4, 2: 3, 3: 2 },
+    10: { 1: 4, 2: 3, 3: 2 },
+    11: { 1: 4, 2: 3, 3: 3 },
+    12: { 1: 4, 2: 3, 3: 3 },
+    13: { 1: 4, 2: 3, 3: 3, 4: 1 },
+    14: { 1: 4, 2: 3, 3: 3, 4: 1 },
+    15: { 1: 4, 2: 3, 3: 3, 4: 2 },
+    16: { 1: 4, 2: 3, 3: 3, 4: 2 },
+    17: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 1 },
+    18: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 1 },
+    19: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2 },
+    20: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2 },
+  };
+
   const FEATURES_LIBRARY = [
     {
       id: 'sorcerer-spellcasting',
       name: 'Spellcasting',
       class: 'Sorcerer',
+      level: 1,
+      type: 'spellcasting',
+    },
+    {
+      id: 'ranger-spellcasting',
+      name: 'Spellcasting',
+      class: 'Ranger',
       level: 1,
       type: 'spellcasting',
     },
@@ -2278,30 +2322,247 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       ],
     },
     {
+      id: 'sorcerer-sorcerous-restoration',
+      name: 'Sorcerous Restoration',
+      class: 'Sorcerer',
+      level: 5,
+      type: 'text',
+      description: "When you finish a Short Rest, you can regain expended Sorcery Points, but no more than a number equal to half your Sorcerer level (round down). Once you use this feature, you can't do so again until you finish a Long Rest.",
+    },
+    {
       id: 'sorcerer-metamagic',
       name: 'Metamagic',
       class: 'Sorcerer',
       level: 2,
       type: 'metamagic',
-      description: 'You can alter your spells with Metamagic. Choose 2 Metamagic options.',
+      description: 'You can alter your spells with Metamagic.',
+    },
+    {
+      id: 'spell-drinker-combat-mage',
+      name: 'Combat Mage',
+      class: 'Sorcerer',
+      subclass: 'Spell Drinker',
+      level: 3,
+      type: 'text',
+      description: 'You gain proficiency with light armor and medium armor. Also, you learn the true strike cantrip.',
+    },
+    {
+      id: 'spell-drinker-magical-conduit',
+      name: 'Magical Conduit',
+      class: 'Sorcerer',
+      subclass: 'Spell Drinker',
+      level: 3,
+      type: 'text',
+      description: 'You can spend 1 hour in meditation with a melee weapon. When you do, you gain proficiency with that weapon and it becomes your spellcasting focus for sorcerer spells. This weapon is your magical conduit. You can change your conduit by repeating this process with a different weapon.',
+    },
+    {
+      id: 'spell-drinker-draining-strike',
+      name: 'Draining Strike',
+      class: 'Sorcerer',
+      subclass: 'Spell Drinker',
+      level: 3,
+      type: 'text',
+      description: 'Once on your turn, when you hit a creature with a weapon attack from your magical conduit, you can deal the weapons damage as Necrotic damage. If you do, deal additional damage equal to your proficiency bonus, and gain temporary hit points equal twice your proficiency bonus for 1 minute.',
+    },
+    {
+      id: 'frayed-base',
+      name: 'Frayed',
+      race: 'Frayed',
+      type: 'frayed',
+      description: [
+        { boldIntro: 'Aberrant Mark.', text: 'Magic deformities warp your visage. You have the disfigured hindrance.' },
+        { boldIntro: 'Child of Misfortune.', text: 'When you are reduced to 0 hit points, you gain Heroic Inspiration if you don\'t have it.' },
+      ],
+    },
+    {
+      id: 'human-determination',
+      name: 'Human',
+      race: 'Human',
+      type: 'text',
+      description: [
+        { boldIntro: 'Skill Versatility.', text: 'You gain proficiency in two skills of your choice.' },
+        { boldIntro: 'Human Determination.', text: 'When you finish a long rest, you gain Heroic Inspiration if you don\'t have it.' },
+      ],
+    },
+    {
+      id: 'spell-drinker-precision-syphon',
+      name: 'Precision Syphon',
+      class: 'Sorcerer',
+      subclass: 'Spell Drinker',
+      level: 6,
+      type: 'text',
+      description: 'The first weapon attack you make with your magical conduit each turn has advantage.',
+    },
+    {
+      id: 'spell-drinker-metamagic',
+      name: 'Spell Drinker Metamagic',
+      class: 'Sorcerer',
+      subclass: 'Spell Drinker',
+      level: 6,
+      type: 'text',
+      description: [
+        { para: [
+          'You gain the ',
+          { metamagicLink: 'spell-strike', text: 'spell strike' },
+          ' metamagic.',
+        ]},
+      ],
+    },
+    {
+      id: 'rogue-expertise',
+      name: 'Expertise',
+      class: 'Rogue',
+      level: 1,
+      type: 'text',
+      description: 'You gain Expertise in two of your skill proficiencies of your choice.',
+    },
+    {
+      id: 'rogue-sneak-attack',
+      name: 'Sneak Attack',
+      class: 'Rogue',
+      level: 1,
+      type: 'text',
+      description: [
+        { sneakAttackDice: true },
+        'You know how to strike subtly and exploit a foe\'s distraction. Once per turn, you can deal an extra 1d6 damage to one creature you hit with an attack roll if you have Advantage on the roll and the attack uses a Finesse or a Ranged weapon. The extra damage\'s type is the same as the weapon\'s type.',
+        'You don\'t need Advantage on the attack roll if at least one of your allies is within 5 feet of the target, the ally doesn\'t have the Incapacitated condition, and you don\'t have Disadvantage on the attack roll.',
+        'The extra damage increases as you gain Rogue levels, as shown in the Sneak Attack column of the Rogue Features table.',
+      ],
+    },
+    {
+      id: 'rogue-thieves-cant',
+      name: "Thieves' Cant",
+      class: 'Rogue',
+      level: 1,
+      type: 'text',
+      description: "You picked up various languages in the communities where you plied your roguish talents. You know Thieves' Cant and one other language of your choice, which you choose from the language tables in chapter 2.",
+    },
+    {
+      id: 'rogue-weapon-mastery',
+      name: 'Weapon Mastery',
+      class: 'Rogue',
+      level: 1,
+      type: 'text',
+      description: [
+        'Your training with weapons allows you to use the mastery properties of two kinds of weapons of your choice with which you have proficiency, such as Daggers and Shortbows.',
+        'Whenever you finish a Long Rest, you can change the kinds of weapons you chose. For example, you could switch to using the mastery properties of Scimitars and Shortswords.',
+      ],
+    },
+    {
+      id: 'rogue-cunning-action',
+      name: 'Cunning Action',
+      class: 'Rogue',
+      level: 2,
+      type: 'text',
+      description: 'On your turn, you can take one of the following actions as a Bonus Action: Dash, Disengage, or Hide.',
+    },
+    {
+      id: 'rogue-steady-aim',
+      name: 'Steady Aim',
+      class: 'Rogue',
+      level: 3,
+      type: 'text',
+      description: "As a Bonus Action, you give yourself Advantage on your next attack roll on the current turn. You can use this feature only if you haven't moved during this turn, and after you use it, your Speed is 0 until the end of the current turn.",
+    },
+    {
+      id: 'rogue-cunning-strike',
+      name: 'Cunning Strike',
+      class: 'Rogue',
+      level: 5,
+      type: 'text',
+      description: [
+        "You've developed cunning ways to use your Sneak Attack. When you deal Sneak Attack damage, you can add one of the following Cunning Strike effects. Each effect has a die cost, which is the number of Sneak Attack damage dice you must forgo to add the effect. You remove the die before rolling, and the effect occurs immediately after the attack's damage is dealt. For example, if you add the Poison effect, remove 1d6 from the Sneak Attack's damage before rolling.",
+        'If a Cunning Strike effect requires a saving throw, the DC equals 8 plus your Dexterity modifier and Proficiency Bonus.',
+        { boldIntro: 'Poison (Cost: 1d6).', text: "You add a toxin to your strike, forcing the target to make a Constitution saving throw. On a failed save, the target has the Poisoned condition for 1 minute. At the end of each of its turns, the Poisoned target repeats the save, ending the effect on itself on a success. To use this effect, you must have a Poisoner's Kit on your person." },
+        { boldIntro: 'Trip (Cost: 1d6).', text: 'If the target is Large or smaller, it must succeed on a Dexterity saving throw or have the Prone condition.' },
+        { boldIntro: 'Withdraw (Cost: 1d6).', text: 'Immediately after the attack, you move up to half your Speed without provoking Opportunity Attacks.' },
+      ],
+    },
+    {
+      id: 'rogue-uncanny-dodge',
+      name: 'Uncanny Dodge',
+      class: 'Rogue',
+      level: 5,
+      type: 'text',
+      description: "When an attacker that you can see hits you with an attack roll, you can take a Reaction to halve the attack's damage against you (round down).",
+    },
+    {
+      id: 'rogue-expertise-2',
+      name: 'Expertise',
+      class: 'Rogue',
+      level: 6,
+      type: 'text',
+      description: 'You gain Expertise in two of your Skill Proficiencies of your choice.',
+    },
+    {
+      id: 'vile-fang-fangs-dripping',
+      name: 'Fangs Dripping',
+      class: 'Rogue',
+      subclass: 'Vile Fang',
+      level: 3,
+      type: 'text',
+      description: [
+        "You gain a poisoner's kit and proficiency with it.",
+        { boldIntro: 'Brewing Poisons.', text: "When you use the poisoner's kit to craft a basic poison, instead make a number of antitoxin or basic poisons equal to your proficiency bonus." },
+        "You can coat a weapon or ammunition with a strapped poison as a bonus action. When you coat a weapon or ammunition in a poison, you can transform it into any from the Exotic Poisons table. You can do this a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a short or long rest.",
+        "A creature that takes Piercing or Slashing damage from the poisoned weapon or ammunition suffers its effect. The poison remains potent for 1 minute or until it deals its damage, whichever comes first. Applying a poison to a weapon or ammunition removes any other poison already applied to it.",
+        { para: [{ bold: 'Saving Throws.' }, ' If a poison effect requires a saving throw, the DC equals 8 plus your Dexterity modifier and Proficiency Bonus.'] },
+        { saveDC: 'dex' },
+        { table: {
+          title: 'Exotic Poisons',
+          headers: ['Poison', 'Effect'],
+          rows: [
+            ["Dryad's Blight",   "The creature is dealt 1d6 poison damage. It is instead dealt 2d6 poison damage if it is a plant."],
+            ["Night Hag's Hex",  ["The creature must succeed on a Constitution saving throw or have the blinded condition until the end of its next turn.", { ingested: "The creature also has the unconscious condition for 1 hour. The creature wakes up if it takes damage or if another creature takes an action to shake it awake." }]],
+            ["Ooze's Caress",    "The creature is dealt 1d6 acid damage. It is instead dealt 2d6 acid damage if it is a construct or object."],
+            ["Succubus's Kiss",  ["The creature must succeed on a Constitution saving throw or have the charmed condition until the end of its next turn.", { ingested: "The creature is treated as having quaffed a Philter of Love." }]],
+            ["Toxin",            ["The creature must succeed on a Constitution saving throw or have the poisoned condition for 1 minute. At the end of each of its turns, the creature can repeat the saving throw. On a success, the effect ends.", { ingested: "the target is poisoned for 1 hour." }]],
+          ],
+        }},
+      ],
+    },
+    {
+      id: 'vile-fang-coiled-and-ready',
+      name: 'Coiled and Ready',
+      class: 'Rogue',
+      subclass: 'Vile Fang',
+      level: 3,
+      type: 'text',
+      description: 'You can use your Sneak Attack when you hit a creature with a weapon or ammunition coated in poison.',
+    },
+    {
+      id: 'vile-fang-my-bite-is-death',
+      name: 'My Bite is Death',
+      class: 'Rogue',
+      subclass: 'Vile Fang',
+      level: 6,
+      type: 'text',
+      description: [
+        'Your poisons ignore Resistance to Poison damage.',
+        { boldIntro: 'Potent (Cost: 1d6).', text: 'The saving throw against the poison applied by this attack is made with disadvantage.' },
+      ],
     },
   ];
 
   function getEligibleFeatures() {
-    const cls = String(state.charClass || '').trim();
-    const sub = String(state.subclass  || '').trim();
-    const lvl = parseInt(state.level)  || 0;
+    const cls     = String(state.charClass || '').trim();
+    const sub     = String(state.subclass  || '').trim();
+    const race    = String(state.race      || '').trim();
+    const subrace = String(state.subrace   || '').trim();
+    const lvl     = parseInt(state.level)  || 0;
     return FEATURES_LIBRARY.filter(f => {
-      if (f.class    && f.class    !== cls) return false;
-      if (f.subclass && f.subclass !== sub) return false;
-      if (f.level    && f.level    >   lvl) return false;
+      if (f.class    && f.class    !== cls)     return false;
+      if (f.subclass && f.subclass !== sub)     return false;
+      if (f.race     && f.race     !== race)    return false;
+      if (f.subrace  && f.subrace  !== subrace) return false;
+      if (f.level    && f.level    >   lvl)     return false;
       return true;
     });
   }
 
   function featureDisplayName(feature, isEditing) {
     if (!isEditing) return feature.name;
-    const source = feature.subclass || feature.class || '';
+    const source = feature.subclass || feature.subrace || feature.class || feature.race || '';
     const level  = feature.level ? ` Level ${feature.level}` : '';
     return `${source}${level} - ${feature.name}`;
   }
@@ -2466,6 +2727,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     decBtn.disabled = current <= 0;
     decBtn.addEventListener('click', e => {
       e.stopPropagation();
+      if (decBtn.disabled) return;
+      decBtn.disabled = true;
+      incBtn.disabled = true;
       onSetCurrent(Math.max(0, current - 1));
     });
     wrap.appendChild(decBtn);
@@ -2497,6 +2761,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     incBtn.disabled = current >= max;
     incBtn.addEventListener('click', e => {
       e.stopPropagation();
+      if (incBtn.disabled) return;
+      decBtn.disabled = true;
+      incBtn.disabled = true;
       onSetCurrent(Math.min(max, current + 1));
     });
     wrap.appendChild(incBtn);
@@ -2505,13 +2772,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
   // ── Feature content renderers ─────────────────────────────────────────────
-  function renderSpellcastingContent(data, isEditing) {
+  function renderSpellcastingContent(feature, data, isEditing) {
+    const isRanger  = feature.id === 'ranger-spellcasting';
     const lvl       = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
-    const slots     = SORC_SLOTS[lvl] || SORC_SLOTS[20];
-    const chaMod    = Math.floor(((parseInt(state.cha) || 10) - 10) / 2);
+    const slotTable = isRanger ? RANGER_SLOTS : SORC_SLOTS;
+    const slots     = slotTable[lvl] || slotTable[20];
+    const abScore   = isRanger ? (parseInt(state.wis) || 10) : (parseInt(state.cha) || 10);
+    const abMod     = Math.floor((abScore - 10) / 2);
+    const abLabel   = isRanger ? 'WIS' : 'CHA';
+    const abClass   = isRanger ? 'cs-attr-wis' : 'cs-attr-cha';
     const profBonus = Math.ceil(lvl / 4) + 1;
-    const atkBonus  = chaMod + profBonus;
-    const saveDC    = 8 + chaMod + profBonus;
+    const atkBonus  = abMod + profBonus;
+    const saveDC    = 8 + abMod + profBonus;
 
     if (!data.usedSlots)  data.usedSlots  = {};
     if (!data.spellNames) data.spellNames = {};
@@ -2524,11 +2796,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const wrap = document.createElement('div');
     wrap.className = 'cs-feat-spellcasting';
 
-    // Stats row (ability / atk bonus / save DC) — colored by CHA attribute
+    // Stats row (ability / atk bonus / save DC)
     const stats = document.createElement('div');
-    stats.className = 'cs-feat-spell-stats cs-attr-cha';
+    stats.className = `cs-feat-spell-stats ${abClass}`;
     stats.innerHTML = `
-      <div class="cs-feat-spell-stat"><span class="cs-feat-spell-stat-val">CHA</span><span class="cs-feat-spell-stat-lbl">Ability</span></div>
+      <div class="cs-feat-spell-stat"><span class="cs-feat-spell-stat-val">${abLabel}</span><span class="cs-feat-spell-stat-lbl">Ability</span></div>
       <div class="cs-feat-spell-stat"><span class="cs-feat-spell-stat-val${penClass}">${dispAtkBonus >= 0 ? '+' : ''}${dispAtkBonus}</span><span class="cs-feat-spell-stat-lbl">Atk Bonus</span></div>
       <div class="cs-feat-spell-stat"><span class="cs-feat-spell-stat-val${penClass}">${dispSaveDC}</span><span class="cs-feat-spell-stat-lbl">Save DC</span></div>
     `;
@@ -2742,6 +3014,45 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     detailPanelEl.classList.add('detail-collapsed');
   }
 
+  let _metamagicDetailActive = null;
+
+  function openMetamagicDetail(opt) {
+    if (_metamagicDetailActive === opt.id) {
+      closeMetamagicDetail();
+      return;
+    }
+    _metamagicDetailActive = opt.id;
+    _spellDetailActive = null;
+    inspectorItemKey = null;
+
+    const section = document.getElementById('spell-insp-section');
+    inspectorEl.hidden = true;
+    section.hidden = false;
+
+    section.querySelector('.spell-detail-name').textContent = opt.name;
+    section.querySelector('.spell-detail-sub').textContent = 'Metamagic Option';
+
+    const propsEl = section.querySelector('.spell-detail-props');
+    propsEl.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'spell-detail-prop';
+    row.innerHTML = `<span class="spell-detail-prop-lbl">Cost</span><span class="spell-detail-prop-val">${opt.cost}</span>`;
+    propsEl.appendChild(row);
+
+    section.querySelector('.spell-detail-desc').innerHTML = opt.desc
+      .split('\n').map(line => `<p>${line}</p>`).join('');
+    section.querySelector('.spell-detail-higher').hidden = true;
+
+    detailPanelEl.classList.remove('no-transition', 'detail-collapsed');
+    document.getElementById('spell-insp-toggle').onclick = closeMetamagicDetail;
+  }
+
+  function closeMetamagicDetail() {
+    _metamagicDetailActive = null;
+    document.getElementById('spell-insp-section').hidden = true;
+    detailPanelEl.classList.add('detail-collapsed');
+  }
+
   function renderSorceryPointsContent(data) {
     const lvl = parseInt(state.level) || 1;
     const max = data.fontMax ?? lvl;
@@ -2788,27 +3099,40 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
 
     const grid = document.createElement('div');
-    grid.className = 'cs-feat-metamagic-grid';
-    METAMAGIC_OPTIONS.forEach(opt => {
+    grid.className = isEditing ? 'cs-feat-metamagic-grid' : 'cs-spell-grid';
+    METAMAGIC_OPTIONS.filter(opt => !opt.subclassOnly).forEach(opt => {
       const chosen = data.chosen.includes(opt.id);
       if (!isEditing && !chosen) return;
+
+      if (!isEditing) {
+        const item = document.createElement('div');
+        item.className = 'cs-spell-link cs-spell-link-known';
+        const icon = document.createElement('span');
+        icon.className = 'cs-spell-link-icon';
+        icon.innerHTML = '<i class="fas fa-circle-info"></i>';
+        const nameEl = document.createElement('span');
+        nameEl.className = 'cs-spell-link-name';
+        nameEl.textContent = opt.name;
+        item.appendChild(icon);
+        item.appendChild(nameEl);
+        item.addEventListener('click', () => openMetamagicDetail(opt));
+        grid.appendChild(item);
+        return;
+      }
+
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'cs-feat-metamagic-opt' + (chosen ? ' cs-feat-metamagic-chosen' : '');
       btn.textContent = opt.name;
-      if (isEditing) {
-        btn.addEventListener('click', () => {
-          if (chosen) {
-            data.chosen = data.chosen.filter(id => id !== opt.id);
-          } else if (data.chosen.length < maxChoices) {
-            data.chosen.push(opt.id);
-          }
-          if (onChange) onChange();
-          renderFeatures();
-        });
-      } else {
-        btn.disabled = true;
-      }
+      btn.addEventListener('click', () => {
+        if (chosen) {
+          data.chosen = data.chosen.filter(id => id !== opt.id);
+        } else if (data.chosen.length < maxChoices) {
+          data.chosen.push(opt.id);
+        }
+        if (onChange) onChange();
+        renderFeatures();
+      });
       grid.appendChild(btn);
     });
     wrap.appendChild(grid);
@@ -2838,7 +3162,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           body.appendChild(ul);
         } else if (part.boldIntro) {
           const p = document.createElement('p');
-          p.className = 'cs-feature-desc';
+          p.className = 'cs-feature-desc' + (part.indent ? ' cs-feature-desc--indent' : '');
           const strong = document.createElement('strong');
           strong.textContent = part.boldIntro + ' ';
           p.appendChild(strong);
@@ -2874,7 +3198,23 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
             const tr = document.createElement('tr');
             row.forEach(cell => {
               const td = document.createElement('td');
-              td.textContent = cell;
+              if (Array.isArray(cell)) {
+                cell.forEach(part => {
+                  if (typeof part === 'string') {
+                    td.appendChild(document.createTextNode(part));
+                  } else if (part.ingested != null) {
+                    const div = document.createElement('div');
+                    div.className = 'cs-table-cell-ingested';
+                    const strong = document.createElement('strong');
+                    strong.textContent = 'Ingested: ';
+                    div.appendChild(strong);
+                    div.appendChild(document.createTextNode(part.ingested));
+                    td.appendChild(div);
+                  }
+                });
+              } else {
+                td.textContent = cell;
+              }
               tr.appendChild(td);
             });
             tbody.appendChild(tr);
@@ -2882,17 +3222,132 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           tbl.appendChild(tbody);
           wrap.appendChild(tbl);
           body.appendChild(wrap);
+        } else if (part.para) {
+          const p = document.createElement('p');
+          p.className = 'cs-feature-desc';
+          part.para.forEach(inline => {
+            if (typeof inline === 'string') {
+              p.appendChild(document.createTextNode(inline));
+            } else if (inline.metamagicLink) {
+              const opt = METAMAGIC_OPTIONS.find(m => m.id === inline.metamagicLink);
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'cs-feature-inline-link';
+              btn.textContent = inline.text;
+              if (opt) btn.addEventListener('click', e => { e.stopPropagation(); openMetamagicDetail(opt); });
+              p.appendChild(btn);
+            } else if (inline.bold) {
+              const strong = document.createElement('strong');
+              strong.textContent = inline.bold;
+              p.appendChild(strong);
+            } else if (inline.calcDC) {
+              const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+              const prof = Math.ceil(lvl / 4) + 1;
+              const abMod = Math.floor(((parseInt(state[inline.calcDC]) || 10) - 10) / 2);
+              const span = document.createElement('span');
+              span.className = `cs-attr-text cs-attr-${inline.calcDC}`;
+              span.textContent = String(8 + abMod + prof);
+              p.appendChild(span);
+            }
+          });
+          body.appendChild(p);
+        } else if (part.saveDC) {
+          const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+          const prof = Math.ceil(lvl / 4) + 1;
+          const abMod = Math.floor(((parseInt(state[part.saveDC]) || 10) - 10) / 2);
+          const dc = 8 + abMod + prof;
+          const panel = document.createElement('div');
+          panel.className = `cs-feat-save-dc-panel cs-attr-${part.saveDC}`;
+          panel.innerHTML = `<span class="cs-feat-spell-stat-val">${dc}</span><span class="cs-feat-spell-stat-lbl">Save DC</span>`;
+          body.appendChild(panel);
+        } else if (part.sneakAttackDice) {
+          const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+          const SNEAK_DICE = [1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10];
+          const count = SNEAK_DICE[lvl - 1];
+          const panel = document.createElement('div');
+          panel.className = 'cs-feat-save-dc-panel';
+          panel.innerHTML = `<span class="cs-feat-spell-stat-val">${count}d6</span><span class="cs-feat-spell-stat-lbl">Sneak Attack</span>`;
+          body.appendChild(panel);
         }
       });
     }
 
     if (feature.type === 'spellcasting') {
-      body.appendChild(renderSpellcastingContent(data, isEditing));
+      body.appendChild(renderSpellcastingContent(feature, data, isEditing));
     } else if (feature.type === 'metamagic') {
       body.appendChild(renderMetamagicContent(data, isEditing));
+    } else if (feature.type === 'frayed') {
+      body.appendChild(renderFrayedContent(isEditing));
     }
 
     return body;
+  }
+
+  const FRAYED_SUBRACES = {
+    Abhorrent: [
+      { boldIntro: 'Abyssal Visage.', text: 'You have proficiency in Intimidation.' },
+      { boldIntro: 'Darkvision.',     text: 'You have darkvision out to 30 feet.' },
+    ],
+    Divine: [
+      { boldIntro: 'Divine Right.',   text: 'You have proficiency in Persuasion.' },
+      { boldIntro: 'Radiant Visage.', text: 'You shed dim light within a 5-foot radius. The light is considered daylight and you can supress it at will.' },
+    ],
+    Fey: [
+      { boldIntro: 'Keen Senses.',   text: 'You have proficiency in Perception.' },
+      { boldIntro: 'Fey Ancestry.',  text: 'You have Advantage on saving throws you make to avoid or end the Charmed condition.' },
+    ],
+  };
+
+  function renderFrayedContent(isEditing) {
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-subrace';
+
+    if (isEditing) {
+      const sel = document.createElement('select');
+      sel.className = 'cs-feat-subrace-sel';
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = 'Choose Sub-race…';
+      sel.appendChild(blank);
+      Object.keys(FRAYED_SUBRACES).forEach(sr => {
+        const opt = document.createElement('option');
+        opt.value = sr;
+        opt.textContent = sr;
+        if (state.subrace === sr) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', e => {
+        e.stopPropagation();
+        state.subrace = sel.value;
+        syncFeatures();
+        renderFeatures();
+        if (onChange) onChange();
+      });
+      wrap.appendChild(sel);
+    } else if (state.subrace) {
+      const label = document.createElement('div');
+      label.className = 'cs-feat-subrace-label';
+      label.textContent = state.subrace;
+      wrap.appendChild(label);
+    }
+
+    const parts = FRAYED_SUBRACES[state.subrace];
+    if (parts) {
+      const descWrap = document.createElement('div');
+      descWrap.className = 'cs-feat-subrace-desc';
+      parts.forEach(part => {
+        const p = document.createElement('p');
+        p.className = 'cs-feature-desc';
+        const strong = document.createElement('strong');
+        strong.textContent = part.boldIntro + ' ';
+        p.appendChild(strong);
+        p.appendChild(document.createTextNode(part.text));
+        descWrap.appendChild(p);
+      });
+      wrap.appendChild(descWrap);
+    }
+
+    return wrap;
   }
 
   function renderFeatures() {
@@ -2958,6 +3413,33 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
             if (onChange) onChange();
             renderFeatures();
           } : null
+        ));
+      } else if (id === 'sorcerer-sorcerous-restoration') {
+        if (data.used == null) data.used = 0;
+        toggle.appendChild(makeUseStepper(
+          1 - data.used,
+          1,
+          newRemaining => {
+            data.used = 1 - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          null
+        ));
+      } else if (id === 'vile-fang-fangs-dripping') {
+        const lvl = parseInt(state.level) || 1;
+        const profMax = Math.ceil(lvl / 4) + 1;
+        if (data.used == null) data.used = 0;
+        const used = Math.min(data.used, profMax);
+        toggle.appendChild(makeUseStepper(
+          profMax - used,
+          profMax,
+          newRemaining => {
+            data.used = profMax - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          null
         ));
       } else if (id === 'sorcerer-font-of-magic') {
         const lvl = parseInt(state.level) || 1;
@@ -3651,7 +4133,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     setTimeout(() => {
       btn.innerHTML = orig;
       btn.classList.remove('cs-rest-done');
-    }, 3000);
+    }, 1000);
     return true;
   }
 
@@ -3679,12 +4161,25 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (state.featureData['sorcerer-spellcasting']) {
       state.featureData['sorcerer-spellcasting'].usedSlots = {};
     }
+    if (state.featureData['ranger-spellcasting']) {
+      state.featureData['ranger-spellcasting'].usedSlots = {};
+    }
+    if (state.featureData['vile-fang-fangs-dripping']) {
+      state.featureData['vile-fang-fangs-dripping'].used = 0;
+    }
     if (state.featureData['sorcerer-innate-sorcery']) {
       state.featureData['sorcerer-innate-sorcery'].innateSorceryUsed = 0;
+    }
+    if (state.featureData['sorcerer-sorcerous-restoration']) {
+      state.featureData['sorcerer-sorcerous-restoration'].used = 0;
     }
     if (state.featureData['sorcerer-font-of-magic']) {
       const fd = state.featureData['sorcerer-font-of-magic'];
       fd.current = fd.fontMax ?? (parseInt(state.level) || 1);
+    }
+    if (state.activeFeatures.includes('human-determination') && !state.inspiration) {
+      state.inspiration = true;
+      updateInspirationDisplay();
     }
     updateCsCalculations();
     renderFeatures();
@@ -3695,6 +4190,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (!lockRestBtn(document.getElementById('cs-short-rest-btn'))) return;
     state.deathSaves = { successes: 0, failures: 0 };
     updateDeathSavesDisplay();
+    if (state.featureData['vile-fang-fangs-dripping']) {
+      state.featureData['vile-fang-fangs-dripping'].used = 0;
+    }
     updateCsCalculations();
     renderFeatures();
     if (onChange) onChange();
@@ -3712,7 +4210,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   const SUBCLASS_MAP = {
     'Barbarian': ['Path of the Cursed'],
-    'Sorcerer':  [],
+    'Sorcerer':  ['Spell Drinker'],
     'Rogue':     ['Vile Fang'],
     'Ranger':    ['Witch Warden'],
   };
@@ -3756,7 +4254,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   syncSubclassOptions();
 
   // Re-sync features when subclass or level changes
-  ['cs-subclass', 'cs-level'].forEach(id => {
+  ['cs-subclass', 'cs-level', 'cs-race'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', () => {
       syncFeatures(); renderFeatures();
     });
@@ -4377,6 +4875,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         inspiration:  state.inspiration,
         deathSaves:   state.deathSaves,
         exhaustion:   state.exhaustion,
+        subrace:          state.subrace,
         activeFeatures:   state.activeFeatures,
         hiddenFeatures:   state.hiddenFeatures,
         featureData:      state.featureData,
@@ -4488,6 +4987,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         ? { successes: _toCount(_ds.successes), failures: _toCount(_ds.failures) }
         : { successes: 0, failures: 0 };
       state.exhaustion      = typeof newState.exhaustion === 'number' ? Math.max(0, Math.min(6, newState.exhaustion)) : 0;
+      state.subrace         = newState.subrace || '';
       state.activeFeatures  = Array.isArray(newState.activeFeatures)  ? newState.activeFeatures  : [];
       state.hiddenFeatures  = Array.isArray(newState.hiddenFeatures)   ? newState.hiddenFeatures  : [];
       state.featureData     = (newState.featureData && typeof newState.featureData === 'object') ? newState.featureData : {};

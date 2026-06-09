@@ -2294,6 +2294,7 @@ body.is-dragging #inv-scroll {
 .cs-attr-int { --ac: var(--ac-int); }
 .cs-attr-wis { --ac: var(--ac-wis); }
 .cs-attr-cha { --ac: var(--ac-cha); }
+.cs-attr-text { color: color-mix(in srgb, rgb(var(--ac)), white 50%); font-weight: 600; }
 
 /* 3-column × 2-row attribute grid */
 .cs-attr-grid {
@@ -2425,7 +2426,7 @@ body.is-dragging #inv-scroll {
 .cs-rest-row {
   display: flex;
   gap: 6px;
-  padding: 8px 8px;
+  padding: 2px 8px 8px;
 }
 .cs-rest-btn {
   flex: 1;
@@ -3272,6 +3273,34 @@ span.cs-feature-ticker {
   margin-top: 4px;
 }
 
+.cs-feat-subrace { margin: 4px 0 2px; }
+.cs-feat-subrace-sel {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 8px;
+  width: 100%;
+  cursor: pointer;
+}
+.cs-feat-subrace-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgb(var(--ac));
+}
+
+.cs-feature-inline-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  font-style: italic;
+  color: rgba(120, 220, 150, 0.85);
+  cursor: pointer;
+}
+.cs-feature-inline-link:hover { text-decoration: underline; color: rgba(120, 220, 150, 1); }
+
 .cs-feature-desc--indent {
   padding-left: 16px;
   margin-top: 0;
@@ -3286,6 +3315,12 @@ span.cs-feature-ticker {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.35);
   margin-bottom: 4px;
+  text-align: center;
+}
+
+.cs-table-cell-ingested {
+  margin-top: 5px;
+  color: rgba(200, 215, 255, 0.45);
 }
 
 .cs-feature-table {
@@ -3317,6 +3352,18 @@ span.cs-feature-ticker {
 
 /* ── Feature: Spellcasting ───────────────────────────────────── */
 .cs-feat-spellcasting { display: flex; flex-direction: column; gap: 10px; }
+
+.cs-feat-save-dc-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgb(var(--ac) / 0.12);
+  border: 1px solid rgb(var(--ac) / 0.4);
+  border-radius: var(--radius);
+  padding: 5px 18px;
+  width: fit-content;
+  margin: 4px auto 2px;
+}
 
 .cs-feat-spell-stats {
   display: flex;
@@ -3836,7 +3883,7 @@ span.cs-feature-ticker {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 0 8px 8px;
+  padding: 0 8px 2px;
 }
 
 .cs-stat-3col {
