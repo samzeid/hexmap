@@ -1,3 +1,4 @@
+console.log('[INIT] SPELLS_XPHB at script.js load:', typeof window.SPELLS_XPHB, Array.isArray(window.SPELLS_XPHB) ? window.SPELLS_XPHB.length : 'not array');
 window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, isHiddenFromPlayer, onSound }) => {
 
   // ── STATE ──────────────────────────────────────────────────────────────
@@ -2351,10 +2352,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   // ── Spell autocomplete ───────────────────────────────────────────────────
   let _spellAcDdEl = document.getElementById('spell-ac-dropdown');
+  console.log('[SpellAC] init — getElementById found:', !!_spellAcDdEl, 'SPELLS_XPHB now:', Array.isArray(window.SPELLS_XPHB) ? window.SPELLS_XPHB.length : typeof window.SPELLS_XPHB);
   if (!_spellAcDdEl) {
     _spellAcDdEl = document.createElement('div');
     _spellAcDdEl.id = 'spell-ac-dropdown';
     document.body.appendChild(_spellAcDdEl);
+    console.log('[SpellAC] created element dynamically, parent:', _spellAcDdEl.parentElement?.tagName);
   }
   _spellAcDdEl.style.display = 'none';
   let _spellAcInp = null;
@@ -2384,10 +2387,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
   function _showSpellAcMatches(val, level, inp, onPick) {
+    const spellDb = window.SPELLS_XPHB || [];
+    console.log('[SpellAC] show — val:', val, 'level:', level, 'db length:', spellDb.length);
     if (!val) { _closeSpellAc(); return; }
-    const matches = (window.SPELLS_XPHB || [])
+    const matches = spellDb
       .filter(s => s.l === level && s.n.toLowerCase().includes(val))
       .slice(0, 10);
+    console.log('[SpellAC] matches:', matches.length, matches.map(s => s.n));
     if (!matches.length) { _closeSpellAc(); return; }
     _spellAcDdEl.innerHTML = '';
     matches.forEach(spell => {
