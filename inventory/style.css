@@ -2533,26 +2533,22 @@ body.is-dragging #inv-scroll {
 }
 .cs-death-save-dot {
   background: none;
-  border-radius: 50%;
+  border: none;
   width: 16px;
   height: 16px;
   padding: 0;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   flex-shrink: 0;
-  transition: background 0.1s, border-color 0.1s;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 14px;
 }
-.cs-death-save-dot[data-type="success"] { border: 1.5px solid rgba(80, 180, 100, 0.35); }
-.cs-death-save-dot[data-type="failure"] { border: 1.5px solid rgba(200, 70, 70, 0.35); }
-.cs-death-save-dot.cs-on-success { background: rgba(100, 200, 120, 0.75); border-color: rgba(100, 200, 120, 1); }
-.cs-death-save-dot.cs-on-failure { background: rgba(200, 80, 80, 0.75);  border-color: rgba(200, 80, 80, 1); }
-.cs-death-save-dot[data-type="success"]::before { content: '✓'; font-size: 11px; line-height: 1; color: rgba(80, 180, 100, 0.35); }
-.cs-death-save-dot[data-type="failure"]::before { content: '✕'; font-size: 11px; line-height: 1; color: rgba(200, 70, 70, 0.35); }
-.cs-death-save-dot[data-type="success"].cs-on-success::before { color: rgba(255, 255, 255, 0.9); }
-.cs-death-save-dot[data-type="failure"].cs-on-failure::before { color: rgba(255, 255, 255, 0.9); }
+.cs-death-save-dot[data-type="success"] i { color: rgba(80, 180, 100, 0.3); transition: color 0.15s; }
+.cs-death-save-dot[data-type="failure"] i { color: rgba(200, 70, 70, 0.3);  transition: color 0.15s; }
+.cs-death-save-dot.cs-on-success i { color: rgba(100, 210, 130, 1); }
+.cs-death-save-dot.cs-on-failure i { color: rgba(220, 80, 80, 1); }
 .cs-exhaustion-pip {
   border: 1.5px solid rgba(255, 255, 255, 0.18);
 }
