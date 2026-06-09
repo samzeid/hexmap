@@ -2555,7 +2555,7 @@ body.is-dragging #inv-scroll {
 .cs-exhaustion-stepper {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .cs-exh-btn {
   background: none;
@@ -2571,10 +2571,15 @@ body.is-dragging #inv-scroll {
   align-items: center;
   justify-content: center;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.1s, border-color 0.1s;
+  transition: background 0.1s, border-color 0.1s, color 0.15s;
+  flex-shrink: 0;
 }
 .cs-exh-btn:disabled { opacity: 0.25; cursor: default; }
 .cs-exh-btn:not(:disabled):active { background: rgba(255,255,255,0.1); }
+.cs-exh-warning .cs-exh-btn {
+  color: rgba(255, 80, 80, 1);
+  border-color: rgba(255, 80, 80, 0.5);
+}
 .cs-exh-count {
   position: relative;
   font-size: 16px;
@@ -2582,6 +2587,8 @@ body.is-dragging #inv-scroll {
   color: var(--text);
   text-align: center;
   display: inline-block;
+  width: 1.4em;
+  text-align: center;
 }
 .cs-exh-warning .cs-exh-count {
   animation: cs-heartbeat 1.1s ease-in-out infinite;
