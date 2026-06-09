@@ -1,4 +1,3 @@
-console.log('[INIT] SPELLS_XPHB at script.js load:', typeof window.SPELLS_XPHB, Array.isArray(window.SPELLS_XPHB) ? window.SPELLS_XPHB.length : 'not array');
 window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, isHiddenFromPlayer, onSound }) => {
 
   // ── STATE ──────────────────────────────────────────────────────────────
@@ -2244,7 +2243,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       class: 'Sorcerer',
       level: 1,
       type: 'spellcasting',
-      description: 'Drawing on your innate magic, you can cast spells. Charisma is your spellcasting ability.',
     },
     {
       id: 'sorcerer-innate-sorcery',
@@ -2252,7 +2250,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       class: 'Sorcerer',
       level: 1,
       type: 'text',
-      description: 'Once per Long Rest, you can activate Innate Sorcery as a Bonus Action. For 1 minute, your spell attack bonus and Spell Save DC each increase by 2.',
+      description: [
+        'An event in your past left an indelible mark on you, infusing you with simmering magic. As a Bonus Action, you can unleash that magic for 1 minute, during which you gain the following benefits:',
+        { list: [
+          'The spell save DC of your Sorcerer spells increases by 1.',
+          'You have Advantage on the attack rolls of Sorcerer spells you cast.',
+        ]},
+        'You can use this feature twice, and you regain all expended uses of it when you finish a Long Rest.',
+      ],
     },
     {
       id: 'sorcerer-font-of-magic',
@@ -2260,7 +2265,17 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       class: 'Sorcerer',
       level: 2,
       type: 'sorcery-points',
-      description: 'You have a number of Sorcery Points equal to your Sorcerer level. You can spend them to create Spell Slots and vice versa.',
+      description: [
+        'You have a number of Sorcery Points equal to your Sorcerer level. You can use your Sorcery Points to fuel the options below, along with other features, such as Metamagic, that use those points.',
+        { boldIntro: 'Converting Spell Slots to Sorcery Points.', text: "You can expend a spell slot to gain a number of Sorcery Points equal to the slot's level (no action required)." },
+        { boldIntro: 'Creating Spell Slots.', text: 'As a Bonus Action, you can transform unexpended Sorcery Points into one spell slot. The Creating Spell Slots table shows the cost of creating a spell slot of a given level, and it lists the minimum Sorcerer level you must be to create a slot. You can create a spell slot no higher than level 5.' },
+        { indent: 'Any spell slot you create with this feature vanishes when you finish a Long Rest.' },
+        { table: {
+          title: 'Creating Spell Slots',
+          headers: ['Spell Slot Level', 'Sorcery Point Cost', 'Min. Sorcerer Level'],
+          rows: [['1','2','2'],['2','3','3'],['3','5','5'],['4','6','7'],['5','7','9']],
+        }},
+      ],
     },
     {
       id: 'sorcerer-metamagic',
@@ -2268,7 +2283,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       class: 'Sorcerer',
       level: 2,
       type: 'metamagic',
-      description: 'You can alter your spells with Metamagic. Choose 2 Metamagic options. You gain another at levels 10 and 17.',
+      description: 'You can alter your spells with Metamagic. Choose 2 Metamagic options.',
     },
   ];
 
@@ -2284,7 +2299,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     });
   }
 
-  function featureDisplayName(feature) {
+  function featureDisplayName(feature, isEditing) {
+    if (!isEditing) return feature.name;
     const source = feature.subclass || feature.class || '';
     const level  = feature.level ? ` Level ${feature.level}` : '';
     return `${source}${level} - ${feature.name}`;
@@ -2359,7 +2375,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   // ── Spell autocomplete ───────────────────────────────────────────────────
   let _spellAcDdEl = document.getElementById('spell-ac-dropdown');
-  console.log('[SpellAC] init — getElementById found:', !!_spellAcDdEl, 'SPELLS_XPHB now:', Array.isArray(window.SPELLS_XPHB) ? window.SPELLS_XPHB.length : typeof window.SPELLS_XPHB);
   if (!_spellAcDdEl) {
     _spellAcDdEl = document.createElement('div');
     _spellAcDdEl.id = 'spell-ac-dropdown';
@@ -2439,6 +2454,56 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     inp.addEventListener('keydown', e => { if (e.key === 'Escape') _closeSpellAc(); });
   }
 
+  // ── Use stepper helper (- current/max +) ─────────────────────────────────
+  function makeUseStepper(current, max, onSetCurrent, onSetMax) {
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-use-stepper';
+
+    const decBtn = document.createElement('button');
+    decBtn.type = 'button';
+    decBtn.className = 'cs-use-btn';
+    decBtn.textContent = '−';
+    decBtn.disabled = current <= 0;
+    decBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      onSetCurrent(Math.max(0, current - 1));
+    });
+    wrap.appendChild(decBtn);
+
+    const countEl = document.createElement('span');
+    countEl.className = 'cs-use-count' + (current <= 0 ? ' cs-use-empty' : '');
+
+    if (onSetMax) {
+      countEl.appendChild(document.createTextNode(current + '/'));
+      const maxInp = document.createElement('input');
+      maxInp.type = 'number';
+      maxInp.className = 'cs-use-max-inp';
+      maxInp.min = '0';
+      maxInp.max = '99';
+      maxInp.value = max;
+      maxInp.addEventListener('click', e => e.stopPropagation());
+      maxInp.addEventListener('input', () => onSetMax(Math.max(0, parseInt(maxInp.value) || 0)));
+      countEl.appendChild(maxInp);
+    } else {
+      countEl.textContent = `${current}/${max}`;
+    }
+
+    wrap.appendChild(countEl);
+
+    const incBtn = document.createElement('button');
+    incBtn.type = 'button';
+    incBtn.className = 'cs-use-btn';
+    incBtn.textContent = '+';
+    incBtn.disabled = current >= max;
+    incBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      onSetCurrent(Math.min(max, current + 1));
+    });
+    wrap.appendChild(incBtn);
+
+    return wrap;
+  }
+
   // ── Feature content renderers ─────────────────────────────────────────────
   function renderSpellcastingContent(data, isEditing) {
     const lvl       = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
@@ -2481,6 +2546,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
       const section = document.createElement('div');
       section.className = 'cs-spell-section';
+      if (slotLvl !== null) {
+        const hue = Math.round(170 + (slotLvl - 1) * 24); // teal(170) → violet(290) across 6 levels
+        section.classList.add('cs-spell-leveled');
+        section.style.setProperty('--sh', hue);
+      }
 
       // Heading
       const heading = document.createElement('div');
@@ -2493,18 +2563,26 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       titleEl.textContent = title;
       heading.appendChild(titleEl);
       if (slotMax !== null) {
+        if (!data.slotOverrides) data.slotOverrides = {};
+        const effectiveMax = data.slotOverrides[slotLvl] != null ? data.slotOverrides[slotLvl] : slotMax;
         const used = data.usedSlots[slotLvl] || 0;
-        const remaining = slotMax - used;
-        const slotBtn = document.createElement('button');
-        slotBtn.type = 'button';
-        slotBtn.className = 'cs-spell-slot-btn' + (remaining === 0 ? ' cs-spell-slot-btn-empty' : '');
-        slotBtn.textContent = `[ ${remaining} / ${slotMax} ]`;
-        slotBtn.addEventListener('click', () => {
-          data.usedSlots[slotLvl] = used < slotMax ? used + 1 : 0;
-          if (onChange) onChange();
-          renderFeatures();
-        });
-        heading.appendChild(slotBtn);
+        const remaining = effectiveMax - used;
+        heading.appendChild(makeUseStepper(
+          remaining,
+          effectiveMax,
+          newRemaining => {
+            const eff = data.slotOverrides?.[slotLvl] ?? slotMax;
+            data.usedSlots[slotLvl] = eff - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          isEditing ? newMax => {
+            data.slotOverrides[slotLvl] = newMax;
+            if ((data.usedSlots[slotLvl] || 0) > newMax) data.usedSlots[slotLvl] = newMax;
+            if (onChange) onChange();
+            renderFeatures();
+          } : null
+        ));
       }
       const rule2 = document.createElement('span');
       rule2.className = 'cs-spell-rule';
@@ -2661,13 +2739,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   function closeSpellDetail() {
     _spellDetailActive = null;
     document.getElementById('spell-insp-section').hidden = true;
-    inspectorEl.hidden = false;
     detailPanelEl.classList.add('detail-collapsed');
   }
 
   function renderSorceryPointsContent(data) {
     const lvl = parseInt(state.level) || 1;
-    const max = lvl;
+    const max = data.fontMax ?? lvl;
     if (data.current == null) data.current = max;
     const current = Math.max(0, Math.min(max, data.current));
 
@@ -2743,16 +2820,74 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     body.className = 'cs-feature-body';
 
     if (feature.description) {
-      const desc = document.createElement('p');
-      desc.className = 'cs-feature-desc';
-      desc.textContent = feature.description;
-      body.appendChild(desc);
+      const parts = Array.isArray(feature.description) ? feature.description : [feature.description];
+      parts.forEach(part => {
+        if (typeof part === 'string') {
+          const p = document.createElement('p');
+          p.className = 'cs-feature-desc';
+          p.textContent = part;
+          body.appendChild(p);
+        } else if (part.list) {
+          const ul = document.createElement('ul');
+          ul.className = 'cs-feature-list';
+          part.list.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = item;
+            ul.appendChild(li);
+          });
+          body.appendChild(ul);
+        } else if (part.boldIntro) {
+          const p = document.createElement('p');
+          p.className = 'cs-feature-desc';
+          const strong = document.createElement('strong');
+          strong.textContent = part.boldIntro + ' ';
+          p.appendChild(strong);
+          p.appendChild(document.createTextNode(part.text ?? ''));
+          body.appendChild(p);
+        } else if (part.indent != null) {
+          const p = document.createElement('p');
+          p.className = 'cs-feature-desc cs-feature-desc--indent';
+          p.textContent = part.indent;
+          body.appendChild(p);
+        } else if (part.table) {
+          const wrap = document.createElement('div');
+          wrap.className = 'cs-feature-table-wrap';
+          if (part.table.title) {
+            const title = document.createElement('div');
+            title.className = 'cs-feature-table-title';
+            title.textContent = part.table.title;
+            wrap.appendChild(title);
+          }
+          const tbl = document.createElement('table');
+          tbl.className = 'cs-feature-table';
+          const thead = document.createElement('thead');
+          const hrow = document.createElement('tr');
+          (part.table.headers ?? []).forEach(h => {
+            const th = document.createElement('th');
+            th.textContent = h;
+            hrow.appendChild(th);
+          });
+          thead.appendChild(hrow);
+          tbl.appendChild(thead);
+          const tbody = document.createElement('tbody');
+          (part.table.rows ?? []).forEach(row => {
+            const tr = document.createElement('tr');
+            row.forEach(cell => {
+              const td = document.createElement('td');
+              td.textContent = cell;
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          });
+          tbl.appendChild(tbody);
+          wrap.appendChild(tbl);
+          body.appendChild(wrap);
+        }
+      });
     }
 
     if (feature.type === 'spellcasting') {
       body.appendChild(renderSpellcastingContent(data, isEditing));
-    } else if (feature.type === 'sorcery-points') {
-      body.appendChild(renderSorceryPointsContent(data));
     } else if (feature.type === 'metamagic') {
       body.appendChild(renderMetamagicContent(data, isEditing));
     }
@@ -2790,38 +2925,66 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       handle.title = 'Drag to reorder';
       header.appendChild(handle);
 
-      const toggle = document.createElement('button');
-      toggle.type = 'button';
+      const toggle = document.createElement('div');
       toggle.className = 'cs-feature-toggle' + (collapsed ? '' : ' cs-feature-open');
-      toggle.innerHTML = `<span class="cs-feature-name">${featureDisplayName(feature)}</span><i class="fa-solid fa-chevron-down cs-feature-chevron"></i>`;
       toggle.addEventListener('click', () => {
         state.featureCollapsed[id] = !state.featureCollapsed[id];
         if (onChange) onChange();
         renderFeatures();
       });
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'cs-feature-name';
+      nameSpan.textContent = featureDisplayName(feature, isEditing);
+      toggle.appendChild(nameSpan);
+
       if (id === 'sorcerer-innate-sorcery') {
-        const ticker = document.createElement('button');
-        ticker.type = 'button';
-        const used = !!data.innateSorceryUsed;
-        ticker.className = 'cs-feature-ticker' + (used ? ' cs-ticker-used' : '');
-        ticker.textContent = used ? '0/1' : '1/1';
-        ticker.title = used ? 'Used (Long Rest to restore)' : 'Available';
-        ticker.addEventListener('click', e => {
-          e.stopPropagation();
-          data.innateSorceryUsed = !data.innateSorceryUsed;
-          if (onChange) onChange();
-          renderFeatures();
-        });
-        header.appendChild(ticker);
+        if (typeof data.innateSorceryUsed !== 'number')
+          data.innateSorceryUsed = data.innateSorceryUsed ? 1 : 0;
+        if (data.innateSorceryMax == null) data.innateSorceryMax = 2;
+        const usedCount = data.innateSorceryUsed;
+        const maxCount = data.innateSorceryMax;
+        toggle.appendChild(makeUseStepper(
+          maxCount - usedCount,
+          maxCount,
+          newRemaining => {
+            data.innateSorceryUsed = maxCount - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          isEditing ? newMax => {
+            data.innateSorceryMax = newMax;
+            if (data.innateSorceryUsed > newMax) data.innateSorceryUsed = newMax;
+            if (onChange) onChange();
+            renderFeatures();
+          } : null
+        ));
       } else if (id === 'sorcerer-font-of-magic') {
         const lvl = parseInt(state.level) || 1;
         if (data.current == null) data.current = lvl;
-        const current = Math.max(0, Math.min(lvl, data.current));
-        const ticker = document.createElement('span');
-        ticker.className = 'cs-feature-ticker';
-        ticker.textContent = `${current}/${lvl}`;
-        header.appendChild(ticker);
+        if (data.fontMax == null) data.fontMax = lvl;
+        const fontMax = data.fontMax;
+        const current = Math.max(0, Math.min(fontMax, data.current));
+        toggle.appendChild(makeUseStepper(
+          current,
+          fontMax,
+          newCurrent => {
+            data.current = newCurrent;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          isEditing ? newMax => {
+            data.fontMax = newMax;
+            if (data.current > newMax) data.current = newMax;
+            if (onChange) onChange();
+            renderFeatures();
+          } : null
+        ));
       }
+
+      const chevronEl = document.createElement('i');
+      chevronEl.className = 'fa-solid fa-chevron-down cs-feature-chevron';
+      toggle.appendChild(chevronEl);
 
       header.appendChild(toggle);
 
@@ -3479,8 +3642,21 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   });
   updateExhaustionDisplay();
 
-  // ── LONG REST / SHORT REST ────────────────────────────────────────────────
+  // ── FULL REST / SHORT REST ────────────────────────────────────────────────
+  function lockRestBtn(btn) {
+    if (!btn || btn.classList.contains('cs-rest-done')) return false;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+    btn.classList.add('cs-rest-done');
+    setTimeout(() => {
+      btn.innerHTML = orig;
+      btn.classList.remove('cs-rest-done');
+    }, 3000);
+    return true;
+  }
+
   document.getElementById('cs-long-rest-btn')?.addEventListener('click', () => {
+    if (!lockRestBtn(document.getElementById('cs-long-rest-btn'))) return;
     const hpMaxEl = document.getElementById('cs-hp-max');
     const hpMax = parseInt(hpMaxEl?.value) || 0;
     if (hpMax > 0) {
@@ -3493,21 +3669,22 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (tempEl) tempEl.value = '';
     state.deathSaves = { successes: 0, failures: 0 };
     updateDeathSavesDisplay();
+    if (state.exhaustion > 0) { state.exhaustion--; updateExhaustionDisplay(); }
     const hdCountEl = document.getElementById('cs-hit-dice-count');
     const totalDice = parseInt(hdCountEl?.value) || parseInt(state.hitDiceCount) || 1;
     const currentDice = parseInt(state.hitDiceRemaining) || 0;
-    const toRestore = Math.max(1, Math.floor(totalDice / 2));
-    state.hitDiceRemaining = String(Math.min(totalDice, currentDice + toRestore));
+    state.hitDiceRemaining = String(totalDice);
     const hdEl = document.getElementById('cs-hit-dice-remaining');
     if (hdEl) hdEl.value = state.hitDiceRemaining;
     if (state.featureData['sorcerer-spellcasting']) {
       state.featureData['sorcerer-spellcasting'].usedSlots = {};
     }
     if (state.featureData['sorcerer-innate-sorcery']) {
-      state.featureData['sorcerer-innate-sorcery'].innateSorceryUsed = false;
+      state.featureData['sorcerer-innate-sorcery'].innateSorceryUsed = 0;
     }
     if (state.featureData['sorcerer-font-of-magic']) {
-      state.featureData['sorcerer-font-of-magic'].current = parseInt(state.level) || 1;
+      const fd = state.featureData['sorcerer-font-of-magic'];
+      fd.current = fd.fontMax ?? (parseInt(state.level) || 1);
     }
     updateCsCalculations();
     renderFeatures();
@@ -3515,6 +3692,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   });
 
   document.getElementById('cs-short-rest-btn')?.addEventListener('click', () => {
+    if (!lockRestBtn(document.getElementById('cs-short-rest-btn'))) return;
     state.deathSaves = { successes: 0, failures: 0 };
     updateDeathSavesDisplay();
     updateCsCalculations();

@@ -1827,7 +1827,8 @@ main {
 .cost-coin-inp::-webkit-inner-spin-button,
 .cost-coin-inp::-webkit-outer-spin-button { -webkit-appearance: none; }
 
-#insp-toggle {
+#insp-toggle,
+#spell-insp-toggle {
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.12);
   color: rgba(255,255,255,0.4);
@@ -1842,7 +1843,8 @@ main {
   justify-content: center;
   -webkit-tap-highlight-color: transparent;
 }
-#insp-toggle:active { background: rgba(255,255,255,0.15); color: var(--text); }
+#insp-toggle:active,
+#spell-insp-toggle:active { background: rgba(255,255,255,0.15); color: var(--text); }
 
 /* Compact props row: bulk chips + container + materials + weapon select */
 #insp-props {
@@ -2392,12 +2394,12 @@ body.is-dragging #inv-scroll {
 }
 
 /* ── REST BUTTONS ────────────────────────────────────────────── */
-.cs-rest-row {
+.cs-top-rest-row {
   display: flex;
   gap: 6px;
-  padding: 0 8px 8px;
+  padding: 4px 8px 8px;
 }
-.cs-rest-btn {
+.cs-top-rest-btn {
   flex: 1;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -2413,12 +2415,62 @@ body.is-dragging #inv-scroll {
   -webkit-tap-highlight-color: transparent;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
+.cs-top-rest-btn:hover { background: rgba(255, 255, 255, 0.09); color: rgba(255, 255, 255, 0.8); }
+.cs-top-rest-btn:active { background: rgba(255, 255, 255, 0.14); }
+.cs-top-long-rest-btn { border-color: rgba(120, 180, 255, 0.25); color: rgba(120, 180, 255, 0.7); }
+.cs-top-long-rest-btn:hover { background: rgba(120, 180, 255, 0.08); border-color: rgba(120, 180, 255, 0.4); color: rgba(120, 180, 255, 0.95); }
+.cs-top-short-rest-btn { border-color: rgba(100, 200, 140, 0.25); color: rgba(100, 200, 140, 0.7); }
+.cs-top-short-rest-btn:hover { background: rgba(100, 200, 140, 0.08); border-color: rgba(100, 200, 140, 0.4); color: rgba(100, 200, 140, 0.95); }
+
+.cs-rest-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 8px;
+}
+.cs-rest-btn {
+  flex: 1;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 4px;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
 .cs-rest-btn:hover { background: rgba(255, 255, 255, 0.09); color: rgba(255, 255, 255, 0.8); }
 .cs-rest-btn:active { background: rgba(255, 255, 255, 0.14); }
 .cs-long-rest-btn { border-color: rgba(120, 180, 255, 0.25); color: rgba(120, 180, 255, 0.7); }
 .cs-long-rest-btn:hover { background: rgba(120, 180, 255, 0.08); border-color: rgba(120, 180, 255, 0.4); color: rgba(120, 180, 255, 0.95); }
 .cs-short-rest-btn { border-color: rgba(100, 200, 140, 0.25); color: rgba(100, 200, 140, 0.7); }
 .cs-short-rest-btn:hover { background: rgba(100, 200, 140, 0.08); border-color: rgba(100, 200, 140, 0.4); color: rgba(100, 200, 140, 0.95); }
+
+@keyframes cs-rest-confirm-green {
+  0%   { background: rgba(100, 200, 140, 0.35); transform: scale(1.03); }
+  30%  { background: rgba(100, 200, 140, 0.2); transform: scale(1); }
+  100% { background: rgba(100, 200, 140, 0.04); opacity: 0.4; }
+}
+@keyframes cs-rest-confirm-blue {
+  0%   { background: rgba(120, 180, 255, 0.35); transform: scale(1.03); }
+  30%  { background: rgba(120, 180, 255, 0.2); transform: scale(1); }
+  100% { background: rgba(120, 180, 255, 0.04); opacity: 0.4; }
+}
+.cs-rest-btn.cs-rest-done {
+  pointer-events: none;
+  cursor: default;
+}
+.cs-short-rest-btn.cs-rest-done { animation: cs-rest-confirm-green 3s ease-out forwards; }
+.cs-long-rest-btn.cs-rest-done  { animation: cs-rest-confirm-blue  3s ease-out forwards; }
 
 /* ── ABILITY SUB-ROW (inspiration / death saves / exhaustion) ─── */
 .cs-ability-sub {
@@ -3065,13 +3117,7 @@ body.is-dragging #inv-scroll {
   justify-content: center;
 }
 .cs-attack-dmg-type-badge {
-  font-size: 7px;
-  color: rgba(255, 255, 255, 0.18);
-  padding: 0 5px;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: none;
 }
 
 .cs-attacks-empty {
@@ -3130,15 +3176,13 @@ body.is-dragging #inv-scroll {
 
 .cs-feature-toggle {
   flex: 1;
-  background: none;
-  border: none;
+  min-width: 0;
   color: inherit;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 2px;
   cursor: pointer;
-  text-align: left;
 }
 
 .cs-feature-name {
@@ -3146,10 +3190,16 @@ body.is-dragging #inv-scroll {
   font-weight: 600;
   letter-spacing: 0.02em;
   color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .cs-feature-chevron {
   margin-left: auto;
+  flex-shrink: 0;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.4);
   transition: transform 0.18s ease;
@@ -3206,8 +3256,60 @@ span.cs-feature-ticker {
 .cs-feature-desc {
   font-size: 11.5px;
   color: rgba(255, 255, 255, 0.5);
-  margin: 6px 0 10px;
+  margin: 6px 0 4px;
   line-height: 1.55;
+}
+
+.cs-feature-list {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 2px 0 4px;
+  padding-left: 20px;
+  line-height: 1.55;
+}
+
+.cs-feature-list + .cs-feature-desc {
+  margin-top: 4px;
+}
+
+.cs-feature-desc--indent {
+  padding-left: 16px;
+  margin-top: 0;
+}
+
+.cs-feature-table-wrap {
+  margin: 6px 0 8px;
+}
+
+.cs-feature-table-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 4px;
+}
+
+.cs-feature-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.cs-feature-table th {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+  text-align: center;
+  padding: 3px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.cs-feature-table td {
+  text-align: center;
+  padding: 4px 8px;
+}
+
+.cs-feature-table tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 /* delete button only visible in edit mode */
@@ -3286,6 +3388,64 @@ span.cs-feature-ticker {
   border-color: rgba(255, 80, 80, 0.3);
 }
 
+/* ── Use stepper (- current/max +) ──────────────────────────────── */
+.cs-use-stepper {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+.cs-use-btn {
+  background: none;
+  border: 1px solid rgba(80, 210, 130, 0.3);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  color: rgba(80, 210, 130, 0.85);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition: background 0.1s;
+}
+.cs-use-btn:disabled { opacity: 0.25; cursor: default; }
+.cs-use-btn:not(:disabled):active { background: rgba(80, 210, 130, 0.12); }
+.cs-use-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(80, 210, 130, 0.9);
+  white-space: nowrap;
+  min-width: 28px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cs-use-count.cs-use-empty { color: rgba(255, 90, 90, 0.75); }
+.cs-use-stepper:has(.cs-use-empty) .cs-use-btn { border-color: rgba(255, 80, 80, 0.3); color: rgba(255, 90, 90, 0.75); }
+.cs-use-max-inp {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  width: 28px;
+  padding: 1px 2px;
+  outline: none;
+  font-family: inherit;
+  -moz-appearance: textfield;
+}
+.cs-use-max-inp::-webkit-inner-spin-button,
+.cs-use-max-inp::-webkit-outer-spin-button { -webkit-appearance: none; }
+
 .cs-spell-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -3315,32 +3475,56 @@ span.cs-feature-ticker {
   align-items: center;
   gap: 5px;
   padding: 4px 7px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: none;
+  border: none;
   border-radius: 4px;
   cursor: default;
   user-select: none;
 }
 .cs-spell-link-known { cursor: pointer; }
-.cs-spell-link-known:hover {
-  background: rgba(var(--ac-cha), 0.1);
-  border-color: rgba(var(--ac-cha), 0.3);
-}
+.cs-spell-link-known:hover .cs-spell-link-name { color: rgba(120, 220, 150, 1); text-decoration: underline; }
 .cs-spell-link-icon {
   font-size: 10px;
-  color: rgba(162, 90, 222, 0.45);
+  color: rgba(120, 220, 150, 0.35);
   flex-shrink: 0;
 }
-.cs-spell-link-known:hover .cs-spell-link-icon { color: rgba(162, 90, 222, 0.9); }
+.cs-spell-link-known:hover .cs-spell-link-icon { color: rgba(120, 220, 150, 0.7); }
 .cs-spell-link-name {
   font-size: 11px;
-  color: rgb(var(--ac-cha));
+  color: rgba(120, 220, 150, 0.85);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cs-spell-link-known:hover .cs-spell-link-name {
-  color: color-mix(in srgb, rgb(var(--ac-cha)), white 40%);
+
+/* Progressive green → cyan → blue-violet per spell level (--sh set in JS) */
+.cs-spell-leveled .cs-use-btn {
+  border-color: hsl(var(--sh) 65% 62% / 0.3);
+  color: hsl(var(--sh) 65% 62% / 0.85);
+}
+.cs-spell-leveled .cs-use-btn:not(:disabled):active {
+  background: hsl(var(--sh) 65% 62% / 0.12);
+}
+.cs-spell-leveled .cs-use-count {
+  color: hsl(var(--sh) 65% 65% / 0.9);
+}
+.cs-spell-leveled .cs-spell-link-name {
+  color: hsl(var(--sh) 60% 72% / 0.85);
+}
+.cs-spell-leveled .cs-spell-link-icon {
+  color: hsl(var(--sh) 60% 72% / 0.35);
+}
+.cs-spell-leveled .cs-spell-link-known:hover .cs-spell-link-name {
+  color: hsl(var(--sh) 60% 72% / 1);
+}
+.cs-spell-leveled .cs-spell-link-known:hover .cs-spell-link-icon {
+  color: hsl(var(--sh) 60% 72% / 0.7);
+}
+/* Empty slots stay red */
+.cs-spell-leveled .cs-use-count.cs-use-empty { color: rgba(255, 90, 90, 0.75); }
+.cs-spell-leveled .cs-use-stepper:has(.cs-use-empty) .cs-use-btn {
+  border-color: rgba(255, 80, 80, 0.3);
+  color: rgba(255, 90, 90, 0.75);
 }
 
 /* ── Spell detail panel ──────────────────────────────────────── */
