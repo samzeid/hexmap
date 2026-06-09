@@ -242,8 +242,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const dieTypeAuto = dieSides ? `d${dieSides}` : null;
     applyAuto('cs-hit-dice-type', 'hitDiceType', dieTypeAuto, true);
 
-    // Hit dice count = level
-    const hitDiceCountAuto = !isNaN(level) && level >= 1 ? level : null;
+    // Hit dice count = level (+ bonus dice from Path of the Cursed features)
+    const bonusHitDice = (state.activeFeatures.includes('cursed-dark-well') ? 1 : 0)
+      + (state.activeFeatures.includes('cursed-curses-claim') ? 1 : 0);
+    const hitDiceCountAuto = !isNaN(level) && level >= 1 ? level + bonusHitDice : null;
     applyAuto('cs-hit-dice-count', 'hitDiceCount', hitDiceCountAuto, true);
 
     // effectiveMax used only for display label — remaining is always user-controlled
@@ -278,7 +280,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       hpContainer.classList.toggle('cs-hp-low', isLow);
     }
 
-    // AC auto-calculation: armor-based or unarmored (10 + Dex), plus shield
+    // AC auto-calculation: armor-based or unarmored (10 + Dex [+ Con w/ Unarmored
+    // Defense]), plus shield
     const acEl = document.getElementById('cs-ac');
     const acStatEl = acEl && acEl.closest('.cs-ac-stat');
     const armorInactive = state.equippedArmor && !state.armorActive;
@@ -286,9 +289,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (acStatEl) acStatEl.classList.toggle('cs-ac-inactive', !!(armorInactive || shieldInactive));
     if (acEl && document.activeElement !== acEl && (state.ac === '' || state.ac == null)) {
       const dexMod = mods.dex !== null ? mods.dex : 0;
+      const conMod = mods.con !== null ? mods.con : 0;
       const shieldBonus = (state.equippedShield && state.shieldActive) ? 2 : 0;
       const useArmor = state.equippedArmor && state.armorActive;
-      const baseAC = useArmor ? calcArmorAC(state.equippedArmor, dexMod) : 10 + dexMod;
+      // Unarmored Defense (Barbarian): 10 + Dex + Con while not wearing armor.
+      const unarmoredBonus = state.activeFeatures.includes('barbarian-unarmored-defense') ? conMod : 0;
+      const baseAC = useArmor ? calcArmorAC(state.equippedArmor, dexMod) : 10 + dexMod + unarmoredBonus;
       const autoAC = baseAC !== null ? baseAC + shieldBonus : null;
       if (autoAC !== null && !isNaN(autoAC)) {
         acEl.value = String(autoAC);
@@ -299,18 +305,21 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
 
     // Speed: default 30ft, every 2 exhaustion levels = -5ft
+    // Let Evil Take Hold (Path of the Cursed) adds +10ft while raging.
     const speedEl = document.getElementById('cs-speed');
     if (speedEl && document.activeElement !== speedEl) {
       const isEmpty = state.speed === '' || state.speed == null;
       const baseSpeed = isEmpty ? 30 : parseInt(state.speed);
       const speedPenalty = Math.floor(exhPenalty / 2) * 5;
+      const ragingSpeedBonus = (isRaging() && state.activeFeatures.includes('cursed-let-evil-take-hold')) ? 10 : 0;
       if (!isNaN(baseSpeed)) {
-        speedEl.value = String(Math.max(0, baseSpeed - speedPenalty));
-        speedEl.classList.toggle('cs-auto', isEmpty || speedPenalty > 0);
+        speedEl.value = String(Math.max(0, baseSpeed - speedPenalty + ragingSpeedBonus));
+        speedEl.classList.toggle('cs-auto', isEmpty || speedPenalty > 0 || ragingSpeedBonus > 0);
         speedEl.classList.toggle('cs-exh-penalty', speedPenalty > 0);
+        speedEl.classList.toggle('cs-rage-boost', ragingSpeedBonus > 0);
       } else {
         speedEl.value = state.speed || '';
-        speedEl.classList.remove('cs-auto', 'cs-exh-penalty');
+        speedEl.classList.remove('cs-auto', 'cs-exh-penalty', 'cs-rage-boost');
       }
     }
 
@@ -2726,6 +2735,45 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       type: 'text',
       description: "Your speed increases by 10 feet while you aren't wearing Heavy armor.",
     },
+    {
+      id: 'cursed-dark-well',
+      name: 'Dark Well',
+      class: 'Barbarian',
+      subclass: 'Path of the Cursed',
+      level: 3,
+      type: 'text',
+      description: [
+        'You gain an additional hit die.',
+        'When you enter your rage, you can expend one hit die to feed your curse. When you do, gain temporary hit points equal to the roll of your hit die plus your Constitution modifier until your next short or long rest.',
+      ],
+    },
+    {
+      id: 'cursed-let-evil-take-hold',
+      name: 'Let Evil Take Hold',
+      class: 'Barbarian',
+      subclass: 'Path of the Cursed',
+      level: 3,
+      type: 'text',
+      description: [
+        'When you enter your rage, your curse takes hold. You gain the following:',
+        { boldIntro: 'Unholy Senses.', text: 'You gain blindsight within 10ft.' },
+        { boldIntro: 'Unholy Speed.', text: 'Your speed increases by 10ft.' },
+        { boldIntro: 'Unholy Strength.', text: 'When you use your Reckless Attack, deal 1d6 plus your proficiency bonus extra damage to the first target you hit with a Strength-based attack. The damage has the same type as the weapon or unarmed strike used for the attack.' },
+      ],
+    },
+    {
+      id: 'cursed-curses-claim',
+      name: "Curses Claim",
+      class: 'Barbarian',
+      subclass: 'Path of the Cursed',
+      level: 6,
+      type: 'text',
+      description: [
+        'You gain an additional hit die.',
+        'When your curse takes hold, you gain the following:',
+        { boldIntro: 'Unholy Survival.', text: 'When you fail a saving throw, you can expend your temporary hit points up to your Barbarian level and add the number of temporary hit points spent to your failed save, potentially turning it into a success.' },
+      ],
+    },
   ];
 
   function getEligibleFeatures() {
@@ -2953,6 +3001,45 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     wrap.appendChild(incBtn);
 
     return wrap;
+  }
+
+  // ── Barbarian Rage ────────────────────────────────────────────────────────
+  const RAGE_DAMAGE_BONUSES = [2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,4,4,4,4,4];
+  const RAGE_USES = [2,2,3,3,3,4,4,4,4,4,4,5,5,5,5,5,6,6,6,6];
+
+  function getRageDamageBonus() {
+    const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+    return RAGE_DAMAGE_BONUSES[lvl - 1];
+  }
+  function isRaging() {
+    return state.activeFeatures.includes('barbarian-rage')
+      && !!(state.featureData['barbarian-rage'] && state.featureData['barbarian-rage'].active);
+  }
+  // Toggle Rage on/off. Entering Rage consumes one use; ending it does not refund.
+  function makeRageToggle() {
+    const active = isRaging();
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cs-rage-panel' + (active ? ' cs-on' : '');
+    btn.innerHTML = '<i class="fa-solid fa-fire-flame-curved cs-rage-panel-icon"></i><span class="cs-rage-panel-lbl">Rage</span>';
+    btn.title = active ? 'Raging — click to end Rage' : 'Enter Rage (uses 1 Rage)';
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const data = state.featureData['barbarian-rage'] || (state.featureData['barbarian-rage'] = {});
+      const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+      const useMax = RAGE_USES[lvl - 1];
+      if (data.used == null) data.used = 0;
+      if (!data.active) {
+        data.active = true;
+        if (data.used < useMax) data.used += 1;
+      } else {
+        data.active = false;
+      }
+      if (onChange) onChange();
+      renderFeatures();
+      updateCsCalculations();
+    });
+    return btn;
   }
 
   // ── Feature content renderers ─────────────────────────────────────────────
@@ -3327,14 +3414,69 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const body = document.createElement('div');
     body.className = 'cs-feature-body';
 
+    let descTarget = body;
+
+    if (feature.id === 'barbarian-rage') {
+      const row = document.createElement('div');
+      row.className = 'cs-rage-toggle-row';
+      row.appendChild(makeRageToggle());
+      body.appendChild(row);
+    }
+
+    // Features whose rules text can be hidden behind a small arrow. The collapsible
+    // range is [collapseStart, collapseEnd); parts outside it (e.g. a stat panel or
+    // table) stay visible. `endBefore` marks the first visible part after the text;
+    // `startAfter` marks a leading visible part the text should follow.
+    const TEXT_COLLAPSE = {
+      'barbarian-rage':           {},
+      'witch-warden-witchmarks':  { endBefore: p => p && p.witchingDie },
+      'vile-fang-fangs-dripping': { endBefore: p => p && p.saveDC },
+      'rogue-sneak-attack':       { startAfter: p => p && p.sneakAttackDice },
+    };
+    let collapseWrap = null, collapseToggle = null, collapseStart = 0, collapseEnd = 0;
+    const collapseCfg = TEXT_COLLAPSE[feature.id];
+    if (collapseCfg && feature.description) {
+      const cparts = Array.isArray(feature.description) ? feature.description : [feature.description];
+      collapseEnd = cparts.length;
+      if (collapseCfg.endBefore) {
+        const i = cparts.findIndex(collapseCfg.endBefore);
+        if (i !== -1) collapseEnd = i;
+      }
+      if (collapseCfg.startAfter) {
+        const i = cparts.findIndex(collapseCfg.startAfter);
+        if (i !== -1) collapseStart = i + 1;
+      }
+      if (collapseStart < collapseEnd) {
+        const collapsed = !!data.textCollapsed;
+        collapseToggle = document.createElement('button');
+        collapseToggle.type = 'button';
+        collapseToggle.className = 'cs-feature-text-toggle' + (collapsed ? '' : ' cs-open');
+        collapseToggle.innerHTML = '<i class="fa-solid fa-chevron-down"></i><span>Details</span>';
+        collapseToggle.addEventListener('click', () => {
+          data.textCollapsed = !data.textCollapsed;
+          if (onChange) onChange();
+          renderFeatures();
+        });
+        collapseWrap = document.createElement('div');
+        collapseWrap.className = 'cs-feature-text-collapse';
+        collapseWrap.hidden = collapsed;
+      }
+    }
+
     if (feature.description) {
       const parts = Array.isArray(feature.description) ? feature.description : [feature.description];
-      parts.forEach(part => {
+      parts.forEach((part, idx) => {
+        // Insert the foldout toggle + wrapper at the point the collapsible range begins.
+        if (collapseWrap && idx === collapseStart) {
+          body.appendChild(collapseToggle);
+          body.appendChild(collapseWrap);
+        }
+        descTarget = (collapseWrap && idx >= collapseStart && idx < collapseEnd) ? collapseWrap : body;
         if (typeof part === 'string') {
           const p = document.createElement('p');
           p.className = 'cs-feature-desc';
           p.textContent = part;
-          body.appendChild(p);
+          descTarget.appendChild(p);
         } else if (part.list) {
           const ul = document.createElement('ul');
           ul.className = 'cs-feature-list';
@@ -3343,7 +3485,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
             li.textContent = item;
             ul.appendChild(li);
           });
-          body.appendChild(ul);
+          descTarget.appendChild(ul);
         } else if (part.boldIntro) {
           const p = document.createElement('p');
           p.className = 'cs-feature-desc' + (part.indent ? ' cs-feature-desc--indent' : '');
@@ -3351,12 +3493,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           strong.textContent = part.boldIntro + ' ';
           p.appendChild(strong);
           p.appendChild(document.createTextNode(part.text ?? ''));
-          body.appendChild(p);
+          descTarget.appendChild(p);
         } else if (part.indent != null) {
           const p = document.createElement('p');
           p.className = 'cs-feature-desc cs-feature-desc--indent';
           p.textContent = part.indent;
-          body.appendChild(p);
+          descTarget.appendChild(p);
         } else if (part.table) {
           const wrap = document.createElement('div');
           wrap.className = 'cs-feature-table-wrap';
@@ -3405,7 +3547,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           });
           tbl.appendChild(tbody);
           wrap.appendChild(tbl);
-          body.appendChild(wrap);
+          descTarget.appendChild(wrap);
         } else if (part.para) {
           const p = document.createElement('p');
           p.className = 'cs-feature-desc';
@@ -3434,7 +3576,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
               p.appendChild(span);
             }
           });
-          body.appendChild(p);
+          descTarget.appendChild(p);
         } else if (part.saveDC) {
           const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
           const prof = Math.ceil(lvl / 4) + 1;
@@ -3443,7 +3585,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           const panel = document.createElement('div');
           panel.className = `cs-feat-save-dc-panel cs-attr-${part.saveDC}`;
           panel.innerHTML = `<span class="cs-feat-spell-stat-val">${dc}</span><span class="cs-feat-spell-stat-lbl">Save DC</span>`;
-          body.appendChild(panel);
+          descTarget.appendChild(panel);
         } else if (part.sneakAttackDice) {
           const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
           const SNEAK_DICE = [1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10];
@@ -3451,14 +3593,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           const panel = document.createElement('div');
           panel.className = 'cs-feat-save-dc-panel';
           panel.innerHTML = `<span class="cs-feat-spell-stat-val">${count}d6</span><span class="cs-feat-spell-stat-lbl">Sneak Attack</span>`;
-          body.appendChild(panel);
+          descTarget.appendChild(panel);
         } else if (part.witchingDie) {
           const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
           const die = lvl >= 6 ? 'd8' : 'd6';
           const panel = document.createElement('div');
           panel.className = 'cs-feat-save-dc-panel';
           panel.innerHTML = `<span class="cs-feat-spell-stat-val">${die}</span><span class="cs-feat-spell-stat-lbl">Witching Die</span>`;
-          body.appendChild(panel);
+          descTarget.appendChild(panel);
         }
       });
     }
@@ -3672,7 +3814,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         ));
       } else if (id === 'barbarian-rage') {
         const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
-        const RAGE_USES = [2,2,3,3,3,4,4,4,4,4,4,5,5,5,5,5,6,6,6,6];
         const useMax = RAGE_USES[lvl - 1];
         if (data.used == null) data.used = 0;
         const used = Math.min(data.used, useMax);
@@ -3874,15 +4015,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const dexScore = parseInt(state.dex);
     const strMod = !isNaN(strScore) ? Math.floor((strScore - 10) / 2) : 0;
     const dexMod = !isNaN(dexScore) ? Math.floor((dexScore - 10) / 2) : 0;
-    let mod;
-    if (info.isRanged)       mod = dexMod;
-    else if (info.isFinesse) mod = Math.max(strMod, dexMod);
-    else                     mod = strMod;
+    let mod, usesStr;
+    if (info.isRanged)       { mod = dexMod; usesStr = false; }
+    else if (info.isFinesse) { mod = Math.max(strMod, dexMod); usesStr = strMod >= dexMod; }
+    else                     { mod = strMod; usesStr = true; }
     const toHitVal = mod + profBonus - (state.exhaustion || 0);
     const toHit  = toHitVal >= 0 ? `+${toHitVal}` : `${toHitVal}`;
-    const modStr = mod > 0 ? `+${mod}` : mod < 0 ? `${mod}` : '';
+    // Rage adds its damage bonus to Strength-based melee attacks while active.
+    const rageApplied = usesStr && isRaging();
+    const dmgMod = mod + (rageApplied ? getRageDamageBonus() : 0);
+    const modStr = dmgMod > 0 ? `+${dmgMod}` : dmgMod < 0 ? `${dmgMod}` : '';
     const damage = `${info.damageDice}${modStr}`;
-    return { toHit, damage, damageType: info.damageType, range: info.range, rangeType: info.rangeType };
+    return { toHit, damage, damageType: info.damageType, range: info.range, rangeType: info.rangeType, rageApplied };
   }
 
   function computeUnarmedStrike() {
@@ -3894,8 +4038,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const strMod = !isNaN(strScore) ? Math.floor((strScore - 10) / 2) : 0;
     const toHitVal = strMod + profBonus - (state.exhaustion || 0);
     const toHit = toHitVal >= 0 ? `+${toHitVal}` : `${toHitVal}`;
-    const damage = String(Math.max(1, 1 + strMod));
-    return { toHit, damage, range: 'Melee' };
+    const rageApplied = isRaging();
+    const damage = String(Math.max(1, 1 + strMod + (rageApplied ? getRageDamageBonus() : 0)));
+    return { toHit, damage, range: 'Melee', rageApplied };
   }
 
   function syncEquippedContainer() {
@@ -3970,7 +4115,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     });
   }
 
-  function makeAttackInput(placeholder, savedObj, field, auto) {
+  function makeAttackInput(placeholder, savedObj, field, auto, boostClass) {
     const input = document.createElement('input');
     input.type = 'text';
     input.placeholder = placeholder;
@@ -3980,9 +4125,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     input.value = isAuto ? auto : saved;
     input.classList.toggle('cs-auto', isAuto);
     if (field === 'toHit' && isAuto && state.exhaustion > 0) input.classList.add('cs-exh-penalty');
+    if (isAuto && boostClass) input.classList.add(boostClass);
     input.addEventListener('input', () => {
       savedObj[field] = input.value;
       input.classList.remove('cs-auto', 'cs-exh-penalty');
+      if (boostClass) input.classList.remove(boostClass);
       if (onChange) onChange();
     });
     input.addEventListener('blur', () => {
@@ -3991,6 +4138,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         input.value = auto;
         input.classList.add('cs-auto');
         if (state.exhaustion > 0) input.classList.add('cs-exh-penalty');
+        if (boostClass) input.classList.add(boostClass);
       }
     });
     return input;
@@ -4009,10 +4157,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     return cell;
   }
 
-  function makeInvDamageCell(placeholder, savedObj, field, autoVal, damageType) {
+  function makeInvDamageCell(placeholder, savedObj, field, autoVal, damageType, boostClass) {
     const cell = document.createElement('div');
     cell.className = 'cs-attack-dmg-cell';
-    cell.appendChild(makeAttackInput(placeholder, savedObj, field, autoVal));
+    cell.appendChild(makeAttackInput(placeholder, savedObj, field, autoVal, boostClass));
     if (damageType) {
       const badge = document.createElement('span');
       badge.className = 'cs-attack-dmg-type-badge';
@@ -4042,7 +4190,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     unarmedRow.appendChild(unarmedNameCell);
     unarmedRow.appendChild(makeRangeCell(unarmedData, unarmedStats.range, null));
     unarmedRow.appendChild(makeAttackInput('+0', unarmedData, 'toHit', unarmedStats.toHit));
-    unarmedRow.appendChild(makeInvDamageCell('1', unarmedData, 'damage', unarmedStats.damage, 'Bludgeoning'));
+    unarmedRow.appendChild(makeInvDamageCell('1', unarmedData, 'damage', unarmedStats.damage, 'Bludgeoning', unarmedStats.rageApplied ? 'cs-rage-boost' : ''));
     unarmedRow.appendChild(document.createElement('span'));
     attacksList.appendChild(unarmedRow);
 
@@ -4099,7 +4247,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         const autoStats = computeWeaponAutoStats(weapon.slotData);
         row.appendChild(makeRangeCell(wepData, autoStats ? autoStats.range : 'Melee', autoStats ? autoStats.rangeType : null));
         row.appendChild(makeAttackInput('+0', wepData, 'toHit', autoStats ? autoStats.toHit : ''));
-        row.appendChild(makeInvDamageCell('1d6', wepData, 'damage', autoStats ? autoStats.damage : '', autoStats ? autoStats.damageType : null));
+        row.appendChild(makeInvDamageCell('1d6', wepData, 'damage', autoStats ? autoStats.damage : '', autoStats ? autoStats.damageType : null, (autoStats && autoStats.rageApplied) ? 'cs-rage-boost' : ''));
         row.appendChild(document.createElement('span'));
 
       } else {
@@ -4466,6 +4614,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
     if (state.featureData['barbarian-rage']) {
       state.featureData['barbarian-rage'].used = 0;
+      state.featureData['barbarian-rage'].active = false;
     }
     if (state.featureData['sorcerer-innate-sorcery']) {
       state.featureData['sorcerer-innate-sorcery'].innateSorceryUsed = 0;
