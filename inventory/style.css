@@ -3344,24 +3344,15 @@ span.cs-feature-ticker {
 }
 
 /* ── Spell detail panel ──────────────────────────────────────── */
-#spell-detail {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(420px, 100vw - 16px);
-  max-height: 55vh;
-  overflow-y: auto;
-  background: #1a1a26;
-  border: 1px solid rgba(162, 90, 222, 0.3);
-  border-bottom: none;
-  border-radius: 10px 10px 0 0;
-  padding: 14px 16px 20px;
-  z-index: 300;
+#spell-insp-section {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+#spell-insp-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
 }
 /* ── Spell autocomplete dropdown ─────────────────────────────── */
 #spell-ac-dropdown {
@@ -3390,11 +3381,6 @@ span.cs-feature-ticker {
 .spell-ac-option:hover { background: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 1); }
 .spell-ac-option:active { background: rgba(255, 255, 255, 0.12); }
 
-.spell-detail-collapsed {
-  transform: translateX(-50%) translateY(100%) !important;
-  opacity: 0;
-  pointer-events: none;
-}
 .spell-detail-header {
   display: flex;
   align-items: flex-start;

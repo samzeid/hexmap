@@ -408,18 +408,6 @@
 
     <div id="spell-ac-dropdown" hidden></div>
 
-    <div id="spell-detail" class="spell-detail-collapsed">
-      <div class="spell-detail-header">
-        <div>
-          <div class="spell-detail-name"></div>
-          <div class="spell-detail-sub"></div>
-        </div>
-        <button class="spell-detail-close" title="Close"><i class="fas fa-xmark"></i></button>
-      </div>
-      <div class="spell-detail-props"></div>
-      <div class="spell-detail-desc"></div>
-      <div class="spell-detail-higher"></div>
-    </div>
 
     <div id="inspector" class="inspector-collapsed">
       <div id="insp-header">
@@ -446,6 +434,19 @@
       <textarea id="insp-notes" hidden placeholder="Notes..."></textarea>
       <button id="insp-copy" hidden>Copy item</button>
       <button id="insp-remove">Remove item</button>
+      <!-- Spell detail section -->
+      <div id="spell-insp-section" hidden>
+        <div id="spell-insp-header">
+          <div>
+            <h2 class="spell-detail-name"></h2>
+            <div class="spell-detail-sub"></div>
+          </div>
+          <button id="spell-insp-toggle" title="Close"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="spell-detail-props"></div>
+        <div class="spell-detail-desc"></div>
+        <div class="spell-detail-higher" hidden></div>
+      </div>
     </div>
 
   </div><!-- /app -->

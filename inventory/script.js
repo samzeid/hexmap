@@ -1206,6 +1206,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   // ── INSPECTOR ────────────────────────────────────────────────────────────
   function showInspector(slotData, container, r, c, packIdx) {
+    _spellDetailActive = null;
+    document.getElementById('spell-insp-section').hidden = true;
+    inspectorEl.hidden = false;
     const _panelOpen = !detailPanelEl.classList.contains('detail-collapsed');
     const _prevH = _panelOpen ? detailPanelEl.offsetHeight : 0;
     const lib = getLibraryItem(slotData.name);
@@ -1993,6 +1996,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
     inspectorItemKey = null;
     _customEditKey = null; _customEditOpen = false;
+    _spellDetailActive = null;
+    document.getElementById('spell-insp-section').hidden = true;
+    inspectorEl.hidden = false;
     refreshInspectorCollapsed();
   }
 
@@ -2013,9 +2019,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
 
   document.addEventListener('pointerdown', e => {
-    if (inspectorItemKey !== null
-        && !detailPanelEl.classList.contains('detail-collapsed')
-        && !inspectorEl.contains(e.target)
+    const panelOpen = !detailPanelEl.classList.contains('detail-collapsed');
+    const outsidePanel = !detailPanelEl.contains(e.target)
         && !e.target.closest('.slot')
         && !e.target.closest('.shop-item-row')
         && !e.target.closest('.char-tab')
@@ -2023,9 +2028,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         && !e.target.closest('#shop-tab-btn')
         && !e.target.closest('#cs-armor-display')
         && !e.target.closest('#cs-shield-display')
-        && !e.target.closest('.cs-attack-weapon-name')) {
-      hideInspector();
-      render();
+        && !e.target.closest('.cs-attack-weapon-name')
+        && !e.target.closest('.cs-spell-link');
+    if (panelOpen && outsidePanel) {
+      if (_spellDetailActive) closeSpellDetail();
+      else if (inspectorItemKey !== null) { hideInspector(); render(); }
     }
   });
 
@@ -2597,26 +2604,28 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   // ── Spell detail panel ───────────────────────────────────────────────────
   let _spellDetailActive = null;
 
-  function openSpellDetail(spell, fromEl) {
-    const panel = document.getElementById('spell-detail');
-    if (!panel) return;
-
+  function openSpellDetail(spell) {
     if (_spellDetailActive === spell.n) {
       closeSpellDetail();
       return;
     }
     _spellDetailActive = spell.n;
+    inspectorItemKey = null;
+
+    const section = document.getElementById('spell-insp-section');
+    inspectorEl.hidden = true;
+    section.hidden = false;
 
     const lvlNames = ['Cantrip','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
     const lvlLabel = spell.l === 0 ? `${spell.sc} Cantrip` : `${lvlNames[spell.l]} Level ${spell.sc}`;
     const tags = [];
-    if (spell.conc)  tags.push('Concentration');
+    if (spell.conc)   tags.push('Concentration');
     if (spell.ritual) tags.push('Ritual');
 
-    panel.querySelector('.spell-detail-name').textContent = spell.n;
-    panel.querySelector('.spell-detail-sub').textContent  = lvlLabel + (tags.length ? ` · ${tags.join(' · ')}` : '');
+    section.querySelector('.spell-detail-name').textContent = spell.n;
+    section.querySelector('.spell-detail-sub').textContent  = lvlLabel + (tags.length ? ` · ${tags.join(' · ')}` : '');
 
-    const propsEl = panel.querySelector('.spell-detail-props');
+    const propsEl = section.querySelector('.spell-detail-props');
     propsEl.innerHTML = '';
     [['Casting Time', spell.t], ['Range', spell.r], ['Components', spell.c], ['Duration', spell.d]]
       .forEach(([label, val]) => {
@@ -2636,8 +2645,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       ).join('');
     }
 
-    panel.querySelector('.spell-detail-desc').innerHTML = renderDesc(spell.desc);
-    const higherEl = panel.querySelector('.spell-detail-higher');
+    section.querySelector('.spell-detail-desc').innerHTML = renderDesc(spell.desc);
+    const higherEl = section.querySelector('.spell-detail-higher');
     if (spell.higher) {
       higherEl.innerHTML = '<div class="spell-detail-higher-lbl">At Higher Levels</div>' + renderDesc(spell.higher);
       higherEl.hidden = false;
@@ -2645,14 +2654,15 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       higherEl.hidden = true;
     }
 
-    panel.classList.remove('spell-detail-collapsed');
-
-    document.querySelector('.spell-detail-close').onclick = closeSpellDetail;
+    detailPanelEl.classList.remove('no-transition', 'detail-collapsed');
+    document.getElementById('spell-insp-toggle').onclick = closeSpellDetail;
   }
 
   function closeSpellDetail() {
     _spellDetailActive = null;
-    document.getElementById('spell-detail')?.classList.add('spell-detail-collapsed');
+    document.getElementById('spell-insp-section').hidden = true;
+    inspectorEl.hidden = false;
+    detailPanelEl.classList.add('detail-collapsed');
   }
 
   function renderSorceryPointsContent(data) {
