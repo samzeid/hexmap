@@ -137,6 +137,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     inspiration: false,
     deathSaves: { successes: 0, failures: 0 },
     exhaustion: 0,
+    activeFeatures:   [],
+    hiddenFeatures:   [],
+    featureData:      {},
+    featureCollapsed: {},
   };
 
   function updateProfButtons() {
@@ -2186,6 +2190,683 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     });
   })();
 
+  // ── FEATURES ─────────────────────────────────────────────────────────────
+
+  const METAMAGIC_OPTIONS = [
+    { id: 'careful',     name: 'Careful Spell' },
+    { id: 'distant',     name: 'Distant Spell' },
+    { id: 'empowered',   name: 'Empowered Spell' },
+    { id: 'extended',    name: 'Extended Spell' },
+    { id: 'heightened',  name: 'Heightened Spell' },
+    { id: 'quickened',   name: 'Quickened Spell' },
+    { id: 'seeking',     name: 'Seeking Spell' },
+    { id: 'subtle',      name: 'Subtle Spell' },
+    { id: 'transmuted',  name: 'Transmuted Spell' },
+    { id: 'twinned',     name: 'Twinned Spell' },
+  ];
+
+  // Sorcerer spell slots by character level (levels 1–3)
+  const SORC_SLOTS = {
+     1: { 1: 2 },
+     2: { 1: 3 },
+     3: { 1: 4, 2: 2 },
+     4: { 1: 4, 2: 3 },
+     5: { 1: 4, 2: 3, 3: 2 },
+     6: { 1: 4, 2: 3, 3: 3 },
+     7: { 1: 4, 2: 3, 3: 3, 4: 1 },
+     8: { 1: 4, 2: 3, 3: 3, 4: 2 },
+     9: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 1 },
+    10: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2 },
+    11: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1 },
+    12: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1 },
+    13: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1 },
+    14: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1 },
+    15: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1, 8: 1 },
+    16: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1, 8: 1 },
+    17: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1, 8: 1, 9: 1 },
+    18: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 3, 6: 1, 7: 1, 8: 1, 9: 1 },
+    19: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 3, 6: 2, 7: 1, 8: 1, 9: 1 },
+    20: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 3, 6: 2, 7: 2, 8: 1, 9: 1 },
+  };
+
+  const FEATURES_LIBRARY = [
+    {
+      id: 'sorcerer-spellcasting',
+      name: 'Spellcasting',
+      class: 'Sorcerer',
+      level: 1,
+      type: 'spellcasting',
+      description: 'Drawing on your innate magic, you can cast spells. Charisma is your spellcasting ability.',
+    },
+    {
+      id: 'sorcerer-innate-sorcery',
+      name: 'Innate Sorcery',
+      class: 'Sorcerer',
+      level: 1,
+      type: 'text',
+      description: 'Once per Long Rest, you can activate Innate Sorcery as a Bonus Action. For 1 minute, your spell attack bonus and Spell Save DC each increase by 2.',
+    },
+    {
+      id: 'sorcerer-font-of-magic',
+      name: 'Font of Magic',
+      class: 'Sorcerer',
+      level: 2,
+      type: 'sorcery-points',
+      description: 'You have a number of Sorcery Points equal to your Sorcerer level. You can spend them to create Spell Slots and vice versa.',
+    },
+    {
+      id: 'sorcerer-metamagic',
+      name: 'Metamagic',
+      class: 'Sorcerer',
+      level: 2,
+      type: 'metamagic',
+      description: 'You can alter your spells with Metamagic. Choose 2 Metamagic options. You gain another at levels 10 and 17.',
+    },
+  ];
+
+  function getEligibleFeatures() {
+    const cls = String(state.charClass || '').trim();
+    const sub = String(state.subclass  || '').trim();
+    const lvl = parseInt(state.level)  || 0;
+    return FEATURES_LIBRARY.filter(f => {
+      if (f.class    && f.class    !== cls) return false;
+      if (f.subclass && f.subclass !== sub) return false;
+      if (f.level    && f.level    >   lvl) return false;
+      return true;
+    });
+  }
+
+  function featureDisplayName(feature) {
+    const source = feature.subclass || feature.class || '';
+    const level  = feature.level ? ` Level ${feature.level}` : '';
+    return `${source}${level} - ${feature.name}`;
+  }
+
+  function syncFeatures() {
+    const eligible = getEligibleFeatures().map(f => f.id);
+    // auto-add newly eligible features not already active or hidden
+    eligible.forEach(id => {
+      if (!state.activeFeatures.includes(id) && !state.hiddenFeatures.includes(id)) {
+        state.activeFeatures.push(id);
+      }
+    });
+    // strip features no longer eligible
+    state.activeFeatures = state.activeFeatures.filter(id => eligible.includes(id));
+    state.hiddenFeatures  = state.hiddenFeatures.filter(id => eligible.includes(id));
+  }
+
+  // ── Feature drag state ────────────────────────────────────────────────────
+  let fDrag = null; // { id, el, dropLine }
+
+  function initFeatureDrag(handle, featureEl, featureId, listEl) {
+    handle.addEventListener('pointerdown', e => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      e.preventDefault();
+      featureEl.classList.add('cs-feature-dragging');
+      fDrag = { id: featureId, el: featureEl };
+
+      const dropLine = document.createElement('div');
+      dropLine.className = 'cs-feature-drop-line';
+      fDrag.dropLine = dropLine;
+
+      const onMove = ev => {
+        if (dropLine.parentNode) dropLine.remove();
+        const rows = [...listEl.querySelectorAll('.cs-feature[data-feature-id]:not(.cs-feature-dragging)')];
+        let inserted = false;
+        for (const row of rows) {
+          const rect = row.getBoundingClientRect();
+          if (ev.clientY < rect.top + rect.height / 2) {
+            listEl.insertBefore(dropLine, row);
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted) {
+          const ghost = listEl.querySelector('.cs-feature-ghost-section');
+          ghost ? listEl.insertBefore(dropLine, ghost) : listEl.appendChild(dropLine);
+        }
+      };
+
+      const onUp = () => {
+        if (dropLine.parentNode) {
+          listEl.insertBefore(featureEl, dropLine);
+          dropLine.remove();
+        }
+        featureEl.classList.remove('cs-feature-dragging');
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+
+        const newOrder = [...listEl.querySelectorAll('.cs-feature[data-feature-id]')]
+          .map(el => el.dataset.featureId);
+        state.activeFeatures = newOrder;
+        fDrag = null;
+        if (onChange) onChange();
+        renderFeatures();
+      };
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  }
+
+  // ── Spell autocomplete ───────────────────────────────────────────────────
+  let _spellAcDdEl = document.getElementById('spell-ac-dropdown');
+  if (!_spellAcDdEl) {
+    _spellAcDdEl = document.createElement('div');
+    _spellAcDdEl.id = 'spell-ac-dropdown';
+    document.body.appendChild(_spellAcDdEl);
+  }
+  _spellAcDdEl.style.display = 'none';
+  let _spellAcInp = null;
+
+  _spellAcDdEl.addEventListener('mousedown', e => e.preventDefault());
+  _spellAcDdEl.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+
+  function _positionSpellAcDd() {
+    if (!_spellAcInp || !_spellAcDdEl) return;
+    const rect = _spellAcInp.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    _spellAcDdEl.style.left  = rect.left + 'px';
+    _spellAcDdEl.style.width = Math.max(rect.width, 160) + 'px';
+    if (spaceBelow >= 160 || spaceBelow >= window.innerHeight - rect.top) {
+      _spellAcDdEl.style.top    = (rect.bottom + 2) + 'px';
+      _spellAcDdEl.style.bottom = 'auto';
+    } else {
+      _spellAcDdEl.style.top    = 'auto';
+      _spellAcDdEl.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+    }
+  }
+
+  function _closeSpellAc() {
+    _spellAcDdEl.style.display = 'none';
+    _spellAcDdEl.innerHTML = '';
+    _spellAcInp = null;
+  }
+
+  function _showSpellAcMatches(val, level, inp, onPick) {
+    if (!val) { _closeSpellAc(); return; }
+    const matches = (window.SPELLS_XPHB || [])
+      .filter(s => s.l === level && s.n.toLowerCase().includes(val))
+      .slice(0, 10);
+    if (!matches.length) { _closeSpellAc(); return; }
+    _spellAcDdEl.innerHTML = '';
+    matches.forEach(spell => {
+      const opt = document.createElement('div');
+      opt.className = 'spell-ac-option';
+      opt.textContent = spell.n;
+      const pick = () => {
+        inp.value = spell.n;
+        _closeSpellAc();
+        if (onPick) onPick(spell.n);
+        inp.blur();
+      };
+      opt.addEventListener('mousedown', e => { e.preventDefault(); pick(); });
+      opt.addEventListener('touchstart', e => { opt._touchY = e.touches[0].clientY; }, { passive: true });
+      opt.addEventListener('touchend', e => {
+        if (Math.abs(e.changedTouches[0].clientY - (opt._touchY || 0)) < 10) {
+          e.preventDefault(); pick();
+        }
+      }, { passive: false });
+      _spellAcDdEl.appendChild(opt);
+    });
+    _positionSpellAcDd();
+    _spellAcDdEl.style.display = 'block';
+  }
+
+  function attachSpellAutocomplete(inp, level, onPick) {
+    inp.addEventListener('focus', () => {
+      _spellAcInp = inp;
+      _showSpellAcMatches(inp.value.trim().toLowerCase(), level, inp, onPick);
+    });
+    inp.addEventListener('input', () => {
+      _spellAcInp = inp;
+      _showSpellAcMatches(inp.value.trim().toLowerCase(), level, inp, onPick);
+    });
+    inp.addEventListener('blur',    () => setTimeout(_closeSpellAc, 150));
+    inp.addEventListener('keydown', e => { if (e.key === 'Escape') _closeSpellAc(); });
+  }
+
+  // ── Feature content renderers ─────────────────────────────────────────────
+  function renderSpellcastingContent(data, isEditing) {
+    const lvl       = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+    const slots     = SORC_SLOTS[lvl] || SORC_SLOTS[20];
+    const chaMod    = Math.floor(((parseInt(state.cha) || 10) - 10) / 2);
+    const profBonus = Math.ceil(lvl / 4) + 1;
+    const atkBonus  = chaMod + profBonus;
+    const saveDC    = 8 + chaMod + profBonus;
+
+    if (!data.usedSlots)  data.usedSlots  = {};
+    if (!data.spellNames) data.spellNames = {};
+
+    const exhPenalty     = state.exhaustion || 0;
+    const dispAtkBonus   = atkBonus - exhPenalty;
+    const dispSaveDC     = saveDC   - exhPenalty;
+    const penClass       = exhPenalty > 0 ? ' cs-exh-penalty' : '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-spellcasting';
+
+    // Stats row (ability / atk bonus / save DC) — colored by CHA attribute
+    const stats = document.createElement('div');
+    stats.className = 'cs-feat-spell-stats cs-attr-cha';
+    stats.innerHTML = `
+      <div class="cs-feat-spell-stat"><span class="cs-feat-spell-stat-val">CHA</span><span class="cs-feat-spell-stat-lbl">Ability</span></div>
+      <div class="cs-feat-spell-stat"><span class="cs-feat-spell-stat-val${penClass}">${dispAtkBonus >= 0 ? '+' : ''}${dispAtkBonus}</span><span class="cs-feat-spell-stat-lbl">Atk Bonus</span></div>
+      <div class="cs-feat-spell-stat"><span class="cs-feat-spell-stat-val${penClass}">${dispSaveDC}</span><span class="cs-feat-spell-stat-lbl">Save DC</span></div>
+    `;
+    wrap.appendChild(stats);
+
+    const ordinals = ['','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
+
+    function makeSpellSection(key, title, slotMax, slotLvl, spellLevel) {
+      if (!data.spellNames[key]) data.spellNames[key] = [];
+      const names = data.spellNames[key];
+      const filled = names.filter(n => n && n.trim());
+
+      // In view mode: hide cantrip section if empty; spell level sections keep heading for slot tracking
+      if (!isEditing && slotMax === null && filled.length === 0) return null;
+
+      const section = document.createElement('div');
+      section.className = 'cs-spell-section';
+
+      // Heading
+      const heading = document.createElement('div');
+      heading.className = 'cs-spell-heading';
+      const rule1 = document.createElement('span');
+      rule1.className = 'cs-spell-rule';
+      heading.appendChild(rule1);
+      const titleEl = document.createElement('span');
+      titleEl.className = 'cs-spell-title';
+      titleEl.textContent = title;
+      heading.appendChild(titleEl);
+      if (slotMax !== null) {
+        const used = data.usedSlots[slotLvl] || 0;
+        const remaining = slotMax - used;
+        const slotBtn = document.createElement('button');
+        slotBtn.type = 'button';
+        slotBtn.className = 'cs-spell-slot-btn' + (remaining === 0 ? ' cs-spell-slot-btn-empty' : '');
+        slotBtn.textContent = `[ ${remaining} / ${slotMax} ]`;
+        slotBtn.addEventListener('click', () => {
+          data.usedSlots[slotLvl] = used < slotMax ? used + 1 : 0;
+          if (onChange) onChange();
+          renderFeatures();
+        });
+        heading.appendChild(slotBtn);
+      }
+      const rule2 = document.createElement('span');
+      rule2.className = 'cs-spell-rule';
+      heading.appendChild(rule2);
+      section.appendChild(heading);
+
+      if (isEditing) {
+        const grid = document.createElement('div');
+        grid.className = 'cs-spell-grid';
+
+        // Normalize: strip old extra trailing empties, keep exactly one trailing empty
+        while (names.length > 0 && !names[names.length - 1]?.trim()) names.pop();
+        names.push('');
+
+        function appendInput(idx) {
+          const inp = document.createElement('input');
+          inp.type = 'text';
+          inp.className = 'cs-spell-input';
+          inp.spellcheck = false;
+          inp.autocomplete = 'off';
+          inp.placeholder = 'Spell name';
+          inp.value = names[idx] || '';
+
+          attachSpellAutocomplete(inp, spellLevel, (spellName) => {
+            names[idx] = spellName;
+            if (onChange) onChange();
+            if (idx === names.length - 1) {
+              names.push('');
+              appendInput(names.length - 1);
+            }
+          });
+
+          inp.addEventListener('input', () => {
+            names[idx] = inp.value;
+            if (onChange) onChange();
+            if (idx === names.length - 1 && inp.value.trim()) {
+              names.push('');
+              appendInput(names.length - 1);
+            }
+          });
+
+          inp.addEventListener('blur', () => {
+            if (!inp.value.trim() && idx < names.length - 1) {
+              names.splice(idx, 1);
+              if (onChange) onChange();
+              renderFeatures();
+            }
+          });
+
+          grid.appendChild(inp);
+        }
+
+        names.forEach((_, idx) => appendInput(idx));
+        section.appendChild(grid);
+      } else if (filled.length > 0) {
+        const grid = document.createElement('div');
+        grid.className = 'cs-spell-grid';
+        filled.forEach(spellName => {
+          const spellData = (window.SPELLS_XPHB || []).find(s => s.n.toLowerCase() === spellName.toLowerCase());
+          const item = document.createElement('div');
+          item.className = 'cs-spell-link' + (spellData ? ' cs-spell-link-known' : '');
+          const icon = document.createElement('span');
+          icon.className = 'cs-spell-link-icon';
+          icon.innerHTML = '<i class="fas fa-circle-info"></i>';
+          const nameEl = document.createElement('span');
+          nameEl.className = 'cs-spell-link-name';
+          nameEl.textContent = spellName;
+          item.appendChild(icon);
+          item.appendChild(nameEl);
+          if (spellData) {
+            item.addEventListener('click', () => openSpellDetail(spellData, item));
+          }
+          grid.appendChild(item);
+        });
+        section.appendChild(grid);
+      }
+
+      return section;
+    }
+
+    // Cantrip section
+    const cantripSec = makeSpellSection('cantrip', 'Cantrip', null, null, 0);
+    if (cantripSec) wrap.appendChild(cantripSec);
+
+    // One section per spell level
+    Object.entries(slots).forEach(([lvlStr, max]) => {
+      const slotLvl = parseInt(lvlStr);
+      if (!data.usedSlots[slotLvl]) data.usedSlots[slotLvl] = 0;
+      const label = `${ordinals[slotLvl] || slotLvl + 'th'} Level Spells`;
+      const sec = makeSpellSection(`level-${slotLvl}`, label, max, slotLvl, slotLvl);
+      if (sec) wrap.appendChild(sec);
+    });
+
+    return wrap;
+  }
+
+  // ── Spell detail panel ───────────────────────────────────────────────────
+  let _spellDetailActive = null;
+
+  function openSpellDetail(spell, fromEl) {
+    const panel = document.getElementById('spell-detail');
+    if (!panel) return;
+
+    if (_spellDetailActive === spell.n) {
+      closeSpellDetail();
+      return;
+    }
+    _spellDetailActive = spell.n;
+
+    const lvlNames = ['Cantrip','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
+    const lvlLabel = spell.l === 0 ? `${spell.sc} Cantrip` : `${lvlNames[spell.l]} Level ${spell.sc}`;
+    const tags = [];
+    if (spell.conc)  tags.push('Concentration');
+    if (spell.ritual) tags.push('Ritual');
+
+    panel.querySelector('.spell-detail-name').textContent = spell.n;
+    panel.querySelector('.spell-detail-sub').textContent  = lvlLabel + (tags.length ? ` · ${tags.join(' · ')}` : '');
+
+    const propsEl = panel.querySelector('.spell-detail-props');
+    propsEl.innerHTML = '';
+    [['Casting Time', spell.t], ['Range', spell.r], ['Components', spell.c], ['Duration', spell.d]]
+      .forEach(([label, val]) => {
+        if (!val) return;
+        const row = document.createElement('div');
+        row.className = 'spell-detail-prop';
+        row.innerHTML = `<span class="spell-detail-prop-lbl">${label}</span><span class="spell-detail-prop-val">${val}</span>`;
+        propsEl.appendChild(row);
+      });
+
+    function renderDesc(text) {
+      if (!text) return '';
+      return text.split('\n').map(line =>
+        line.startsWith('• ')
+          ? `<div class="spell-detail-bullet">${line.slice(2)}</div>`
+          : `<p>${line}</p>`
+      ).join('');
+    }
+
+    panel.querySelector('.spell-detail-desc').innerHTML = renderDesc(spell.desc);
+    const higherEl = panel.querySelector('.spell-detail-higher');
+    if (spell.higher) {
+      higherEl.innerHTML = '<div class="spell-detail-higher-lbl">At Higher Levels</div>' + renderDesc(spell.higher);
+      higherEl.hidden = false;
+    } else {
+      higherEl.hidden = true;
+    }
+
+    panel.classList.remove('spell-detail-collapsed');
+
+    document.querySelector('.spell-detail-close').onclick = closeSpellDetail;
+  }
+
+  function closeSpellDetail() {
+    _spellDetailActive = null;
+    document.getElementById('spell-detail')?.classList.add('spell-detail-collapsed');
+  }
+
+  function renderSorceryPointsContent(data) {
+    const lvl = parseInt(state.level) || 1;
+    const max = lvl;
+    if (data.current == null) data.current = max;
+    const current = Math.max(0, Math.min(max, data.current));
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-sorcery';
+
+    const pips = document.createElement('div');
+    pips.className = 'cs-feat-sorcery-pips';
+    for (let i = 0; i < max; i++) {
+      const pip = document.createElement('button');
+      pip.type = 'button';
+      pip.className = 'cs-feat-sorcery-pip' + (i < current ? ' cs-feat-sorcery-pip-full' : '');
+      pip.addEventListener('click', () => {
+        data.current = i < current ? current - 1 : i + 1;
+        if (onChange) onChange();
+        renderFeatures();
+      });
+      pips.appendChild(pip);
+    }
+    const pipLabel = document.createElement('div');
+    pipLabel.className = 'cs-feat-sorcery-count';
+    pipLabel.textContent = `${current} / ${max} Sorcery Points`;
+    wrap.appendChild(pips);
+    wrap.appendChild(pipLabel);
+    return wrap;
+  }
+
+  function renderMetamagicContent(data, isEditing) {
+    const lvl = parseInt(state.level) || 2;
+    const maxChoices = lvl >= 17 ? 4 : lvl >= 10 ? 3 : 2;
+    if (!data.chosen) data.chosen = [];
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-metamagic';
+
+    if (isEditing) {
+      const choiceInfo = document.createElement('div');
+      choiceInfo.className = 'cs-feat-metamagic-info';
+      choiceInfo.textContent = `${data.chosen.length} / ${maxChoices} chosen`;
+      wrap.appendChild(choiceInfo);
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'cs-feat-metamagic-grid';
+    METAMAGIC_OPTIONS.forEach(opt => {
+      const chosen = data.chosen.includes(opt.id);
+      if (!isEditing && !chosen) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cs-feat-metamagic-opt' + (chosen ? ' cs-feat-metamagic-chosen' : '');
+      btn.textContent = opt.name;
+      if (isEditing) {
+        btn.addEventListener('click', () => {
+          if (chosen) {
+            data.chosen = data.chosen.filter(id => id !== opt.id);
+          } else if (data.chosen.length < maxChoices) {
+            data.chosen.push(opt.id);
+          }
+          if (onChange) onChange();
+          renderFeatures();
+        });
+      } else {
+        btn.disabled = true;
+      }
+      grid.appendChild(btn);
+    });
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  function renderFeatureBody(feature, data, isEditing) {
+    const body = document.createElement('div');
+    body.className = 'cs-feature-body';
+
+    if (feature.description) {
+      const desc = document.createElement('p');
+      desc.className = 'cs-feature-desc';
+      desc.textContent = feature.description;
+      body.appendChild(desc);
+    }
+
+    if (feature.type === 'spellcasting') {
+      body.appendChild(renderSpellcastingContent(data, isEditing));
+    } else if (feature.type === 'sorcery-points') {
+      body.appendChild(renderSorceryPointsContent(data));
+    } else if (feature.type === 'metamagic') {
+      body.appendChild(renderMetamagicContent(data, isEditing));
+    }
+
+    return body;
+  }
+
+  function renderFeatures() {
+    const listEl = document.getElementById('cs-features');
+    if (!listEl) return;
+    const isEditing = document.getElementById('stats-panel')?.classList.contains('editing');
+    listEl.innerHTML = '';
+
+    // Active features
+    state.activeFeatures.forEach(id => {
+      const feature = FEATURES_LIBRARY.find(f => f.id === id);
+      if (!feature) return;
+
+      if (!state.featureData[id]) state.featureData[id] = {};
+      const data = state.featureData[id];
+      const collapsed = !!state.featureCollapsed[id];
+
+      const el = document.createElement('div');
+      el.className = 'cs-feature';
+      el.dataset.featureId = id;
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'cs-feature-header';
+
+      const handle = document.createElement('button');
+      handle.type = 'button';
+      handle.className = 'cs-feature-drag-handle';
+      handle.innerHTML = '<i class="fa-solid fa-grip-vertical"></i>';
+      handle.title = 'Drag to reorder';
+      header.appendChild(handle);
+
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'cs-feature-toggle' + (collapsed ? '' : ' cs-feature-open');
+      toggle.innerHTML = `<span class="cs-feature-name">${featureDisplayName(feature)}</span><i class="fa-solid fa-chevron-down cs-feature-chevron"></i>`;
+      toggle.addEventListener('click', () => {
+        state.featureCollapsed[id] = !state.featureCollapsed[id];
+        if (onChange) onChange();
+        renderFeatures();
+      });
+      if (id === 'sorcerer-innate-sorcery') {
+        const ticker = document.createElement('button');
+        ticker.type = 'button';
+        const used = !!data.innateSorceryUsed;
+        ticker.className = 'cs-feature-ticker' + (used ? ' cs-ticker-used' : '');
+        ticker.textContent = used ? '0/1' : '1/1';
+        ticker.title = used ? 'Used (Long Rest to restore)' : 'Available';
+        ticker.addEventListener('click', e => {
+          e.stopPropagation();
+          data.innateSorceryUsed = !data.innateSorceryUsed;
+          if (onChange) onChange();
+          renderFeatures();
+        });
+        header.appendChild(ticker);
+      } else if (id === 'sorcerer-font-of-magic') {
+        const lvl = parseInt(state.level) || 1;
+        if (data.current == null) data.current = lvl;
+        const current = Math.max(0, Math.min(lvl, data.current));
+        const ticker = document.createElement('span');
+        ticker.className = 'cs-feature-ticker';
+        ticker.textContent = `${current}/${lvl}`;
+        header.appendChild(ticker);
+      }
+
+      header.appendChild(toggle);
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'cs-feature-del cs-edit-only';
+      delBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      delBtn.title = 'Remove feature';
+      delBtn.addEventListener('click', () => {
+        state.activeFeatures = state.activeFeatures.filter(fid => fid !== id);
+        state.hiddenFeatures.push(id);
+        if (onChange) onChange();
+        renderFeatures();
+      });
+      header.appendChild(delBtn);
+
+      el.appendChild(header);
+
+      if (!collapsed) {
+        el.appendChild(renderFeatureBody(feature, data, isEditing));
+      }
+
+      listEl.appendChild(el);
+      initFeatureDrag(handle, el, id, listEl);
+    });
+
+    // Ghost features (hidden but eligible) — only visible in edit mode
+    if (isEditing) {
+      const ghostIds = state.hiddenFeatures.filter(id => FEATURES_LIBRARY.find(f => f.id === id));
+      if (ghostIds.length) {
+        const section = document.createElement('div');
+        section.className = 'cs-feature-ghost-section';
+        const sectionLabel = document.createElement('div');
+        sectionLabel.className = 'cs-feature-ghost-label';
+        sectionLabel.textContent = 'Available Features';
+        section.appendChild(sectionLabel);
+        ghostIds.forEach(id => {
+          const feature = FEATURES_LIBRARY.find(f => f.id === id);
+          if (!feature) return;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'cs-feature-ghost-btn';
+          btn.innerHTML = `<i class="fa-solid fa-plus"></i> ${featureDisplayName(feature)}`;
+          btn.addEventListener('click', () => {
+            state.hiddenFeatures = state.hiddenFeatures.filter(fid => fid !== id);
+            state.activeFeatures.push(id);
+            if (onChange) onChange();
+            renderFeatures();
+          });
+          section.appendChild(btn);
+        });
+        listEl.appendChild(section);
+      }
+    }
+  }
+
+  // Hook renderFeatures into edit mode toggle
+  const _featureEditObserver = new MutationObserver(() => renderFeatures());
+  const _statsPanelEl = document.getElementById('stats-panel');
+  if (_statsPanelEl) _featureEditObserver.observe(_statsPanelEl, { attributes: true, attributeFilter: ['class'] });
+
   // ── ATTACKS ───────────────────────────────────────────────────────────────
   const attacksList = document.getElementById('cs-attacks-list');
   const attacksAddBtn = document.getElementById('cs-attacks-add');
@@ -2742,6 +3423,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const filled = +dot.dataset.level <= (isSuccess ? state.deathSaves.successes : state.deathSaves.failures);
       dot.classList.toggle('cs-on-success', isSuccess && filled);
       dot.classList.toggle('cs-on-failure',  !isSuccess && filled);
+      const icon = dot.querySelector('i');
+      if (icon) {
+        icon.classList.toggle('fa-regular', !filled);
+        icon.classList.toggle('fa-solid',    filled);
+      }
     });
     const anyActive = state.deathSaves.successes > 0 || state.deathSaves.failures > 0;
     const skull = document.querySelector('.cs-ds-skull');
@@ -2777,6 +3463,49 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   });
   updateExhaustionDisplay();
 
+  // ── LONG REST / SHORT REST ────────────────────────────────────────────────
+  document.getElementById('cs-long-rest-btn')?.addEventListener('click', () => {
+    const hpMaxEl = document.getElementById('cs-hp-max');
+    const hpMax = parseInt(hpMaxEl?.value) || 0;
+    if (hpMax > 0) {
+      state.hp = String(hpMax);
+      const hpEl = document.getElementById('cs-hp');
+      if (hpEl) hpEl.value = state.hp;
+    }
+    state.tempHp = '';
+    const tempEl = document.getElementById('cs-temp-hp');
+    if (tempEl) tempEl.value = '';
+    state.deathSaves = { successes: 0, failures: 0 };
+    updateDeathSavesDisplay();
+    const hdCountEl = document.getElementById('cs-hit-dice-count');
+    const totalDice = parseInt(hdCountEl?.value) || parseInt(state.hitDiceCount) || 1;
+    const currentDice = parseInt(state.hitDiceRemaining) || 0;
+    const toRestore = Math.max(1, Math.floor(totalDice / 2));
+    state.hitDiceRemaining = String(Math.min(totalDice, currentDice + toRestore));
+    const hdEl = document.getElementById('cs-hit-dice-remaining');
+    if (hdEl) hdEl.value = state.hitDiceRemaining;
+    if (state.featureData['sorcerer-spellcasting']) {
+      state.featureData['sorcerer-spellcasting'].usedSlots = {};
+    }
+    if (state.featureData['sorcerer-innate-sorcery']) {
+      state.featureData['sorcerer-innate-sorcery'].innateSorceryUsed = false;
+    }
+    if (state.featureData['sorcerer-font-of-magic']) {
+      state.featureData['sorcerer-font-of-magic'].current = parseInt(state.level) || 1;
+    }
+    updateCsCalculations();
+    renderFeatures();
+    if (onChange) onChange();
+  });
+
+  document.getElementById('cs-short-rest-btn')?.addEventListener('click', () => {
+    state.deathSaves = { successes: 0, failures: 0 };
+    updateDeathSavesDisplay();
+    updateCsCalculations();
+    renderFeatures();
+    if (onChange) onChange();
+  });
+
   function autoResizeTextarea(ta) {
     ta.style.height = 'auto';
     ta.style.height = ta.scrollHeight + 'px';
@@ -2789,7 +3518,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   const SUBCLASS_MAP = {
     'Barbarian': ['Path of the Cursed'],
-    'Sorcerer':  ['Spell Drinker'],
+    'Sorcerer':  [],
     'Rogue':     ['Vile Fang'],
     'Ranger':    ['Witch Warden'],
   };
@@ -2824,11 +3553,21 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         updateCsCalculations();
       }
       syncSubclassOptions();
+      syncFeatures();
+      renderFeatures();
       if (onChange) onChange();
     });
   }
 
   syncSubclassOptions();
+
+  // Re-sync features when subclass or level changes
+  ['cs-subclass', 'cs-level'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', () => {
+      syncFeatures(); renderFeatures();
+    });
+  });
+
   ['str','dex','con','int','wis','cha'].forEach(ab => {
     const scoreEl = document.getElementById(`cs-${ab}`);
     const modEl   = document.getElementById(`cs-${ab}-mod`);
@@ -3444,6 +4183,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         inspiration:  state.inspiration,
         deathSaves:   state.deathSaves,
         exhaustion:   state.exhaustion,
+        activeFeatures:   state.activeFeatures,
+        hiddenFeatures:   state.hiddenFeatures,
+        featureData:      state.featureData,
+        featureCollapsed: state.featureCollapsed,
         ...csState,
         ...profState,
       }));
@@ -3550,7 +4293,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       state.deathSaves = _ds && typeof _ds === 'object'
         ? { successes: _toCount(_ds.successes), failures: _toCount(_ds.failures) }
         : { successes: 0, failures: 0 };
-      state.exhaustion = typeof newState.exhaustion === 'number' ? Math.max(0, Math.min(6, newState.exhaustion)) : 0;
+      state.exhaustion      = typeof newState.exhaustion === 'number' ? Math.max(0, Math.min(6, newState.exhaustion)) : 0;
+      state.activeFeatures  = Array.isArray(newState.activeFeatures)  ? newState.activeFeatures  : [];
+      state.hiddenFeatures  = Array.isArray(newState.hiddenFeatures)   ? newState.hiddenFeatures  : [];
+      state.featureData     = (newState.featureData && typeof newState.featureData === 'object') ? newState.featureData : {};
+      state.featureCollapsed = (newState.featureCollapsed && typeof newState.featureCollapsed === 'object') ? newState.featureCollapsed : {};
       updateInspirationDisplay();
       updateDeathSavesDisplay();
       updateExhaustionDisplay();
@@ -3567,6 +4314,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       updateCsCalculations();
       updateCsNameDisplay();
       renderAttacks();
+      syncFeatures();
+      renderFeatures();
       populateArmorDatalist();
       render();
     },
@@ -4358,21 +5107,39 @@ window.CharacterManager = ({ auth, database }) => {
 
   const charHideBtn = document.getElementById('char-hide-btn');
 
+  const VISIBILITY_CYCLE = ['visible', 'inventory-only', 'hidden'];
+  const VISIBILITY_ICON  = { 'visible': 'fa-eye', 'inventory-only': 'fa-eye-low-vision', 'hidden': 'fa-eye-slash' };
+  const VISIBILITY_TITLE = {
+    'visible':        'Fully visible — click to hide character sheet',
+    'inventory-only': 'Inventory only — character sheet hidden from players — click to hide entirely',
+    'hidden':         'Hidden entirely — click to make visible',
+  };
+
   charHideBtn.addEventListener('click', () => {
     if (!currentCharId || !allChars[currentCharId]) return;
     const char = allChars[currentCharId];
-    char.hiddenFromPlayers = !char.hiddenFromPlayers;
-    database.ref(`/inventory_characters/${currentCharId}`).update({ hiddenFromPlayers: char.hiddenFromPlayers });
+    const idx  = VISIBILITY_CYCLE.indexOf(char.charVisibility || 'visible');
+    char.charVisibility = VISIBILITY_CYCLE[(idx + 1) % VISIBILITY_CYCLE.length];
+    database.ref(`/inventory_characters/${currentCharId}`).update({ charVisibility: char.charVisibility });
     updateCharHideBtn();
     renderTabs();
+    enforceCharVisibility();
   });
 
   function updateCharHideBtn() {
     if (!window._isDM) return;
-    const hidden = !!(currentCharId && allChars[currentCharId]?.hiddenFromPlayers);
-    charHideBtn.innerHTML = hidden ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
-    charHideBtn.classList.toggle('char-hide-active', hidden);
-    charHideBtn.title = hidden ? 'Unhide — currently hidden from players' : 'Hide from players';
+    const vis = (currentCharId && allChars[currentCharId]?.charVisibility) || 'visible';
+    charHideBtn.innerHTML = `<i class="fas ${VISIBILITY_ICON[vis]}"></i>`;
+    charHideBtn.classList.toggle('char-hide-active', vis === 'inventory-only');
+    charHideBtn.classList.toggle('char-hide-fully',  vis === 'hidden');
+    charHideBtn.title = VISIBILITY_TITLE[vis];
+  }
+
+  function enforceCharVisibility() {
+    if (window._isDM || !currentCharId) return;
+    const vis = allChars[currentCharId]?.charVisibility || 'visible';
+    if (vis === 'inventory-only' && statsOpen) closeStats();
+    charSheetToggleBtn.hidden = (vis === 'inventory-only');
   }
 
   function applyRole(role) {
@@ -4448,7 +5215,7 @@ window.CharacterManager = ({ auth, database }) => {
           id,
           ownerUid:          data.ownerUid  || '',
           ownerName:         data.ownerName || '',
-          hiddenFromPlayers: !!data.hiddenFromPlayers,
+          charVisibility: data.charVisibility || (data.hiddenFromPlayers ? 'hidden' : 'visible'),
           state:             parseState(data.state),
           createdAt:         data.createdAt || 0,
           sortOrder:         data.sortOrder ?? data.createdAt ?? 0,
@@ -4620,7 +5387,7 @@ window.CharacterManager = ({ auth, database }) => {
   function ensureCharSelected() {
     if (currentCharId && allChars[currentCharId]) return;
     const chars = Object.values(allChars)
-      .filter(c => window._isDM || !c.hiddenFromPlayers)
+      .filter(c => window._isDM || (c.charVisibility || 'visible') !== 'hidden')
       .sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt));
     const target = chars.find(c => c.ownerUid === currentUser?.uid) || chars[0];
     if (target) switchToChar(target.id, true);
@@ -4650,6 +5417,7 @@ window.CharacterManager = ({ auth, database }) => {
 
     updateCharHideBtn();
     updateEditBtn();
+    enforceCharVisibility();
     renderTabs();
     if (shopOpen) {
       document.querySelectorAll('.shop-item-row').forEach(row => {
@@ -4885,14 +5653,15 @@ window.CharacterManager = ({ auth, database }) => {
 
     Object.values(allChars)
       .sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt))
-      .filter(char => window._isDM || !char.hiddenFromPlayers)
+      .filter(char => window._isDM || (char.charVisibility || 'visible') !== 'hidden')
       .forEach(char => {
         const isOwn = char.ownerUid === currentUser?.uid;
+        const vis   = char.charVisibility || 'visible';
         const tab = document.createElement('button');
         tab.className  = 'char-tab'
           + (char.id === currentCharId ? ' active' : '')
           + (isOwn ? ' tab-mine' : ' tab-other')
-          + (window._isDM && char.hiddenFromPlayers ? ' tab-hidden' : '');
+          + (window._isDM && vis !== 'visible' ? ' tab-hidden' : '');
         tab.dataset.charId = char.id;
         tab.title = char.ownerName || '';
 
@@ -4901,9 +5670,9 @@ window.CharacterManager = ({ auth, database }) => {
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'char-tab-name';
-        if (window._isDM && char.hiddenFromPlayers) {
+        if (window._isDM && vis !== 'visible') {
           const hiddenIcon = document.createElement('i');
-          hiddenIcon.className = 'fas fa-eye-slash char-tab-hidden-icon';
+          hiddenIcon.className = `fas ${VISIBILITY_ICON[vis]} char-tab-hidden-icon`;
           nameSpan.appendChild(hiddenIcon);
         }
         nameSpan.appendChild(document.createTextNode(char.state.charName || 'Unnamed'));

@@ -114,6 +114,11 @@
             </datalist>
             <label>Class</label>
           </div>
+          <div class="cs-char-info-class">
+            <input type="text" id="cs-subclass" list="cs-subclass-list" placeholder="—" autocomplete="off" />
+            <datalist id="cs-subclass-list"></datalist>
+            <label>Subclass</label>
+          </div>
           <div class="cs-char-info-sm">
             <input type="number" id="cs-level" placeholder="—" min="1" max="20" autocomplete="off" />
             <label>Level</label>
@@ -242,6 +247,23 @@
                     <input type="number" id="cs-ac" placeholder="—" autocomplete="off" />
                   </div>
                   <label>AC</label>
+                  <div class="cs-inner-divider"></div>
+                  <div class="cs-shield-sel">
+                    <input type="text" id="cs-shield-select" list="cs-shield-options" placeholder="Shield…" autocomplete="off" />
+                    <datalist id="cs-shield-options"></datalist>
+                    <div class="cs-shield-view" id="cs-shield-view" hidden>
+                      <button type="button" class="cs-shield-toggle" id="cs-shield-toggle">○</button>
+                      <button type="button" class="cs-shield-display" id="cs-shield-display">—</button>
+                    </div>
+                  </div>
+                  <div class="cs-armor-sel">
+                    <input type="text" id="cs-armor-select" list="cs-armor-options" placeholder="Armor…" autocomplete="off" />
+                    <datalist id="cs-armor-options"></datalist>
+                    <div class="cs-armor-view">
+                      <button type="button" class="cs-armor-toggle" id="cs-armor-toggle" hidden>○</button>
+                      <button type="button" class="cs-armor-display" id="cs-armor-display">—</button>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="cs-stat-col3">
@@ -274,6 +296,40 @@
       </div>
         </div><!-- /cs-skills-combat-row -->
 
+        <div class="cs-ability-sub">
+          <div class="cs-inspiration">
+            <button type="button" class="cs-inspiration-btn" id="cs-inspiration-toggle"><i class="fa-solid fa-star"></i></button>
+            <label>Inspiration</label>
+          </div>
+          <div class="cs-death-saves">
+            <i class="cs-ds-skull fa-solid fa-skull"></i>
+            <div class="cs-death-saves-row">
+              <button type="button" class="cs-death-save-dot" data-type="success" data-level="1"><i class="fa-regular fa-circle-check"></i></button>
+              <button type="button" class="cs-death-save-dot" data-type="success" data-level="2"><i class="fa-regular fa-circle-check"></i></button>
+              <button type="button" class="cs-death-save-dot" data-type="success" data-level="3"><i class="fa-regular fa-circle-check"></i></button>
+            </div>
+            <div class="cs-death-saves-row">
+              <button type="button" class="cs-death-save-dot" data-type="failure" data-level="1"><i class="fa-regular fa-circle-xmark"></i></button>
+              <button type="button" class="cs-death-save-dot" data-type="failure" data-level="2"><i class="fa-regular fa-circle-xmark"></i></button>
+              <button type="button" class="cs-death-save-dot" data-type="failure" data-level="3"><i class="fa-regular fa-circle-xmark"></i></button>
+            </div>
+            <label>Death Saves</label>
+          </div>
+          <div class="cs-exhaustion">
+            <div class="cs-exhaustion-stepper">
+              <button type="button" class="cs-exh-btn" id="cs-exh-minus">−</button>
+              <span id="cs-exh-count">0</span>
+              <button type="button" class="cs-exh-btn" id="cs-exh-plus">+</button>
+            </div>
+            <label>Exhaustion</label>
+          </div>
+        </div>
+
+        <div class="cs-rest-row">
+          <button type="button" class="cs-rest-btn cs-short-rest-btn" id="cs-short-rest-btn">Short Rest</button>
+          <button type="button" class="cs-rest-btn cs-long-rest-btn" id="cs-long-rest-btn">Long Rest</button>
+        </div>
+
         <div class="cs-other-profs">
           <button class="cs-other-profs-toggle" id="cs-other-profs-toggle" aria-expanded="false">
             <span>Languages and Other Proficiencies</span>
@@ -298,9 +354,72 @@
             </div>
           </div>
         </div>
+
+        <div class="cs-attacks">
+          <div class="cs-attacks-header">
+            <button type="button" class="cs-attacks-toggle" id="cs-attacks-toggle" aria-expanded="false">
+              <span class="cs-attacks-title">Attacks</span>
+              <i class="fa-solid fa-chevron-down cs-attacks-chevron"></i>
+            </button>
+            <button type="button" class="cs-attacks-add" id="cs-attacks-add">+ Add</button>
+          </div>
+          <div id="cs-attacks-body" hidden>
+            <div class="cs-attacks-col-labels">
+              <span></span><span>Name</span><span>To Hit</span><span>Range</span><span>Damage</span><span></span>
+            </div>
+            <div class="cs-attacks-list" id="cs-attacks-list"></div>
+          </div>
+        </div>
+
+        <div id="cs-features" class="cs-features"></div>
+
+        <div id="cs-calc-backdrop"></div>
+        <div id="cs-calc-overlay">
+          <div class="cs-calc-header" id="cs-calc-header"></div>
+          <div class="cs-calc-display">
+            <div class="cs-calc-main" id="cs-calc-main">0</div>
+            <div class="cs-calc-sub" id="cs-calc-sub"></div>
+          </div>
+          <div class="cs-calc-keys">
+            <button class="cs-calc-fn" data-key="clear">C</button>
+            <button class="cs-calc-fn" data-key="back">⌫</button>
+            <button class="cs-calc-op" data-key="+">+</button>
+            <button class="cs-calc-op" data-key="-">−</button>
+            <button data-key="7">7</button>
+            <button data-key="8">8</button>
+            <button data-key="9">9</button>
+            <span></span>
+            <button data-key="4">4</button>
+            <button data-key="5">5</button>
+            <button data-key="6">6</button>
+            <span></span>
+            <button data-key="1">1</button>
+            <button data-key="2">2</button>
+            <button data-key="3">3</button>
+            <button class="cs-calc-eq" data-key="=">=</button>
+            <button class="cs-calc-wide" data-key="0">0</button>
+            <button data-key=".">.</button>
+            <span></span>
+          </div>
+        </div>
     </div>
 
     <div id="drag-trash-btn" hidden><i class="fa-solid fa-trash"></i></div>
+
+    <div id="spell-ac-dropdown" hidden></div>
+
+    <div id="spell-detail" class="spell-detail-collapsed">
+      <div class="spell-detail-header">
+        <div>
+          <div class="spell-detail-name"></div>
+          <div class="spell-detail-sub"></div>
+        </div>
+        <button class="spell-detail-close" title="Close"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="spell-detail-props"></div>
+      <div class="spell-detail-desc"></div>
+      <div class="spell-detail-higher"></div>
+    </div>
 
     <div id="inspector" class="inspector-collapsed">
       <div id="insp-header">
@@ -338,6 +457,7 @@
 
   <script src="../firebase-setup.js"></script>
   <script src="items.js"></script>
+  <script src="spells-data.js?v=2"></script>
   <script src="script.js"></script>
   <script>
     const { auth, database } = window.FirebaseSetup();

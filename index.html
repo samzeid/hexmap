@@ -74,8 +74,12 @@
       <div class="char-field grow">
         <div class="char-coin-row">
           <button id="char-sheet-toggle-btn" title="Inventory"><i class="fa-solid fa-sack-xmark"></i></button>
-          <button id="char-fields-edit-btn" title="Edit name &amp; carry capacity"><i class="fas fa-user-pen"></i></button>
           <div id="coin-counter" hidden></div>
+          <div class="char-coin-row-right">
+            <button id="char-assign-btn" hidden title="Assign to player"><i class="fas fa-user-gear"></i></button>
+            <button id="char-hide-btn"   hidden title="Hide from players"><i class="fas fa-eye"></i></button>
+            <button id="char-fields-edit-btn" title="Edit name &amp; carry capacity"><i class="fas fa-user-pen"></i></button>
+          </div>
         </div>
         <div id="char-fields-slide">
           <input type="text" id="char-name" placeholder="Character name" autocomplete="off" />
@@ -111,11 +115,6 @@
         <div id="autocomplete-dropdown" hidden></div>
       </div>
       <div id="stats-panel">
-        <div class="cs-action-row">
-          <button id="char-assign-btn" hidden title="Assign to player"><i class="fas fa-user-gear"></i></button>
-          <button id="char-hide-btn"   hidden title="Hide from players"><i class="fas fa-eye"></i></button>
-        </div>
-
         <div class="cs-char-info">
           <div class="cs-char-info-class">
             <input type="text" id="cs-race" list="cs-race-list" placeholder="—" autocomplete="off" />
@@ -384,6 +383,9 @@
             </div>
           </div>
         </div>
+
+        <div id="cs-features" class="cs-features"></div>
+
       </div><!-- /stats-panel -->
     </div><!-- /char-panels -->
 

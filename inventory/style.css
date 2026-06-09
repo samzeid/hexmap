@@ -214,8 +214,8 @@ input, textarea, select { font-size: max(16px, 1em); }
   transition: none;
 }
 
-.char-tab.tab-hidden { opacity: 0.45; }
-.char-tab.tab-hidden.active { opacity: 0.75; }
+.char-tab.tab-hidden { opacity: 0.5; }
+.char-tab.tab-hidden.active { opacity: 0.8; }
 
 .char-tab-hidden-icon {
   font-size: 9px;
@@ -755,14 +755,6 @@ input, textarea, select { font-size: max(16px, 1em); }
 #char-fields-slide #char-name { flex: 1; min-width: 0; }
 
 /* Assign/hide button row at top of stats panel */
-.cs-action-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 8px;
-  min-height: 0;
-}
-
 /* Class / Level / Proficiency row */
 .cs-char-info {
   display: flex;
@@ -893,7 +885,6 @@ input, textarea, select { font-size: max(16px, 1em); }
   padding: 6px 8px;
   border-radius: 6px;
   flex-shrink: 0;
-  margin-left: auto;
   transition: color 0.15s, background 0.15s;
 }
 #char-hide-btn:hover {
@@ -901,9 +892,16 @@ input, textarea, select { font-size: max(16px, 1em); }
   background: rgba(255,255,255,0.08);
 }
 #char-hide-btn.char-hide-active {
-  color: rgba(255, 90, 90, 0.85);
+  color: rgba(255, 180, 60, 0.9);
 }
 #char-hide-btn.char-hide-active:hover {
+  color: rgba(255, 200, 80, 1);
+  background: rgba(255, 160, 40, 0.1);
+}
+#char-hide-btn.char-hide-fully {
+  color: rgba(255, 90, 90, 0.85);
+}
+#char-hide-btn.char-hide-fully:hover {
   color: rgba(255, 110, 110, 1);
   background: rgba(255, 80, 80, 0.1);
 }
@@ -1213,9 +1211,9 @@ main {
   min-height: 24px;
 }
 
-#char-fields-edit-btn,
 #char-sheet-toggle-btn {
   position: absolute;
+  left: 0;
   top: 50%;
   transform: translateY(-50%);
   background: none;
@@ -1228,12 +1226,30 @@ main {
   -webkit-tap-highlight-color: transparent;
   transition: color 0.15s, background 0.15s;
 }
-#char-fields-edit-btn { right: 0; }
-#char-sheet-toggle-btn { left: 0; }
-#char-fields-edit-btn:hover,
 #char-sheet-toggle-btn:hover  { color: var(--text); }
-#char-fields-edit-btn:active,
 #char-sheet-toggle-btn:active { background: rgba(255,255,255,0.08); }
+
+.char-coin-row-right {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+}
+#char-fields-edit-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s, background 0.15s;
+}
+#char-fields-edit-btn:hover  { color: var(--text); }
+#char-fields-edit-btn:active { background: rgba(255,255,255,0.08); }
 
 #coin-counter {
   display: flex;
@@ -2375,11 +2391,41 @@ body.is-dragging #inv-scroll {
   border-radius: 3px;
 }
 
+/* ── REST BUTTONS ────────────────────────────────────────────── */
+.cs-rest-row {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+.cs-rest-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 4px;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.cs-rest-btn:hover { background: rgba(255, 255, 255, 0.09); color: rgba(255, 255, 255, 0.8); }
+.cs-rest-btn:active { background: rgba(255, 255, 255, 0.14); }
+.cs-long-rest-btn { border-color: rgba(120, 180, 255, 0.25); color: rgba(120, 180, 255, 0.7); }
+.cs-long-rest-btn:hover { background: rgba(120, 180, 255, 0.08); border-color: rgba(120, 180, 255, 0.4); color: rgba(120, 180, 255, 0.95); }
+.cs-short-rest-btn { border-color: rgba(100, 200, 140, 0.25); color: rgba(100, 200, 140, 0.7); }
+.cs-short-rest-btn:hover { background: rgba(100, 200, 140, 0.08); border-color: rgba(100, 200, 140, 0.4); color: rgba(100, 200, 140, 0.95); }
+
 /* ── ABILITY SUB-ROW (inspiration / death saves / exhaustion) ─── */
 .cs-ability-sub {
   display: flex;
   flex-direction: row;
   gap: 4px;
+  padding: 0 8px 4px;
 }
 
 .cs-death-saves,
@@ -3033,6 +3079,472 @@ body.is-dragging #inv-scroll {
   color: rgba(255, 255, 255, 0.2);
   padding: 4px 2px 2px;
   font-style: italic;
+}
+
+/* ── FEATURES ────────────────────────────────────────────────── */
+.cs-features {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.cs-feature {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius);
+  overflow: visible;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.cs-feature-dragging {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.cs-feature-drop-line {
+  height: 2px;
+  background: rgb(var(--ac));
+  border-radius: 2px;
+  margin: 1px 0;
+}
+
+.cs-feature-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  min-height: 36px;
+}
+
+.cs-feature-drag-handle {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: grab;
+  padding: 4px 3px;
+  font-size: 13px;
+  touch-action: none;
+  flex-shrink: 0;
+}
+.cs-feature-drag-handle:active { cursor: grabbing; }
+
+.cs-feature-toggle {
+  flex: 1;
+  background: none;
+  border: none;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 2px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cs-feature-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.cs-feature-chevron {
+  margin-left: auto;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  transition: transform 0.18s ease;
+}
+.cs-feature-open .cs-feature-chevron {
+  transform: rotate(-180deg);
+}
+
+.cs-feature-del {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 14px;
+  padding: 4px 5px;
+  cursor: pointer;
+  transition: color 0.12s;
+  flex-shrink: 0;
+}
+.cs-feature-del:hover { color: rgba(220, 80, 80, 0.85); }
+
+.cs-feature-ticker {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+button.cs-feature-ticker {
+  background: none;
+  border: 1px solid rgba(80, 210, 130, 0.3);
+  color: rgba(80, 210, 130, 0.9);
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.1s, border-color 0.1s;
+}
+button.cs-feature-ticker:not(:disabled):active { background: rgba(80, 210, 130, 0.1); }
+button.cs-ticker-used {
+  border-color: rgba(255, 80, 80, 0.35);
+  color: rgba(255, 90, 90, 0.75);
+}
+span.cs-feature-ticker {
+  background: none;
+  border: 1px solid rgba(80, 210, 130, 0.3);
+  color: rgba(80, 210, 130, 0.9);
+}
+
+.cs-feature-body {
+  padding: 2px 10px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.cs-feature-desc {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 6px 0 10px;
+  line-height: 1.55;
+}
+
+/* delete button only visible in edit mode */
+#stats-panel:not(.editing) .cs-feature-del { display: none; }
+
+/* ── Feature: Spellcasting ───────────────────────────────────── */
+.cs-feat-spellcasting { display: flex; flex-direction: column; gap: 10px; }
+
+.cs-feat-spell-stats {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cs-feat-spell-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgb(var(--ac) / 0.12);
+  border: 1px solid rgb(var(--ac) / 0.4);
+  border-radius: var(--radius);
+  padding: 5px 8px;
+  flex: 1;
+  min-width: 44px;
+}
+.cs-feat-spell-stat-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: color-mix(in srgb, rgb(var(--ac)), white 55%);
+}
+.cs-feat-spell-stat-lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgb(var(--ac) / 0.7);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.cs-spell-section { display: flex; flex-direction: column; gap: 6px; }
+
+.cs-spell-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.cs-spell-rule {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.cs-spell-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+}
+.cs-spell-slot-btn {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(80, 210, 130, 0.9);
+  background: none;
+  border: 1px solid rgba(80, 210, 130, 0.3);
+  border-radius: 5px;
+  padding: 2px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.cs-spell-slot-btn:hover { background: rgba(80, 210, 130, 0.1); }
+.cs-spell-slot-btn-empty {
+  color: rgba(255, 90, 90, 0.7);
+  background: none;
+  border-color: rgba(255, 80, 80, 0.3);
+}
+
+.cs-spell-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+}
+.cs-spell-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 11px;
+  padding: 4px 7px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.cs-spell-input { width: 100%; box-sizing: border-box; }
+.cs-spell-input::placeholder { color: rgba(255, 255, 255, 0.2); }
+.cs-spell-input:focus {
+  outline: none;
+  border-color: rgba(var(--ac-cha), 0.5);
+}
+
+/* Spell link (view mode) */
+.cs-spell-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  cursor: default;
+  user-select: none;
+}
+.cs-spell-link-known { cursor: pointer; }
+.cs-spell-link-known:hover {
+  background: rgba(var(--ac-cha), 0.1);
+  border-color: rgba(var(--ac-cha), 0.3);
+}
+.cs-spell-link-icon {
+  font-size: 10px;
+  color: rgba(162, 90, 222, 0.45);
+  flex-shrink: 0;
+}
+.cs-spell-link-known:hover .cs-spell-link-icon { color: rgba(162, 90, 222, 0.9); }
+.cs-spell-link-name {
+  font-size: 11px;
+  color: rgb(var(--ac-cha));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cs-spell-link-known:hover .cs-spell-link-name {
+  color: color-mix(in srgb, rgb(var(--ac-cha)), white 40%);
+}
+
+/* ── Spell detail panel ──────────────────────────────────────── */
+#spell-detail {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, 100vw - 16px);
+  max-height: 55vh;
+  overflow-y: auto;
+  background: #1a1a26;
+  border: 1px solid rgba(162, 90, 222, 0.3);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  padding: 14px 16px 20px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+/* ── Spell autocomplete dropdown ─────────────────────────────── */
+#spell-ac-dropdown {
+  position: fixed;
+  z-index: 2000;
+  background: rgb(18, 20, 30);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.65);
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+#spell-ac-dropdown::-webkit-scrollbar { display: none; }
+.spell-ac-option {
+  padding: 9px 13px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.spell-ac-option:last-child { border-bottom: none; }
+.spell-ac-option:hover { background: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 1); }
+.spell-ac-option:active { background: rgba(255, 255, 255, 0.12); }
+
+.spell-detail-collapsed {
+  transform: translateX(-50%) translateY(100%) !important;
+  opacity: 0;
+  pointer-events: none;
+}
+.spell-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.spell-detail-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+.spell-detail-sub {
+  font-size: 10.5px;
+  color: rgb(162, 90, 222);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.spell-detail-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.spell-detail-close:hover { color: #fff; }
+.spell-detail-props {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px 10px;
+}
+.spell-detail-prop {
+  display: flex;
+  flex-direction: column;
+}
+.spell-detail-prop-lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255,255,255,0.35);
+}
+.spell-detail-prop-val {
+  font-size: 11.5px;
+  color: rgba(255,255,255,0.8);
+}
+.spell-detail-desc p, .spell-detail-higher p {
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
+  line-height: 1.55;
+  margin: 0 0 6px;
+}
+.spell-detail-bullet {
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
+  line-height: 1.55;
+  padding-left: 10px;
+  position: relative;
+  margin-bottom: 3px;
+}
+.spell-detail-bullet::before { content: '•'; position: absolute; left: 0; }
+.spell-detail-higher-lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(162, 90, 222, 0.7);
+  margin-bottom: 4px;
+}
+
+/* ── Feature: Sorcery Points ─────────────────────────────────── */
+.cs-feat-sorcery { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 4px 0; }
+.cs-feat-sorcery-pips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.cs-feat-sorcery-pip {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: none;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.cs-feat-sorcery-pip-full {
+  background: rgb(var(--ac));
+  border-color: rgb(var(--ac));
+}
+.cs-feat-sorcery-count {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* ── Feature: Metamagic ──────────────────────────────────────── */
+.cs-feat-metamagic { display: flex; flex-direction: column; gap: 8px; }
+.cs-feat-metamagic-info {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+.cs-feat-metamagic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 5px;
+}
+.cs-feat-metamagic-opt {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11.5px;
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.cs-feat-metamagic-opt:hover:not(:disabled) { background: rgba(255, 255, 255, 0.09); }
+.cs-feat-metamagic-opt:disabled { cursor: default; }
+.cs-feat-metamagic-chosen {
+  background: rgb(var(--ac) / 0.18);
+  border-color: rgb(var(--ac) / 0.5);
+  color: rgb(var(--ac));
+}
+
+/* ── Ghost features ──────────────────────────────────────────── */
+.cs-feature-ghost-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 4px;
+}
+.cs-feature-ghost-label {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.3);
+  padding: 4px 2px 2px;
+}
+.cs-feature-ghost-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius);
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  padding: 7px 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.cs-feature-ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgb(var(--ac) / 0.4);
+  color: rgb(var(--ac));
 }
 
 /* ── LANGUAGES / OTHER PROFS ─────────────────────────────────── */
