@@ -6253,8 +6253,10 @@ window.CharacterManager = ({ auth, database }) => {
         btn.style.height = btn.offsetHeight + 'px';
         randResult.hidden = true;
         const diceIcons = ['fa-dice-one','fa-dice-two','fa-dice-three','fa-dice-four','fa-dice-five','fa-dice-six'];
-        const randIcon = () => diceIcons[Math.floor(Math.random() * diceIcons.length)];
-        const diceHtml = () => `<span class="dm-rand-dice-wrap"><i class="fas ${randIcon()} dm-rand-dice-jump"></i><span class="dm-rand-dice-ground"></span></span>`;
+        const step = Math.floor(Math.random() * 5) + 1; // 1–5, never repeats same face
+        let iconIdx = Math.floor(Math.random() * diceIcons.length);
+        const nextIcon = () => { iconIdx = (iconIdx + step) % diceIcons.length; return diceIcons[iconIdx]; };
+        const diceHtml = () => `<span class="dm-rand-dice-wrap"><i class="fas ${nextIcon()} dm-rand-dice-jump"></i><span class="dm-rand-dice-ground"></span></span>`;
         btn.innerHTML = diceHtml();
         const cycleInterval = setInterval(() => {
           btn.innerHTML = diceHtml();
