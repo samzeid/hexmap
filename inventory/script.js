@@ -635,10 +635,35 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
   }
 
+  function growStrapped() {
+    const strapped = state.containers.find(c => c.id === 'strapped');
+    if (!strapped) return;
+    const hasEmptyRow = strapped.slots.some(row => row[0] === null && row[1] === null);
+    if (!hasEmptyRow) {
+      strapped.slots.push([null, null]);
+      strapped.rows++;
+    }
+  }
+
+  function shrinkStrapped() {
+    const strapped = state.containers.find(c => c.id === 'strapped');
+    if (!strapped) return;
+    while (strapped.slots.length > 1) {
+      const last = strapped.slots[strapped.slots.length - 1];
+      const prev = strapped.slots[strapped.slots.length - 2];
+      if (last[0] === null && last[1] === null && prev[0] === null && prev[1] === null) {
+        strapped.slots.pop();
+        strapped.rows--;
+      } else {
+        break;
+      }
+    }
+  }
+
   function growContainer(container) {
     if (!container.maxRows) container.maxRows = container.rows;
     const hasEmptyRow = container.slots.some(row => row[0] === null && row[1] === null);
-    if (!hasEmptyRow && containerFillAvailable(container) > 0.001) {
+    if (!hasEmptyRow) {
       container.slots.push([null, null]);
       container.rows++;
     }
@@ -663,6 +688,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (_strapped) delete _strapped.maxRows;
     growEquipped();
     shrinkEquipped();
+    growStrapped();
+    shrinkStrapped();
     state.containers.forEach(c => {
       if (c.linkedTo) { growContainer(c); shrinkContainer(c); }
     });
@@ -718,7 +745,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       _capHtml = `<span class="container-capacity${_over ? ' container-capacity-over' : ''}">${parseFloat(_fillUsed.toFixed(2))}/${_fillCap}</span>`;
     } else if (container.id === 'strapped') {
       const _fillUsed = containerFillUsed(container);
-      const _fillCap  = container.slots.length * 2;
+      const _fillCap  = 4;
       const _over = _fillUsed > _fillCap + 0.001;
       _capHtml = `<span class="container-capacity${_over ? ' container-capacity-over' : ''}">${parseFloat(_fillUsed.toFixed(2))}/${_fillCap}</span>`;
     }
@@ -1091,13 +1118,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }),
     };
 
-    const existingFill = existing ? itemFillCost(existing, container) : 0;
-    if (itemFillCost(slotData, container) - existingFill > containerFillAvailable(container) + 0.001) {
-      closeDropdown();
-      render();
-      return;
-    }
-
     ensurePackableQty(slotData);
     row[c] = slotData;
 
@@ -1212,6 +1232,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     dropdownEl.hidden = true;
     dropdownEl.innerHTML = '';
   }
+
+  ['inv-scroll', 'stats-panel', 'shop-scroll'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('scroll', () => { if (!dropdownEl.hidden) positionDropdown(); }, { passive: true });
+  });
 
   // ── INSPECTOR ────────────────────────────────────────────────────────────
   function showInspector(slotData, container, r, c, packIdx) {
@@ -2900,6 +2925,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     _spellAcDdEl.innerHTML = '';
     _spellAcInp = null;
   }
+
+  ['inv-scroll', 'stats-panel', 'shop-scroll'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('scroll', () => { if (_spellAcDdEl.style.display !== 'none') _positionSpellAcDd(); }, { passive: true });
+  });
 
   function _showSpellAcMatches(val, level, inp, onPick) {
     const spellDb = window.SPELLS_XPHB || [];
@@ -5070,8 +5100,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       if (targetItem && targetItem.containerId) {
         const linked = state.containers.find(c => c.id === targetItem.containerId);
         if (linked) {
+          growContainer(linked);
           const freeSlot = findEmptySlot(linked, -1);
-          if (freeSlot && itemFillCost(slotData, linked) <= containerFillAvailable(linked) + 0.001) {
+          if (freeSlot) {
             removeFromSource();
             if (placeSlotData(slotData, linked, freeSlot.r, freeSlot.c) && !slotData._unresolved && isShopDrag && onShopPurchase) onShopPurchase(slotData);
             if (onSound) onSound(isShopDrag ? 'coin' : 'place');
@@ -5174,13 +5205,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       return false;
     }
     slotData.conflict = false;
-    const existing = container.slots[r][c];
-    const existingFill = existing ? itemFillCost(existing, container) : 0;
-    if (itemFillCost(slotData, container) - existingFill > containerFillAvailable(container) + 0.001) {
-      render();
-      return;
-    }
-
     ensurePackableQty(slotData);
     container.slots[r][c] = slotData;
 
