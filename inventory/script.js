@@ -3842,34 +3842,34 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   // fixedAmount1: override the bonus for ab1 (use 1 for fixed +1 feats; null = default 2/1 logic)
   function applyAsiChange(data, newAb1, newAb2, fixedAmount1 = null) {
-    if (data.ab1 && data.bonus1) state[data.ab1] = String(parseInt(state[data.ab1] || ‘10’) - data.bonus1);
-    if (data.ab2 && data.bonus2) state[data.ab2] = String(parseInt(state[data.ab2] || ‘10’) - data.bonus2);
+    if (data.ab1 && data.bonus1) state[data.ab1] = String(parseInt(state[data.ab1] || '10') - data.bonus1);
+    if (data.ab2 && data.bonus2) state[data.ab2] = String(parseInt(state[data.ab2] || '10') - data.bonus2);
     const intended1 = newAb1 ? (fixedAmount1 !== null ? fixedAmount1 : (newAb2 ? 1 : 2)) : 0;
     const intended2 = newAb2 ? 1 : 0;
     let bonus1 = 0, bonus2 = 0;
     if (newAb1) {
-      const cur = parseInt(state[newAb1] || ‘10’);
+      const cur = parseInt(state[newAb1] || '10');
       const after = Math.min(20, cur + intended1);
       bonus1 = after - cur;
       state[newAb1] = String(after);
     }
     if (newAb2) {
-      const cur = parseInt(state[newAb2] || ‘10’);
+      const cur = parseInt(state[newAb2] || '10');
       const after = Math.min(20, cur + intended2);
       bonus2 = after - cur;
       state[newAb2] = String(after);
     }
-    data.ab1 = newAb1 || ‘’;
-    data.ab2 = newAb2 || ‘’;
+    data.ab1 = newAb1 || '';
+    data.ab2 = newAb2 || '';
     data.bonus1 = bonus1;
     data.bonus2 = bonus2;
   }
 
   function reverseToughBonus(data) {
     if (!data.toughBonus) return;
-    if (state.hpMax !== ‘’ && state.hpMax != null) {
+    if (state.hpMax !== '' && state.hpMax != null) {
       state.hpMax = String(Math.max(0, (parseInt(state.hpMax) || 0) - data.toughBonus));
-      const el = document.getElementById(‘cs-hp-max’);
+      const el = document.getElementById('cs-hp-max');
       if (el && document.activeElement !== el) el.value = state.hpMax;
     }
     data.toughBonus = 0;
@@ -3877,86 +3877,86 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   function renderFeatContent(feature, data) {
     function descPara(content) {
-      const p = document.createElement(‘p’);
-      p.className = ‘cs-feature-desc’;
-      if (typeof content === ‘string’) {
+      const p = document.createElement('p');
+      p.className = 'cs-feature-desc';
+      if (typeof content === 'string') {
         p.textContent = content;
       } else if (content.boldIntro) {
-        const b = document.createElement(‘strong’);
-        b.textContent = content.boldIntro + ‘ ‘;
+        const b = document.createElement('strong');
+        b.textContent = content.boldIntro + ' ';
         p.appendChild(b);
-        p.appendChild(document.createTextNode(content.text || ‘’));
+        p.appendChild(document.createTextNode(content.text || ''));
       }
       return p;
     }
 
-    const wrap = document.createElement(‘div’);
-    wrap.className = ‘cs-feat-choice’;
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-choice';
 
-    const featSel = document.createElement(‘select’);
-    featSel.className = ‘cs-feat-subrace-sel’;
-    const blank = document.createElement(‘option’);
-    blank.value = ‘’;
-    blank.textContent = ‘Choose a feat…’;
+    const featSel = document.createElement('select');
+    featSel.className = 'cs-feat-subrace-sel';
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'Choose a feat…';
     featSel.appendChild(blank);
     FEAT_OPTIONS.forEach(f => {
-      const opt = document.createElement(‘option’);
+      const opt = document.createElement('option');
       opt.value = f.id;
       opt.textContent = f.name;
       if (data.feat === f.id) opt.selected = true;
       featSel.appendChild(opt);
     });
-    featSel.addEventListener(‘change’, e => {
+    featSel.addEventListener('change', e => {
       e.stopPropagation();
       const old = data.feat;
-      if (old === ‘ability-score-improvement’ || old === ‘shield-master’ || old === ‘dual-wielder’) applyAsiChange(data, ‘’, ‘’);
-      else if (old === ‘tough’) reverseToughBonus(data);
+      if (old === 'ability-score-improvement' || old === 'shield-master' || old === 'dual-wielder') applyAsiChange(data, '', '');
+      else if (old === 'tough') reverseToughBonus(data);
       data.feat = featSel.value;
-      if (data.feat === ‘shield-master’) applyAsiChange(data, ‘str’, ‘’, 1);
+      if (data.feat === 'shield-master') applyAsiChange(data, 'str', '', 1);
       updateCsCalculations();
       if (onChange) onChange();
       renderFeatures();
     });
     wrap.appendChild(featSel);
 
-    if (data.feat === ‘ability-score-improvement’) {
-      const p1 = document.createElement(‘p’);
-      p1.className = ‘cs-feature-desc’;
-      p1.textContent = "Increase one ability score of your choice by 2, or increase two ability scores of your choice by 1. This feat can’t increase an ability score above 20.";
+    if (data.feat === 'ability-score-improvement') {
+      const p1 = document.createElement('p');
+      p1.className = 'cs-feature-desc';
+      p1.textContent = "Increase one ability score of your choice by 2, or increase two ability scores of your choice by 1. This feat can't increase an ability score above 20.";
       wrap.appendChild(p1);
-      const p2 = document.createElement(‘p’);
-      p2.className = ‘cs-feature-desc’;
-      const rep = document.createElement(‘strong’);
-      rep.className = ‘cs-feat-repeatable’;
-      rep.textContent = ‘Repeatable. ‘;
+      const p2 = document.createElement('p');
+      p2.className = 'cs-feature-desc';
+      const rep = document.createElement('strong');
+      rep.className = 'cs-feat-repeatable';
+      rep.textContent = 'Repeatable. ';
       p2.appendChild(rep);
-      p2.appendChild(document.createTextNode(‘You can take this feat more than once.’));
+      p2.appendChild(document.createTextNode('You can take this feat more than once.'));
       wrap.appendChild(p2);
-      const row = document.createElement(‘div’);
-      row.className = ‘cs-feat-asi-row’;
-      [‘ab1’, ‘ab2’].forEach(key => {
-        const col = document.createElement(‘div’);
-        col.className = ‘cs-feat-asi-col’;
-        const lbl = document.createElement(‘span’);
-        lbl.className = ‘cs-feat-asi-label’;
-        lbl.textContent = key === ‘ab1’ ? ‘Ability 1’ : ‘Ability 2’;
-        const sel = document.createElement(‘select’);
-        sel.className = ‘cs-feat-subrace-sel’;
-        const none = document.createElement(‘option’);
-        none.value = ‘’;
-        none.textContent = ‘—‘;
+      const row = document.createElement('div');
+      row.className = 'cs-feat-asi-row';
+      ['ab1', 'ab2'].forEach(key => {
+        const col = document.createElement('div');
+        col.className = 'cs-feat-asi-col';
+        const lbl = document.createElement('span');
+        lbl.className = 'cs-feat-asi-label';
+        lbl.textContent = key === 'ab1' ? 'Ability 1' : 'Ability 2';
+        const sel = document.createElement('select');
+        sel.className = 'cs-feat-subrace-sel';
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = '—';
         sel.appendChild(none);
         Object.entries(FEAT_ABILITY_NAMES).forEach(([ab, name]) => {
-          const opt = document.createElement(‘option’);
+          const opt = document.createElement('option');
           opt.value = ab;
           opt.textContent = name;
           if (data[key] === ab) opt.selected = true;
           sel.appendChild(opt);
         });
-        sel.addEventListener(‘change’, e => {
+        sel.addEventListener('change', e => {
           e.stopPropagation();
-          const newAb1 = key === ‘ab1’ ? sel.value : (data.ab1 || ‘’);
-          const newAb2 = key === ‘ab2’ ? sel.value : (data.ab2 || ‘’);
+          const newAb1 = key === 'ab1' ? sel.value : (data.ab1 || '');
+          const newAb2 = key === 'ab2' ? sel.value : (data.ab2 || '');
           applyAsiChange(data, newAb1, newAb2);
           updateCsCalculations();
           if (onChange) onChange();
@@ -3967,45 +3967,45 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         row.appendChild(col);
       });
       wrap.appendChild(row);
-      const hint = document.createElement(‘p’);
-      hint.className = ‘cs-feature-desc cs-feat-asi-hint’;
-      hint.textContent = data.ab1 && data.ab2 ? ‘+1 to each ability’
-        : data.ab1 ? ‘+2 to first ability’
-        : ‘Choose one ability for +2, or two abilities for +1 each.’;
+      const hint = document.createElement('p');
+      hint.className = 'cs-feature-desc cs-feat-asi-hint';
+      hint.textContent = data.ab1 && data.ab2 ? '+1 to each ability'
+        : data.ab1 ? '+2 to first ability'
+        : 'Choose one ability for +2, or two abilities for +1 each.';
       wrap.appendChild(hint);
 
-    } else if (data.feat === ‘shield-master’) {
+    } else if (data.feat === 'shield-master') {
       [
-        ‘You gain the following benefits.’,
-        { boldIntro: ‘Ability Score Increase.’, text: ‘Increase your Strength score by 1, to a maximum of 20.’ },
-        { boldIntro: ‘Shield Bash.’, text: "If you attack a creature within 5 feet of you as part of the Attack action and hit with a Melee weapon, you can immediately bash the target with your Shield if it’s equipped, forcing the target to make a Strength saving throw (DC 8 plus your Strength modifier and Proficiency Bonus). On a failed save, you either push the target 5 feet from you or cause it to have the Prone condition (your choice). You can use this benefit only once on each of your turns." },
-        { boldIntro: ‘Interpose Shield.’, text: "If you’re subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you can take a Reaction to take no damage if you succeed on the saving throw and are holding a Shield." },
+        'You gain the following benefits.',
+        { boldIntro: 'Ability Score Increase.', text: 'Increase your Strength score by 1, to a maximum of 20.' },
+        { boldIntro: 'Shield Bash.', text: "If you attack a creature within 5 feet of you as part of the Attack action and hit with a Melee weapon, you can immediately bash the target with your Shield if it's equipped, forcing the target to make a Strength saving throw (DC 8 plus your Strength modifier and Proficiency Bonus). On a failed save, you either push the target 5 feet from you or cause it to have the Prone condition (your choice). You can use this benefit only once on each of your turns." },
+        { boldIntro: 'Interpose Shield.', text: "If you're subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you can take a Reaction to take no damage if you succeed on the saving throw and are holding a Shield." },
       ].forEach(part => wrap.appendChild(descPara(part)));
 
-    } else if (data.feat === ‘dual-wielder’) {
-      wrap.appendChild(descPara(‘You gain the following benefits.’));
-      wrap.appendChild(descPara({ boldIntro: ‘Ability Score Increase.’, text: ‘Increase your Strength or Dexterity by 1, to a maximum of 20.’ }));
-      const col = document.createElement(‘div’);
-      col.className = ‘cs-feat-asi-col’;
-      const lbl = document.createElement(‘span’);
-      lbl.className = ‘cs-feat-asi-label’;
-      lbl.textContent = ‘Ability (+1)’;
-      const sel = document.createElement(‘select’);
-      sel.className = ‘cs-feat-subrace-sel’;
-      const none = document.createElement(‘option’);
-      none.value = ‘’;
-      none.textContent = ‘—‘;
+    } else if (data.feat === 'dual-wielder') {
+      wrap.appendChild(descPara('You gain the following benefits.'));
+      wrap.appendChild(descPara({ boldIntro: 'Ability Score Increase.', text: 'Increase your Strength or Dexterity by 1, to a maximum of 20.' }));
+      const col = document.createElement('div');
+      col.className = 'cs-feat-asi-col';
+      const lbl = document.createElement('span');
+      lbl.className = 'cs-feat-asi-label';
+      lbl.textContent = 'Ability (+1)';
+      const sel = document.createElement('select');
+      sel.className = 'cs-feat-subrace-sel';
+      const none = document.createElement('option');
+      none.value = '';
+      none.textContent = '—';
       sel.appendChild(none);
-      [[‘str’, ‘Strength’], [‘dex’, ‘Dexterity’]].forEach(([ab, name]) => {
-        const opt = document.createElement(‘option’);
+      [['str', 'Strength'], ['dex', 'Dexterity']].forEach(([ab, name]) => {
+        const opt = document.createElement('option');
         opt.value = ab;
         opt.textContent = name;
         if (data.ab1 === ab) opt.selected = true;
         sel.appendChild(opt);
       });
-      sel.addEventListener(‘change’, e => {
+      sel.addEventListener('change', e => {
         e.stopPropagation();
-        applyAsiChange(data, sel.value, ‘’, 1);
+        applyAsiChange(data, sel.value, '', 1);
         updateCsCalculations();
         if (onChange) onChange();
         renderFeatures();
@@ -4013,15 +4013,15 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       col.appendChild(lbl);
       col.appendChild(sel);
       wrap.appendChild(col);
-      wrap.appendChild(descPara({ boldIntro: ‘Enhanced Dual Wielding.’, text: "When you take the Attack action on your turn and attack with a weapon that has the Light property, you can make one extra attack as a Bonus Action later on the same turn with a different weapon, which must be a Melee weapon that lacks the Two-Handed property. You don’t add your ability modifier to the extra attack’s damage unless that modifier is negative." }));
-      wrap.appendChild(descPara({ boldIntro: ‘Quick Draw.’, text: ‘You can draw or stow two weapons that lack the Two-Handed property when you would normally be able to draw or stow only one.’ }));
+      wrap.appendChild(descPara({ boldIntro: 'Enhanced Dual Wielding.', text: "When you take the Attack action on your turn and attack with a weapon that has the Light property, you can make one extra attack as a Bonus Action later on the same turn with a different weapon, which must be a Melee weapon that lacks the Two-Handed property. You don't add your ability modifier to the extra attack's damage unless that modifier is negative." }));
+      wrap.appendChild(descPara({ boldIntro: 'Quick Draw.', text: 'You can draw or stow two weapons that lack the Two-Handed property when you would normally be able to draw or stow only one.' }));
 
-    } else if (data.feat === ‘tough’) {
-      wrap.appendChild(descPara(‘Your Hit Point maximum increases by an amount equal to twice your character level when you gain this feat. Whenever you gain a character level thereafter, your Hit Point maximum increases by an additional 2 Hit Points.’));
+    } else if (data.feat === 'tough') {
+      wrap.appendChild(descPara('Your Hit Point maximum increases by an amount equal to twice your character level when you gain this feat. Whenever you gain a character level thereafter, your Hit Point maximum increases by an additional 2 Hit Points.'));
       const lvl = parseInt(state.level) || 0;
       const bonus = lvl >= 1 ? 2 * lvl : 0;
-      const panel = document.createElement(‘div’);
-      panel.className = ‘cs-feat-save-dc-panel’;
+      const panel = document.createElement('div');
+      panel.className = 'cs-feat-save-dc-panel';
       panel.innerHTML = `<span class="cs-feat-spell-stat-val">+${bonus}</span><span class="cs-feat-spell-stat-lbl">HP Max</span>`;
       wrap.appendChild(panel);
     }
