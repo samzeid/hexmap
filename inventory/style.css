@@ -3277,6 +3277,7 @@ span.cs-feature-ticker {
 }
 
 .cs-feat-subrace { margin: 4px 0 2px; }
+.cs-feat-expertise { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 2px; }
 .cs-feat-subrace-sel {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -4492,6 +4493,20 @@ span.cs-feature-ticker {
 .cs-hit-dice-row select option {
   background: var(--bg, #1a1a2e);
   color: var(--text);
+}
+
+/* ── VIEW-ONLY CHARACTER SHEET ───────────────────────────────────────────── */
+#stats-panel.char-view-only button,
+#stats-panel.char-view-only input,
+#stats-panel.char-view-only select {
+  pointer-events: none;
+  opacity: 0.38;
+  filter: grayscale(0.4);
+}
+#stats-panel:not(.editing) select {
+  pointer-events: none;
+  opacity: 0.38;
+  filter: grayscale(0.4);
 }
 
 /* ── CALCULATOR OVERLAY ──────────────────────────────────────────────────── */

@@ -69,6 +69,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     deception:'cha', intimidation:'cha', performance:'cha', persuasion:'cha',
   };
 
+  const EXPERTISE_SKILL_NAMES = {
+    athletics:'Athletics', acrobatics:'Acrobatics', sleightOfHand:'Sleight of Hand', stealth:'Stealth',
+    arcana:'Arcana', history:'History', investigation:'Investigation', nature:'Nature', religion:'Religion',
+    animalHandling:'Animal Handling', insight:'Insight', medicine:'Medicine', perception:'Perception', survival:'Survival',
+    deception:'Deception', intimidation:'Intimidation', performance:'Performance', persuasion:'Persuasion',
+  };
+
   const SAVE_AB = {
     strSave:'str', dexSave:'dex', conSave:'con', intSave:'int', wisSave:'wis', chaSave:'cha',
   };
@@ -192,9 +199,19 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       if (el) el.classList.toggle('cs-exh-penalty', exhPenalty > 0 && mod !== null);
     });
 
+    const expertiseSkills = new Set();
+    (state.activeFeatures || []).forEach(fid => {
+      const feat = FEATURES_LIBRARY.find(f => f.id === fid);
+      if (feat?.type === 'expertise') {
+        ((state.featureData[fid] || {}).slots || []).forEach(s => { if (s) expertiseSkills.add(s); });
+      }
+    });
+
     Object.entries(SKILL_AB).forEach(([skill, ab]) => {
       const mod = mods[ab];
-      const base = mod !== null ? mod + (state[skill + 'Prof'] ? prof : 0) : null;
+      const hasProficiency = !!state[skill + 'Prof'];
+      const profMult = hasProficiency && expertiseSkills.has(skill) ? 2 : 1;
+      const base = mod !== null ? mod + (hasProficiency ? prof * profMult : 0) : null;
       const auto = base !== null ? base - exhPenalty : null;
       applyAuto(CS_ID_MAP[skill], skill, auto);
       const el = document.getElementById(CS_ID_MAP[skill]);
@@ -210,7 +227,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const el = document.getElementById(id);
       if (!el) return;
       const mod = mods[ab];
-      const autoSkill = mod !== null ? mod + (state[skill + 'Prof'] ? prof : 0) : null;
+      const _hasProficiency = !!state[skill + 'Prof'];
+      const _profMult = _hasProficiency && expertiseSkills.has(skill) ? 2 : 1;
+      const autoSkill = mod !== null ? mod + (_hasProficiency ? prof * _profMult : 0) : null;
       const effectiveSkill = (state[skill] === '' || state[skill] == null)
         ? autoSkill
         : parseInt(state[skill]);
@@ -2156,6 +2175,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
 
     function show(el) {
+      if (document.getElementById('stats-panel')?.classList.contains('char-view-only')) { el.readOnly = false; return; }
       targetEl = el;
       baseVal  = parseInt(el.value) || 0;
       op       = '';
@@ -2349,10 +2369,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       name: 'Deft Explorer',
       class: 'Ranger',
       level: 2,
-      type: 'text',
+      type: 'expertise',
+      expertiseSlots: 1,
       description: [
         'Thanks to your travels, you gain the following benefits.',
         { boldIntro: 'Expertise.', text: 'Choose one of your skill proficiencies with which you lack Expertise. You gain Expertise in that skill.' },
+        { insertExpertiseDropdown: true },
         { boldIntro: 'Languages.', text: 'You know two languages of your choice.' },
       ],
     },
@@ -2546,7 +2568,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       name: 'Expertise',
       class: 'Rogue',
       level: 1,
-      type: 'text',
+      type: 'expertise',
+      expertiseSlots: 2,
       description: 'You gain Expertise in two of your skill proficiencies of your choice.',
     },
     {
@@ -2624,7 +2647,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       name: 'Expertise',
       class: 'Rogue',
       level: 6,
-      type: 'text',
+      type: 'expertise',
+      expertiseSlots: 2,
       description: 'You gain Expertise in two of your Skill Proficiencies of your choice.',
     },
     {
@@ -3493,6 +3517,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
     }
 
+    let expertiseDropdownInserted = false;
     if (feature.description) {
       const parts = Array.isArray(feature.description) ? feature.description : [feature.description];
       parts.forEach((part, idx) => {
@@ -3516,6 +3541,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
             ul.appendChild(li);
           });
           descTarget.appendChild(ul);
+        } else if (part.insertExpertiseDropdown) {
+          if (feature.type === 'expertise') {
+            descTarget.appendChild(renderExpertiseContent(feature, data));
+            expertiseDropdownInserted = true;
+          }
         } else if (part.boldIntro) {
           const p = document.createElement('p');
           p.className = 'cs-feature-desc' + (part.indent ? ' cs-feature-desc--indent' : '');
@@ -3643,6 +3673,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       body.appendChild(renderFrayedContent(isEditing));
     } else if (feature.type === 'fighting-style') {
       body.appendChild(renderFightingStyleContent(data, isEditing));
+    } else if (feature.type === 'expertise' && !expertiseDropdownInserted) {
+      body.appendChild(renderExpertiseContent(feature, data));
     }
 
     return body;
@@ -3722,6 +3754,45 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     { value: 'Dueling' },
     { value: 'Two-Weapon Fighting' },
   ];
+
+  function renderExpertiseContent(feature, data) {
+    if (!data.slots) data.slots = [];
+    const slots = feature.expertiseSlots || 2;
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-expertise';
+
+    for (let i = 0; i < slots; i++) {
+      const sel = document.createElement('select');
+      sel.className = 'cs-feat-subrace-sel';
+
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = 'None';
+      sel.appendChild(blank);
+
+      Object.keys(EXPERTISE_SKILL_NAMES).forEach(skill => {
+        if (!state[skill + 'Prof']) return;
+        const opt = document.createElement('option');
+        opt.value = skill;
+        opt.textContent = EXPERTISE_SKILL_NAMES[skill];
+        if (data.slots[i] === skill) opt.selected = true;
+        sel.appendChild(opt);
+      });
+
+      const idx = i;
+      sel.addEventListener('change', e => {
+        e.stopPropagation();
+        data.slots[idx] = sel.value;
+        updateCsCalculations();
+        if (onChange) onChange();
+        renderFeatures();
+      });
+
+      wrap.appendChild(sel);
+    }
+
+    return wrap;
+  }
 
   function renderFightingStyleContent(data, isEditing) {
     const wrap = document.createElement('div');
@@ -5647,7 +5718,9 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   function updateEditBtn() {
-    charFieldsEditBtn.hidden = !canEditCurrentChar();
+    const canEdit = canEditCurrentChar();
+    charFieldsEditBtn.hidden = !canEdit;
+    statsPanelEl.classList.toggle('char-view-only', !canEdit);
   }
 
   function setStatsEditing(on) {
