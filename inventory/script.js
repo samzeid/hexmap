@@ -3917,6 +3917,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       if (old === 'ability-score-improvement' || old === 'shield-master' || old === 'dual-wielder') applyAsiChange(data, '', '');
       else if (old === 'tough') reverseToughBonus(data);
       data.feat = featSel.value;
+      if (data.feat === 'shield-master') applyAsiChange(data, 'str', '', 1);
       updateCsCalculations();
       if (onChange) onChange();
       renderFeatures();
@@ -3979,36 +3980,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       wrap.appendChild(hint);
 
     } else if (data.feat === 'shield-master') {
-      wrap.appendChild(descPara('You gain the following benefits.'));
-      wrap.appendChild(descPara({ boldIntro: 'Ability Score Increase.', text: 'Increase your Strength score by 1, to a maximum of 20.' }));
-      const smCol = document.createElement('div');
-      smCol.className = 'cs-feat-asi-col';
-      const smLbl = document.createElement('span');
-      smLbl.className = 'cs-feat-asi-label';
-      smLbl.textContent = 'Ability (+1)';
-      const smSel = document.createElement('select');
-      smSel.className = 'cs-feat-subrace-sel';
-      const smNone = document.createElement('option');
-      smNone.value = '';
-      smNone.textContent = '—';
-      smSel.appendChild(smNone);
-      const smOpt = document.createElement('option');
-      smOpt.value = 'str';
-      smOpt.textContent = 'Strength';
-      if (data.ab1 === 'str') smOpt.selected = true;
-      smSel.appendChild(smOpt);
-      smSel.addEventListener('change', e => {
-        e.stopPropagation();
-        applyAsiChange(data, smSel.value, '', 1);
-        updateCsCalculations();
-        if (onChange) onChange();
-        renderFeatures();
-      });
-      smCol.appendChild(smLbl);
-      smCol.appendChild(smSel);
-      wrap.appendChild(smCol);
-      wrap.appendChild(descPara({ boldIntro: 'Shield Bash.', text: "If you attack a creature within 5 feet of you as part of the Attack action and hit with a Melee weapon, you can immediately bash the target with your Shield if it's equipped, forcing the target to make a Strength saving throw (DC 8 plus your Strength modifier and Proficiency Bonus). On a failed save, you either push the target 5 feet from you or cause it to have the Prone condition (your choice). You can use this benefit only once on each of your turns." }));
-      wrap.appendChild(descPara({ boldIntro: 'Interpose Shield.', text: "If you're subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you can take a Reaction to take no damage if you succeed on the saving throw and are holding a Shield." }));
+      [
+        'You gain the following benefits.',
+        { boldIntro: 'Ability Score Increase.', text: 'Increase your Strength score by 1, to a maximum of 20.' },
+        { boldIntro: 'Shield Bash.', text: "If you attack a creature within 5 feet of you as part of the Attack action and hit with a Melee weapon, you can immediately bash the target with your Shield if it's equipped, forcing the target to make a Strength saving throw (DC 8 plus your Strength modifier and Proficiency Bonus). On a failed save, you either push the target 5 feet from you or cause it to have the Prone condition (your choice). You can use this benefit only once on each of your turns." },
+        { boldIntro: 'Interpose Shield.', text: "If you're subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you can take a Reaction to take no damage if you succeed on the saving throw and are holding a Shield." },
+      ].forEach(part => wrap.appendChild(descPara(part)));
 
     } else if (data.feat === 'dual-wielder') {
       wrap.appendChild(descPara('You gain the following benefits.'));
