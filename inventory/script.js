@@ -3846,6 +3846,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       state[ab] = String(val);
       const el = document.getElementById(CS_ID_MAP[ab]);
       if (el && document.activeElement !== el) el.value = state[ab];
+      const modEl = document.getElementById(`cs-${ab}-mod`);
+      if (modEl) modEl.textContent = abilityMod(val);
     }
     if (data.ab1 && data.bonus1) setAbScore(data.ab1, parseInt(state[data.ab1] || '10') - data.bonus1);
     if (data.ab2 && data.bonus2) setAbScore(data.ab2, parseInt(state[data.ab2] || '10') - data.bonus2);
@@ -6150,6 +6152,199 @@ window.CharacterManager = ({ auth, database }) => {
     let currentRarity  = null;
     const SHOP_HIDDEN_SECTIONS = new Set(['Valuables', 'Currency']);
     const visibleSections = [];
+
+    // ── DM RANDOMIZER PANEL ───────────────────────────────────────────────────
+    if (window._isDM) {
+      const RAND_EXCLUDED = new Set(['Currency', 'Valuables']);
+      const sectionItems = {};
+      let _rs = null, _rr = null;
+      ITEM_LIBRARY.forEach(li => {
+        if (li._section) { _rs = li._section; _rr = null; return; }
+        if (li._rarity)  { _rr = li._rarity; return; }
+        if (!li.name || li.shopHidden || RAND_EXCLUDED.has(_rs)) return;
+        if (!_rs) return;
+        if (!sectionItems[_rs]) sectionItems[_rs] = {};
+        const rKey = _rr || '';
+        if (!sectionItems[_rs][rKey]) sectionItems[_rs][rKey] = [];
+        sectionItems[_rs][rKey].push(li);
+      });
+
+      const panel = document.createElement('div');
+      panel.className = 'dm-randomizer';
+
+      const heading = document.createElement('div');
+      heading.className = 'dm-randomizer-heading';
+      heading.textContent = 'Random Item';
+      panel.appendChild(heading);
+
+      const controls = document.createElement('div');
+      controls.className = 'dm-randomizer-controls';
+
+      const tableWrap = document.createElement('label');
+      tableWrap.className = 'dm-rand-label';
+      tableWrap.textContent = 'Table';
+      const tableSelect = document.createElement('select');
+      tableSelect.className = 'dm-rand-select';
+      Object.keys(sectionItems).forEach(sec => {
+        const opt = document.createElement('option');
+        opt.value = sec; opt.textContent = sec;
+        tableSelect.appendChild(opt);
+      });
+      if ([...tableSelect.options].some(o => o.value === 'Magical Items')) tableSelect.value = 'Magical Items';
+      tableWrap.appendChild(tableSelect);
+      controls.appendChild(tableWrap);
+
+      const rarityWrap = document.createElement('label');
+      rarityWrap.className = 'dm-rand-label';
+      rarityWrap.textContent = 'Rarity';
+      const raritySelect = document.createElement('select');
+      raritySelect.className = 'dm-rand-select';
+      rarityWrap.appendChild(raritySelect);
+      controls.appendChild(rarityWrap);
+
+      const randResult = document.createElement('div');
+      randResult.className = 'dm-rand-result';
+      randResult.hidden = true;
+
+      function updateRarities() {
+        raritySelect.innerHTML = '';
+        const map = sectionItems[tableSelect.value] || {};
+        const rarities = Object.keys(map).filter(r => r !== '');
+        rarityWrap.hidden = rarities.length === 0;
+        if (rarities.length) {
+          [['__all__', 'Any'], ...rarities.map(r => [r, r])].forEach(([v, t]) => {
+            const o = document.createElement('option'); o.value = v; o.textContent = t; raritySelect.appendChild(o);
+          });
+        }
+      }
+      tableSelect.addEventListener('change', () => { updateRarities(); randResult.hidden = true; });
+      updateRarities();
+
+      const btn = document.createElement('button');
+      btn.className = 'dm-rand-btn';
+      btn.textContent = 'Randomize';
+      controls.appendChild(btn);
+
+      panel.appendChild(controls);
+      panel.appendChild(randResult);
+
+      btn.addEventListener('click', () => {
+        const map = sectionItems[tableSelect.value] || {};
+        const rarity = rarityWrap.hidden ? '' : raritySelect.value;
+        const pool = [];
+        if (rarity === '__all__' || rarity === '') {
+          Object.values(map).forEach(arr => pool.push(...arr));
+        } else {
+          pool.push(...(map[rarity] || []));
+        }
+        if (!pool.length) { randResult.innerHTML = '<em>No items in this selection.</em>'; randResult.hidden = false; return; }
+        const item = pool[Math.floor(Math.random() * pool.length)];
+        let itemRarity = '';
+        let _is = null, _ir = null;
+        for (const li of ITEM_LIBRARY) {
+          if (li._section) { _is = li._section; _ir = null; continue; }
+          if (li._rarity)  { _ir = li._rarity; continue; }
+          if (li === item) { itemRarity = _ir || ''; break; }
+        }
+
+        // Dice cycling animation
+        btn.disabled = true;
+        btn.style.width  = btn.offsetWidth  + 'px';
+        btn.style.height = btn.offsetHeight + 'px';
+        randResult.hidden = true;
+        const diceIcons = ['fa-dice-one','fa-dice-two','fa-dice-three','fa-dice-four','fa-dice-five','fa-dice-six'];
+        const randIcon = () => diceIcons[Math.floor(Math.random() * diceIcons.length)];
+        const diceHtml = () => `<span class="dm-rand-dice-wrap"><i class="fas ${randIcon()} dm-rand-dice-jump"></i><span class="dm-rand-dice-ground"></span></span>`;
+        btn.innerHTML = diceHtml();
+        const cycleInterval = setInterval(() => {
+          btn.innerHTML = diceHtml();
+        }, 350);
+
+        setTimeout(() => {
+          clearInterval(cycleInterval);
+          btn.querySelector('.dm-rand-dice-jump')?.classList.remove('dm-rand-dice-jump');
+        }, 1000);
+
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.style.width  = '';
+          btn.style.height = '';
+          btn.textContent = 'Randomize';
+
+        randResult.innerHTML = '';
+        randResult.hidden = false;
+
+        const slotData = buildShopSlotData(
+          item,
+          item.variables?.weapon?.value || item.variables?.armor?.value || null,
+          false, null,
+          item.variables?.element?.value || null,
+          shopCostToCp(item.cost)
+        );
+
+        const row = document.createElement('div');
+        row.className = 'shop-item-row';
+        row.dataset.itemName = item.name;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'shop-item-name';
+        nameSpan.textContent = item.name;
+        row.appendChild(nameSpan);
+
+        const metaSpan = document.createElement('span');
+        metaSpan.className = 'shop-item-cost';
+        metaSpan.textContent = [itemRarity, item.cost].filter(Boolean).join(' · ');
+        row.appendChild(metaSpan);
+
+        row.addEventListener('click', e => {
+          if (row._shopDragging) return;
+          inv.toggleShopItem(slotData, `rand-${item.name}`);
+        });
+
+        row.style.touchAction = 'none';
+        let lpTimer = null, lpX, lpY, lpPointerId, lpTracking = false;
+        row.addEventListener('pointerdown', e => {
+          if (e.button !== 0) return;
+          lpX = e.clientX; lpY = e.clientY; lpPointerId = e.pointerId; lpTracking = true;
+          lpTimer = setTimeout(() => {
+            lpTimer = null;
+            row._shopDragging = true;
+            row.classList.add('shop-item-dragging');
+            document.documentElement.setPointerCapture(lpPointerId);
+            inv.startShopDrag(slotData, e.clientX, e.clientY);
+            const cleanup = () => {
+              row._shopDragging = false;
+              row.classList.remove('shop-item-dragging');
+              document.removeEventListener('pointerup', cleanup);
+              document.removeEventListener('pointercancel', cleanup);
+            };
+            document.addEventListener('pointerup', cleanup);
+            document.addEventListener('pointercancel', cleanup);
+          }, 380);
+        });
+        row.addEventListener('pointermove', e => {
+          if (!lpTracking) return;
+          if ((e.clientX - lpX) ** 2 + (e.clientY - lpY) ** 2 > 64) {
+            if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+            lpTracking = false;
+          }
+        });
+        const cancelLP = () => {
+          if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+          lpTracking = false;
+          row._shopDragging = false;
+          row.classList.remove('shop-item-dragging');
+        };
+        row.addEventListener('pointerup', cancelLP);
+        row.addEventListener('pointercancel', cancelLP);
+
+        randResult.appendChild(row);
+        }, 1250); // end setTimeout
+      });
+
+      scroll.appendChild(panel);
+    }
+    // ── END DM RANDOMIZER ─────────────────────────────────────────────────────
 
     // Calculate current character's total wealth in cp for affordability display
     const charCoins = getCharCoins(currentCharId ? allChars[currentCharId]?.state : null);

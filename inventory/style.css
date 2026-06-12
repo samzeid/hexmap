@@ -565,6 +565,99 @@ input, textarea, select { font-size: max(16px, 1em); }
 .shop-item-unaffordable .cost-sp,
 .shop-item-unaffordable .cost-cp { color: rgba(255, 80, 80, 0.85); }
 
+/* ── DM RANDOMIZER ────────────────────────────────────────────────────────── */
+.dm-randomizer {
+  margin: 12px 12px 4px;
+  padding: 13px 14px;
+  border-radius: 8px;
+  background: rgba(255, 200, 50, 0.05);
+  border: 1px solid rgba(255, 200, 50, 0.2);
+}
+.dm-randomizer-heading {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 200, 50, 0.65);
+  margin-bottom: 10px;
+}
+.dm-randomizer-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dm-rand-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+.dm-rand-select {
+  background: var(--bg);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 5px 8px;
+  cursor: pointer;
+  outline: none;
+  max-width: 160px;
+}
+.dm-rand-select:focus { border-color: rgba(255,200,50,0.4); }
+.dm-rand-btn {
+  background: rgba(255,200,50,0.12);
+  border: 1px solid rgba(255,200,50,0.3);
+  border-radius: 5px;
+  color: rgba(255,200,50,0.9);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.dm-rand-btn:hover  { background: rgba(255,200,50,0.22); }
+@keyframes dm-dice-jump {
+  0%   { transform: translateY(0)    rotate(0deg);   }
+  25%  { transform: translateY(-6px) rotate(-14deg); }
+  55%  { transform: translateY(-5px) rotate(10deg);  }
+  80%  { transform: translateY(-2px) rotate(-4deg);  }
+  100% { transform: translateY(0)    rotate(0deg);   }
+}
+.dm-rand-dice-jump {
+  display: inline-block;
+  animation: dm-dice-jump 0.28s ease-out;
+}
+.dm-rand-dice-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  transform: translateY(3px);
+}
+.dm-rand-dice-ground {
+  width: 14px;
+  height: 4px;
+  background: rgba(255, 200, 50, 0.35);
+  border-radius: 50%;
+  filter: blur(0.75px);
+  margin-top: -3px;
+}
+.dm-rand-btn:active { background: rgba(255,200,50,0.35); }
+.dm-rand-result {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
 .shop-mat-btn {
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.12);
