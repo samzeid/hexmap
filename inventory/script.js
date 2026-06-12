@@ -2138,12 +2138,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     el.addEventListener('keydown', e => { if (e.key === 'Enter') { applyEval(); el.blur(); } });
   });
 
-  // ── HISTORY / BACK-BUTTON NAVIGATION ─────────────────────────────────────
-  let _calcOpen        = false;   // calculator overlay is currently on screen
-  let _calcHide        = null;    // set by the calculator IIFE below
-  let _suppressPopstate = false;  // skip the next popstate (programmatic history.back)
-  let _handlingPopstate = false;  // popstate is in progress; skip re-entrant history ops
-
   // ── CALCULATOR OVERLAY (touch devices) ───────────────────────────────────
   (function () {
     const overlay   = document.getElementById('cs-calc-overlay');
@@ -2191,15 +2185,15 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       overlay.classList.add('cs-calc-open');
       backdrop.classList.add('cs-calc-open');
       el.readOnly = true;
-      _calcOpen = true;
+      window._navCalc.open = true;
       history.pushState({ overlay: 'calculator' }, '');
     }
 
     function hide() {
-      if (_calcOpen) {
-        _calcOpen = false;
-        if (!_handlingPopstate) {
-          _suppressPopstate = true;
+      if (window._navCalc.open) {
+        window._navCalc.open = false;
+        if (!window._navCalc.handling) {
+          window._navCalc.suppress = true;
           history.back();
         }
       }
@@ -2209,7 +2203,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       op = ''; numStr = '';
     }
 
-    _calcHide = hide;
+    window._navCalc.hide = hide;
 
     function commit() {
       if (!targetEl) return;
@@ -5615,6 +5609,12 @@ window.CharacterManager = ({ auth, database }) => {
     };
   })();
 
+  // ── HISTORY / BACK-BUTTON NAVIGATION ─────────────────────────────────────
+  // _navCalc bridges calculator state (inside InventorySystem scope) to here.
+  window._navCalc = { open: false, suppress: false, handling: false, hide: null };
+  let _suppressPopstate = false;
+  let _handlingPopstate = false;
+
   // ── INVENTORY SYSTEM ────────────────────────────────────────────────────
   inv = window.InventorySystem({
     database: null,
@@ -7127,9 +7127,11 @@ window.CharacterManager = ({ auth, database }) => {
   // ── SYSTEM BACK-BUTTON HANDLER ────────────────────────────────────────────
   window.addEventListener('popstate', e => {
     if (_suppressPopstate) { _suppressPopstate = false; return; }
+    if (window._navCalc.suppress) { window._navCalc.suppress = false; return; }
     _handlingPopstate = true;
+    window._navCalc.handling = true;
     try {
-      if (_calcOpen) { _calcHide?.(); return; }
+      if (window._navCalc.open) { window._navCalc.hide?.(); return; }
       const v = e.state?.view;
       if (!v || v === 'hexmap') {
         if (shopOpen) {
@@ -7146,6 +7148,7 @@ window.CharacterManager = ({ auth, database }) => {
       }
     } finally {
       _handlingPopstate = false;
+      window._navCalc.handling = false;
     }
   });
 };
