@@ -3278,6 +3278,13 @@ span.cs-feature-ticker {
 
 .cs-feat-subrace { margin: 4px 0 2px; }
 .cs-feat-expertise { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 2px; }
+
+.cs-feat-choice { display: flex; flex-direction: column; gap: 8px; }
+.cs-feat-asi-row { display: flex; gap: 10px; }
+.cs-feat-asi-col { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.cs-feat-asi-label { font-size: 11px; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.05em; }
+.cs-feat-asi-hint { font-style: italic; opacity: 0.5; margin-top: 0 !important; }
+.cs-feat-repeatable { font-style: italic; }
 .cs-feat-subrace-sel {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.15);

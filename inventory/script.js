@@ -76,6 +76,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     deception:'Deception', intimidation:'Intimidation', performance:'Performance', persuasion:'Persuasion',
   };
 
+  const FEAT_ABILITY_NAMES = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
+
+  const FEAT_OPTIONS = [
+    { id: 'ability-score-improvement', name: 'Ability Score Improvement' },
+  ];
+
   const SAVE_AB = {
     strSave:'str', dexSave:'dex', conSave:'con', intSave:'int', wisSave:'wis', chaSave:'cha',
   };
@@ -2834,6 +2840,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         { boldIntro: 'Unholy Survival.', text: 'When you fail a saving throw, you can expend your temporary hit points up to your Barbarian level and add the number of temporary hit points spent to your failed save, potentially turning it into a success.' },
       ],
     },
+    { id: 'ranger-feat-4',    name: 'Feat', class: 'Ranger',    level: 4, type: 'feat' },
+    { id: 'sorcerer-feat-4',  name: 'Feat', class: 'Sorcerer',  level: 4, type: 'feat' },
+    { id: 'rogue-feat-4',     name: 'Feat', class: 'Rogue',     level: 4, type: 'feat' },
+    { id: 'barbarian-feat-4', name: 'Feat', class: 'Barbarian', level: 4, type: 'feat' },
   ];
 
   function getEligibleFeatures() {
@@ -3686,6 +3696,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       body.appendChild(renderFightingStyleContent(data, isEditing));
     } else if (feature.type === 'expertise' && !expertiseDropdownInserted) {
       body.appendChild(renderExpertiseContent(feature, data));
+    } else if (feature.type === 'feat') {
+      body.appendChild(renderFeatContent(feature, data));
     }
 
     return body;
@@ -3800,6 +3812,125 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       });
 
       wrap.appendChild(sel);
+    }
+
+    return wrap;
+  }
+
+  function applyAsiChange(data, newAb1, newAb2) {
+    // Reverse previously applied bonuses (stored as exact deltas)
+    if (data.ab1 && data.bonus1) state[data.ab1] = String(parseInt(state[data.ab1] || '10') - data.bonus1);
+    if (data.ab2 && data.bonus2) state[data.ab2] = String(parseInt(state[data.ab2] || '10') - data.bonus2);
+
+    // Apply new bonuses, storing actual delta (capped at 20)
+    const intended1 = newAb1 ? (newAb2 ? 1 : 2) : 0;
+    const intended2 = newAb2 ? 1 : 0;
+    let bonus1 = 0, bonus2 = 0;
+    if (newAb1) {
+      const cur = parseInt(state[newAb1] || '10');
+      const after = Math.min(20, cur + intended1);
+      bonus1 = after - cur;
+      state[newAb1] = String(after);
+    }
+    if (newAb2) {
+      const cur = parseInt(state[newAb2] || '10');
+      const after = Math.min(20, cur + intended2);
+      bonus2 = after - cur;
+      state[newAb2] = String(after);
+    }
+
+    data.ab1 = newAb1 || '';
+    data.ab2 = newAb2 || '';
+    data.bonus1 = bonus1;
+    data.bonus2 = bonus2;
+  }
+
+  function renderFeatContent(feature, data) {
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-choice';
+
+    // Feat selector
+    const featSel = document.createElement('select');
+    featSel.className = 'cs-feat-subrace-sel';
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'Choose a feat…';
+    featSel.appendChild(blank);
+    FEAT_OPTIONS.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = f.name;
+      if (data.feat === f.id) opt.selected = true;
+      featSel.appendChild(opt);
+    });
+    featSel.addEventListener('change', e => {
+      e.stopPropagation();
+      if (data.feat === 'ability-score-improvement') applyAsiChange(data, '', '');
+      data.feat = featSel.value;
+      updateCsCalculations();
+      if (onChange) onChange();
+      renderFeatures();
+    });
+    wrap.appendChild(featSel);
+
+    if (data.feat === 'ability-score-improvement') {
+      const p1 = document.createElement('p');
+      p1.className = 'cs-feature-desc';
+      p1.textContent = "Increase one ability score of your choice by 2, or increase two ability scores of your choice by 1. This feat can’t increase an ability score above 20.";
+      wrap.appendChild(p1);
+
+      const p2 = document.createElement('p');
+      p2.className = 'cs-feature-desc';
+      const rep = document.createElement('strong');
+      rep.className = 'cs-feat-repeatable';
+      rep.textContent = 'Repeatable. ';
+      p2.appendChild(rep);
+      p2.appendChild(document.createTextNode('You can take this feat more than once.'));
+      wrap.appendChild(p2);
+
+      // Two ability dropdowns
+      const row = document.createElement('div');
+      row.className = 'cs-feat-asi-row';
+      ['ab1', 'ab2'].forEach(key => {
+        const col = document.createElement('div');
+        col.className = 'cs-feat-asi-col';
+        const lbl = document.createElement('span');
+        lbl.className = 'cs-feat-asi-label';
+        lbl.textContent = key === 'ab1' ? 'Ability 1' : 'Ability 2';
+        const sel = document.createElement('select');
+        sel.className = 'cs-feat-subrace-sel';
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = '—';
+        sel.appendChild(none);
+        Object.entries(FEAT_ABILITY_NAMES).forEach(([ab, name]) => {
+          const opt = document.createElement('option');
+          opt.value = ab;
+          opt.textContent = name;
+          if (data[key] === ab) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        sel.addEventListener('change', e => {
+          e.stopPropagation();
+          const newAb1 = key === 'ab1' ? sel.value : (data.ab1 || '');
+          const newAb2 = key === 'ab2' ? sel.value : (data.ab2 || '');
+          applyAsiChange(data, newAb1, newAb2);
+          updateCsCalculations();
+          if (onChange) onChange();
+          renderFeatures();
+        });
+        col.appendChild(lbl);
+        col.appendChild(sel);
+        row.appendChild(col);
+      });
+      wrap.appendChild(row);
+
+      const hint = document.createElement('p');
+      hint.className = 'cs-feature-desc cs-feat-asi-hint';
+      hint.textContent = data.ab1 && data.ab2 ? '+1 to each ability'
+        : data.ab1 ? '+2 to first ability'
+        : 'Choose one ability for +2, or two abilities for +1 each.';
+      wrap.appendChild(hint);
     }
 
     return wrap;
