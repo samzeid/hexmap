@@ -2138,6 +2138,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     el.addEventListener('keydown', e => { if (e.key === 'Enter') { applyEval(); el.blur(); } });
   });
 
+  // ── HISTORY / BACK-BUTTON NAVIGATION ─────────────────────────────────────
+  let _calcOpen        = false;   // calculator overlay is currently on screen
+  let _calcHide        = null;    // set by the calculator IIFE below
+  let _suppressPopstate = false;  // skip the next popstate (programmatic history.back)
+  let _handlingPopstate = false;  // popstate is in progress; skip re-entrant history ops
+
   // ── CALCULATOR OVERLAY (touch devices) ───────────────────────────────────
   (function () {
     const overlay   = document.getElementById('cs-calc-overlay');
@@ -2185,14 +2191,25 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       overlay.classList.add('cs-calc-open');
       backdrop.classList.add('cs-calc-open');
       el.readOnly = true;
+      _calcOpen = true;
+      history.pushState({ overlay: 'calculator' }, '');
     }
 
     function hide() {
+      if (_calcOpen) {
+        _calcOpen = false;
+        if (!_handlingPopstate) {
+          _suppressPopstate = true;
+          history.back();
+        }
+      }
       overlay.classList.remove('cs-calc-open');
       backdrop.classList.remove('cs-calc-open');
       if (targetEl) { targetEl.readOnly = false; targetEl = null; }
       op = ''; numStr = '';
     }
+
+    _calcHide = hide;
 
     function commit() {
       if (!targetEl) return;
@@ -5647,6 +5664,7 @@ window.CharacterManager = ({ auth, database }) => {
     _applyViewMode();
     window.hexOnGoToHexmap && window.hexOnGoToHexmap();
     deselectChar();
+    if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
   });
 
   // ── HEXMAP TOOLBAR ──────────────────────────────────────────────────────
@@ -5672,6 +5690,7 @@ window.CharacterManager = ({ auth, database }) => {
   });
 
   // Start in hexmap-mode
+  history.replaceState({ view: 'hexmap' }, '');
   _applyViewMode();
 
   // Converts a plain username to a Firebase-compatible email by appending a
@@ -5759,6 +5778,7 @@ window.CharacterManager = ({ auth, database }) => {
       _applyViewMode();
       window.hexOnGoToInventory && window.hexOnGoToInventory();
       ensureCharSelected();
+      if (!_handlingPopstate) history.pushState({ view: 'inventory' }, '');
     }
   }
 
@@ -6319,6 +6339,7 @@ window.CharacterManager = ({ auth, database }) => {
     updateShopWallet();
     buildShop();
     updateCharSheetToggle();
+    if (!_handlingPopstate) history.pushState({ view: 'shop' }, '');
   }
 
   function closeShop() {
@@ -6340,6 +6361,7 @@ window.CharacterManager = ({ auth, database }) => {
       inv.closeInspector();
     }
     updateCharSheetToggle();
+    if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
   }
 
   shopTabBtn.addEventListener('click', () => {
@@ -6993,6 +7015,7 @@ window.CharacterManager = ({ auth, database }) => {
               _hexmapMode = true;
               _applyViewMode();
               window.hexOnGoToHexmap && window.hexOnGoToHexmap();
+              if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
             }
           } else {
             if (!shopOpen) inv.collapsePanelInstant();
@@ -7000,6 +7023,7 @@ window.CharacterManager = ({ auth, database }) => {
               _hexmapMode = false;
               _applyViewMode();
               window.hexOnGoToInventory && window.hexOnGoToInventory();
+              if (!_handlingPopstate) history.pushState({ view: 'inventory' }, '');
             }
             switchToChar(char.id, false);
           }
@@ -7099,4 +7123,29 @@ window.CharacterManager = ({ auth, database }) => {
     _customEditOpen = false;
     inv.closeInspector();
   };
+
+  // ── SYSTEM BACK-BUTTON HANDLER ────────────────────────────────────────────
+  window.addEventListener('popstate', e => {
+    if (_suppressPopstate) { _suppressPopstate = false; return; }
+    _handlingPopstate = true;
+    try {
+      if (_calcOpen) { _calcHide?.(); return; }
+      const v = e.state?.view;
+      if (!v || v === 'hexmap') {
+        if (shopOpen) {
+          closeShop();
+        } else if (!_hexmapMode) {
+          _hexmapMode = true;
+          inv.collapsePanelInstant();
+          _applyViewMode();
+          window.hexOnGoToHexmap && window.hexOnGoToHexmap();
+          deselectChar();
+        }
+      } else if (v === 'inventory') {
+        if (shopOpen) closeShop();
+      }
+    } finally {
+      _handlingPopstate = false;
+    }
+  });
 };
