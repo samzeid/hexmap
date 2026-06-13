@@ -2204,7 +2204,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
 
     function show(el) {
-      if (document.getElementById('stats-panel')?.classList.contains('char-view-only')) { el.readOnly = false; return; }
+      if (document.getElementById('stats-panel')?.classList.contains('char-view-only')) return;
       targetEl = el;
       baseVal  = parseInt(el.value) || 0;
       op       = '';

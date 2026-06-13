@@ -4472,6 +4472,10 @@ span.cs-feature-ticker {
 #stats-panel.editing #cs-hp,
 #stats-panel.editing #cs-temp-hp,
 #stats-panel.editing #cs-hit-dice-remaining { pointer-events: none; }
+/* View-only: block HP fields even though the rule above has lower specificity */
+#stats-panel.char-view-only #cs-hp,
+#stats-panel.char-view-only #cs-temp-hp,
+#stats-panel.char-view-only #cs-hit-dice-remaining { pointer-events: none; }
 
 /* Auto-calculated values: dimmed in edit mode so user knows they're not manual */
 #stats-panel.editing .cs-skill-val.cs-auto,
@@ -4602,6 +4606,13 @@ span.cs-feature-ticker {
   pointer-events: none;
   opacity: 0.38;
   filter: grayscale(0.4);
+}
+#stats-panel.char-view-only .cs-attack-weapon-name,
+#stats-panel.char-view-only #cs-shield-display,
+#stats-panel.char-view-only #cs-armor-display {
+  pointer-events: auto;
+  opacity: 1;
+  filter: none;
 }
 #stats-panel:not(.editing) select {
   pointer-events: none;
