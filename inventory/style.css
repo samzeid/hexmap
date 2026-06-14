@@ -2485,7 +2485,7 @@ body.is-dragging #inv-scroll {
   margin-top: 1px;
   pointer-events: none;
 }
-#stats-panel.editing .cs-ability-has-bonus .cs-ability-bonus-indicator {
+#stats-panel.editing .cs-ability-bonus-indicator {
   display: inline;
 }
 

@@ -207,8 +207,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const scoreEl = document.getElementById(`cs-${ab}`);
       if (!scoreEl || document.activeElement === scoreEl) return;
       const eff = effectiveAbScore(ab);
-      const hasBonus = eff !== null && eff !== parseInt(state[ab]);
-      scoreEl.closest('.cs-ability')?.classList.toggle('cs-ability-has-bonus', hasBonus);
       scoreEl.value = _isEditing ? (state[ab] || '') : (eff !== null ? String(eff) : '');
     });
 
