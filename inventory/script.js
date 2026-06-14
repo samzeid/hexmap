@@ -205,8 +205,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const modEl = document.getElementById(`cs-${ab}-mod`);
       if (modEl) modEl.textContent = mods[ab] !== null ? fmtMod(mods[ab]) : '—';
       const scoreEl = document.getElementById(`cs-${ab}`);
-      if (!scoreEl || document.activeElement === scoreEl) return;
       const eff = effectiveAbScore(ab);
+      const effEl = document.getElementById(`cs-${ab}-eff`);
+      if (effEl) effEl.textContent = (_isEditing && eff !== null && eff !== parseInt(state[ab])) ? `(${eff})` : '';
+      if (!scoreEl || document.activeElement === scoreEl) return;
       scoreEl.value = _isEditing ? (state[ab] || '') : (eff !== null ? String(eff) : '');
     });
 

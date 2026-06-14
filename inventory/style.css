@@ -2475,18 +2475,12 @@ body.is-dragging #inv-scroll {
 .cs-ability-score::-webkit-inner-spin-button,
 .cs-ability-score::-webkit-outer-spin-button { -webkit-appearance: none; }
 
-.cs-ability-bonus-indicator {
-  display: none;
-  color: rgba(255, 200, 50, 0.75);
+.cs-ability-effective {
   font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
-  align-self: flex-start;
-  margin-top: 1px;
+  font-weight: 600;
+  color: rgba(255, 200, 50, 0.65);
   pointer-events: none;
-}
-#stats-panel.editing .cs-ability-bonus-indicator {
-  display: inline;
+  white-space: nowrap;
 }
 
 .cs-ability-mod {
