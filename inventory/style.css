@@ -697,6 +697,34 @@ input, textarea, select { font-size: max(16px, 1em); }
   border-top: 1px solid rgba(255,255,255,0.08);
 }
 .dm-rand-label-spacer { visibility: hidden; }
+.dm-rand-toggle-wrap {
+  position: relative;
+  display: inline-block;
+  width: 30px;
+  height: 16px;
+  cursor: pointer;
+}
+.dm-rand-toggle-wrap input { display: none; }
+.dm-rand-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.12);
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+.dm-rand-toggle-wrap input:checked + .dm-rand-toggle-track { background: rgba(255,200,50,0.55); }
+.dm-rand-toggle-track::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+.dm-rand-toggle-wrap input:checked + .dm-rand-toggle-track::after { transform: translateX(14px); }
 
 .shop-mat-btn {
   background: rgba(255,255,255,0.06);

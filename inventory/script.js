@@ -414,6 +414,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
 
   // ── HELPERS ─────────────────────────────────────────────────────────────
+  function resolveItemDescription(lib, slotData) {
+    if (!lib) return '';
+    if (!lib.descriptions) return lib.description || '';
+    const vars = slotData.variables || {};
+    for (const meta of Object.values(vars)) {
+      if (meta.control === 'select' && meta.value && lib.descriptions[meta.value] !== undefined) {
+        return lib.descriptions[meta.value];
+      }
+    }
+    return lib.description || '';
+  }
+
   function getLibraryItem(name) {
     if (!name || typeof name !== 'string') return null;
     const key = name.trim().toLowerCase();
@@ -1327,7 +1339,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       _nameEl.innerHTML = `${lib.gridSymbol}&nbsp;${lib.name}`;
       _nameEl.classList.add('insp-name-symbol');
     } else {
-      _nameEl.textContent = slotData.name || '';
+      const _inspSilverPfx = (slotData.silvered || slotData.material === 'silvered') ? 'Silvered ' : '';
+      const _inspMetalMat  = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
+      const _inspMetalPfx  = _inspMetalMat ? _inspMetalMat.charAt(0).toUpperCase() + _inspMetalMat.slice(1) + ' ' : '';
+      _nameEl.textContent = _inspSilverPfx + _inspMetalPfx + computeDisplayName(slotData);
       _nameEl.classList.remove('insp-name-symbol');
     }
 
@@ -1511,7 +1526,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
     } else {
       descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
-      descP.innerHTML = lib ? lib.description : '';
+      descP.innerHTML = resolveItemDescription(lib, slotData);
       if (container) {
         notesEl.value = slotData.notes || '';
         notesEl.oninput = () => { slotData.notes = notesEl.value; };
@@ -1882,7 +1897,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if (opt === meta.value) o.selected = true;
         sel.appendChild(o);
       });
-      sel.addEventListener('change', () => { slotData.variables[key].value = sel.value; render(); });
+      sel.addEventListener('change', () => { slotData.variables[key].value = sel.value; _updateUnresolved(); render(); showInspector(slotData, container, r, c, packIdx); });
       div.appendChild(label); div.appendChild(sel);
       varsEl.appendChild(div);
     }
@@ -5708,6 +5723,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
 
     // ── SHOP API ────────────────────────────────────────────────
+    computeDisplayName(slotData) { return computeDisplayName(slotData); },
     toggleShopItem(slotData, key) {
       toggleInspectorFor(key, slotData, null, -1, -1);
     },
@@ -6187,6 +6203,49 @@ window.CharacterManager = ({ auth, database }) => {
     return total;
   }
 
+  const WEAPON_WEIGHTS = {
+    "Longsword": 8, "Rapier": 7,
+    "Shortsword": 6, "Greatsword": 6, "Greataxe": 6,
+    "Dagger": 5, "Handaxe": 5, "Longbow": 5,
+    "Glaive": 4, "Halberd": 4, "Maul": 4, "Battleaxe": 4,
+    "Warhammer": 3, "Scimitar": 3, "Hand Crossbow": 3,
+    "Flail": 2, "Morningstar": 2, "Trident": 2, "Spear": 2, "Quarterstaff": 2,
+    "Light Crossbow": 2, "Shortbow": 2, "Whip": 2,
+    "Heavy Crossbow": 1, "War Pick": 1, "Lance": 1, "Pike": 1,
+    "Club": 1, "Greatclub": 1, "Sickle": 1, "Mace": 1,
+    "Javelin": 1, "Light Hammer": 1, "Sling": 1, "Dart": 1, "Blowgun": 1,
+  };
+
+  const ARMOR_WEIGHTS = {
+    "Chain Mail": 6,
+    "Full Plate": 5, "Half Plate": 5, "Studded Leather Armor": 5,
+    "Breastplate": 4,
+    "Splint Armor": 3, "Scale Mail": 3, "Leather Armor": 3, "Chain Shirt": 3,
+    "Hide Armor": 2, "Ring Mail": 2,
+    "Padded Armor": 1,
+  };
+
+  function weightedPick(options, weights) {
+    const total = options.reduce((s, o) => s + (weights[o] || 1), 0);
+    let r = Math.random() * total;
+    for (const o of options) {
+      r -= (weights[o] || 1);
+      if (r <= 0) return o;
+    }
+    return options[options.length - 1];
+  }
+
+  function randomizeItemSelectVars(item) {
+    const result = {};
+    for (const [key, meta] of Object.entries(item.variables || {})) {
+      if (meta.control !== 'select' || !meta.options?.length) continue;
+      if (key === 'weapon') result[key] = weightedPick(meta.options, WEAPON_WEIGHTS);
+      else if (key === 'armor') result[key] = weightedPick(meta.options, ARMOR_WEIGHTS);
+      else result[key] = meta.options[Math.floor(Math.random() * meta.options.length)];
+    }
+    return result;
+  }
+
   function buildShop() {
     const scroll = document.getElementById('shop-scroll');
     const savedScrollTop = scroll.scrollTop;
@@ -6299,6 +6358,32 @@ window.CharacterManager = ({ auth, database }) => {
       tableSelect.addEventListener('change', () => { updateRarities(); randResult.innerHTML = ''; });
       updateRarities();
 
+      let randMetalEnabled  = true;
+      let randSilverEnabled = false;
+
+      const makeRandToggle = (labelText, checked, onChange) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'dm-rand-label';
+        const lbl = document.createElement('span');
+        lbl.textContent = labelText;
+        const toggleLabel = document.createElement('label');
+        toggleLabel.className = 'dm-rand-toggle-wrap';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = checked;
+        checkbox.addEventListener('change', () => onChange(checkbox.checked));
+        const track = document.createElement('span');
+        track.className = 'dm-rand-toggle-track';
+        toggleLabel.appendChild(checkbox);
+        toggleLabel.appendChild(track);
+        wrap.appendChild(lbl);
+        wrap.appendChild(toggleLabel);
+        return wrap;
+      };
+
+      controls.appendChild(makeRandToggle('Metal',    randMetalEnabled,  v => { randMetalEnabled  = v; }));
+      controls.appendChild(makeRandToggle('Silvered', randSilverEnabled, v => { randSilverEnabled = v; }));
+
       const btn = document.createElement('button');
       btn.className = 'dm-rand-btn';
       btn.textContent = 'Randomize';
@@ -6315,13 +6400,29 @@ window.CharacterManager = ({ auth, database }) => {
       panel.appendChild(randResult);
 
       const buildRandResultRow = (item, itemSection, itemRarity) => {
+        const randVars = randomizeItemSelectVars(item);
+        const _randCat = item.category
+          || (item.variables?.weapon?.control === 'select' ? 'weapon'
+            : item.variables?.armor?.control  === 'select' ? 'armor'
+            : ['Simple Weapons', 'Martial Weapons', 'Magical Weapons'].includes(itemSection) ? 'weapon'
+            : itemSection === 'Armor & Shields' ? (item.name === 'Shield' ? 'shield' : 'armor')
+            : null);
+        const canMetal  = ['weapon','armor','shield','ammunition'].includes(_randCat);
+        const canSilver = ['weapon','ammunition'].includes(_randCat);
+        const randMaterial = randMetalEnabled && canMetal && Math.random() < 0.10
+          ? (Math.random() < 0.5 ? 'mithral' : 'adamantine')
+          : null;
+        const randSilvered = !randMaterial && randSilverEnabled && canSilver && Math.random() < 0.10;
         const slotData = buildShopSlotData(
           item,
-          item.variables?.weapon?.value || item.variables?.armor?.value || null,
-          false, null,
-          item.variables?.element?.value || null,
+          randVars.weapon || randVars.armor || null,
+          randSilvered, randMaterial,
+          randVars.element || null,
           shopCostToCp(item.cost)
         );
+        Object.entries(randVars).forEach(([k, v]) => {
+          if (slotData.variables?.[k]?.control === 'select') slotData.variables[k].value = v;
+        });
 
         const row = document.createElement('div');
         row.className = 'shop-item-row';
@@ -6330,7 +6431,10 @@ window.CharacterManager = ({ auth, database }) => {
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'shop-item-name';
-        nameSpan.textContent = item.name;
+        const _silverPfx = slotData.silvered ? 'Silvered ' : '';
+        const _metalPfx = (slotData.material === 'mithral' || slotData.material === 'adamantine')
+          ? slotData.material.charAt(0).toUpperCase() + slotData.material.slice(1) + ' ' : '';
+        nameSpan.textContent = _silverPfx + _metalPfx + inv.computeDisplayName(slotData);
         row.appendChild(nameSpan);
 
         if (itemRarity) {
