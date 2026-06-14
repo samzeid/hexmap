@@ -6203,6 +6203,9 @@ window.CharacterManager = ({ auth, database }) => {
     return total;
   }
 
+  // Session-only memory of the last randomizer roll (cleared on page reload)
+  let _randLastRoll = []; // [{ item, itemSection, itemRarity }]
+
   const WEAPON_WEIGHTS = {
     "Longsword": 16, "Rapier": 8,
     "Shortsword": 8, "Greatsword": 6, "Greataxe": 6,
@@ -6399,7 +6402,7 @@ window.CharacterManager = ({ auth, database }) => {
       panel.appendChild(controls);
       panel.appendChild(randResult);
 
-      const buildRandResultRow = (item, itemSection, itemRarity) => {
+      const rollRandSlotData = (item, itemSection) => {
         const randVars = randomizeItemSelectVars(item);
         const _randCat = item.category
           || (item.variables?.weapon?.control === 'select' ? 'weapon'
@@ -6423,6 +6426,11 @@ window.CharacterManager = ({ auth, database }) => {
         Object.entries(randVars).forEach(([k, v]) => {
           if (slotData.variables?.[k]?.control === 'select') slotData.variables[k].value = v;
         });
+        return slotData;
+      };
+
+      const buildRandResultRow = (item, itemSection, itemRarity, slotData) => {
+        if (!slotData) slotData = rollRandSlotData(item, itemSection);
 
         const row = document.createElement('div');
         row.className = 'shop-item-row';
@@ -6431,10 +6439,14 @@ window.CharacterManager = ({ auth, database }) => {
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'shop-item-name';
-        const _silverPfx = slotData.silvered ? 'Silvered ' : '';
-        const _metalPfx = (slotData.material === 'mithral' || slotData.material === 'adamantine')
-          ? slotData.material.charAt(0).toUpperCase() + slotData.material.slice(1) + ' ' : '';
-        nameSpan.textContent = _silverPfx + _metalPfx + inv.computeDisplayName(slotData);
+        const _refreshRandName = () => {
+          const _sPfx = slotData.silvered ? 'Silvered ' : '';
+          const _mMat = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
+          const _mPfx = _mMat ? _mMat.charAt(0).toUpperCase() + _mMat.slice(1) + ' ' : '';
+          nameSpan.textContent = _sPfx + _mPfx + inv.computeDisplayName(slotData);
+        };
+        row._applyRowState = _refreshRandName;
+        _refreshRandName();
         row.appendChild(nameSpan);
 
         if (itemRarity) {
@@ -6459,7 +6471,6 @@ window.CharacterManager = ({ auth, database }) => {
           e.stopPropagation();
           shopAvailability[item.name] = !isItemAvailable(item.name);
           saveShopAvailability();
-          updateAvailBtn();
           buildShop();
         });
         row.appendChild(availBtn);
@@ -6478,7 +6489,6 @@ window.CharacterManager = ({ auth, database }) => {
           e.stopPropagation();
           shopVisibility[item.name] = !isItemVisible(item.name, itemSection);
           saveShopVisibility();
-          updateVisBtn();
           buildShop();
         });
         row.appendChild(visBtn);
@@ -6570,17 +6580,27 @@ window.CharacterManager = ({ auth, database }) => {
           btn.style.height = '';
           btn.textContent = 'Randomize';
 
-          randResult.innerHTML = '';
-          picked.forEach(item => {
+          _randLastRoll = picked.map(item => {
             const itemSection = randItemSectionMap.get(item) || '';
             const itemRarity  = randItemRarityMap.get(item) || '';
-            randResult.appendChild(buildRandResultRow(item, itemSection, itemRarity));
+            return { item, itemSection, itemRarity, slotData: rollRandSlotData(item, itemSection) };
+          });
+          randResult.innerHTML = '';
+          _randLastRoll.forEach(({ item, itemSection, itemRarity, slotData }) => {
+            randResult.appendChild(buildRandResultRow(item, itemSection, itemRarity, slotData));
           });
           randResult.style.visibility = '';
         }, 1250); // end setTimeout
       });
 
       scroll.appendChild(panel);
+
+      if (_randLastRoll.length) {
+        _randLastRoll.forEach(({ item, itemSection, itemRarity, slotData }) => {
+          randResult.appendChild(buildRandResultRow(item, itemSection, itemRarity, slotData));
+        });
+        randResult.style.visibility = '';
+      }
     }
     // ── END DM RANDOMIZER ─────────────────────────────────────────────────────
 
