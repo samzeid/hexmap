@@ -200,9 +200,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const n = effectiveAbScore(ab);
       mods[ab] = n !== null ? Math.floor((n - 10) / 2) : null;
     });
+    const _isEditing = document.getElementById('stats-panel')?.classList.contains('editing');
     ['str','dex','con','int','wis','cha'].forEach(ab => {
       const modEl = document.getElementById(`cs-${ab}-mod`);
       if (modEl) modEl.textContent = mods[ab] !== null ? fmtMod(mods[ab]) : '—';
+      const scoreEl = document.getElementById(`cs-${ab}`);
+      if (!scoreEl || document.activeElement === scoreEl) return;
+      const eff = effectiveAbScore(ab);
+      const hasBonus = eff !== null && eff !== parseInt(state[ab]);
+      scoreEl.closest('.cs-ability')?.classList.toggle('cs-ability-has-bonus', hasBonus);
+      scoreEl.value = _isEditing ? (state[ab] || '') : (eff !== null ? String(eff) : '');
     });
 
     function applyAuto(id, stateKey, autoVal, rawNum) {

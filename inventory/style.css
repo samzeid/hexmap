@@ -2475,6 +2475,20 @@ body.is-dragging #inv-scroll {
 .cs-ability-score::-webkit-inner-spin-button,
 .cs-ability-score::-webkit-outer-spin-button { -webkit-appearance: none; }
 
+.cs-ability-bonus-indicator {
+  display: none;
+  color: rgba(255, 200, 50, 0.75);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  align-self: flex-start;
+  margin-top: 1px;
+  pointer-events: none;
+}
+#stats-panel.editing .cs-ability-has-bonus .cs-ability-bonus-indicator {
+  display: inline;
+}
+
 .cs-ability-mod {
   grid-area: mod;
   font-size: 16px;
