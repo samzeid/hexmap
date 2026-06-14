@@ -138,6 +138,21 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   function fmtMod(n) { return n >= 0 ? `+${n}` : `${n}`; }
 
+  // Returns the effective ability score: base (what the user typed) + any bonuses
+  // granted by active features/feats. Returns null if the base score is blank.
+  function effectiveAbScore(ab) {
+    const base = parseInt(state[ab]);
+    if (isNaN(base)) return null;
+    let bonus = 0;
+    state.activeFeatures.forEach(fid => {
+      const fd = state.featureData[fid];
+      if (!fd) return;
+      if (fd.ab1 === ab) bonus += fd.bonus1 || 0;
+      if (fd.ab2 === ab) bonus += fd.bonus2 || 0;
+    });
+    return base + bonus;
+  }
+
   const _csDefaults = Object.fromEntries(CS_FIELDS.map(([, k]) => [k, '']));
   const _profDefaults = Object.fromEntries(PROF_KEYS.map(k => [k, false]));
   const state = {
@@ -182,8 +197,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     const mods = {};
     ['str','dex','con','int','wis','cha'].forEach(ab => {
-      const n = parseInt(state[ab]);
-      mods[ab] = isNaN(n) ? null : Math.floor((n - 10) / 2);
+      const n = effectiveAbScore(ab);
+      mods[ab] = n !== null ? Math.floor((n - 10) / 2) : null;
+    });
+    ['str','dex','con','int','wis','cha'].forEach(ab => {
+      const modEl = document.getElementById(`cs-${ab}-mod`);
+      if (modEl) modEl.textContent = mods[ab] !== null ? fmtMod(mods[ab]) : '—';
     });
 
     function applyAuto(id, stateKey, autoVal, rawNum) {
@@ -253,8 +272,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     applyAuto('cs-initiative', 'initiative', initiativeAuto);
 
     // Carry capacity = STR + 4
-    const strScore = parseInt(state.str);
-    const carryAutoVal = !isNaN(strScore) ? strScore : null;
+    const strScore = effectiveAbScore('str');
+    const carryAutoVal = strScore !== null ? strScore : null;
     const carryEl = document.getElementById('char-carry');
     if (carryEl && document.activeElement !== carryEl) {
       const isCarryAuto = (state.carryCapacity === '' || state.carryCapacity == null) && carryAutoVal !== null;
@@ -527,8 +546,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const usedEl = document.getElementById('carry-used');
     const header = document.getElementById('char-header');
     usedEl.textContent = used;
-    const strScore = parseInt(state.str);
-    const carryAutoVal = !isNaN(strScore) ? strScore : null;
+    const strScore = effectiveAbScore('str');
+    const carryAutoVal = strScore !== null ? strScore : null;
     const isCarryAuto = (state.carryCapacity === '' || state.carryCapacity == null) && carryAutoVal !== null;
     const max  = isCarryAuto ? carryAutoVal : parseInt(state.carryCapacity);
     const over = !isNaN(max) && max > 0 && used > max;
@@ -3146,7 +3165,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const lvl       = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
     const slotTable = isRanger ? RANGER_SLOTS : SORC_SLOTS;
     const slots     = slotTable[lvl] || slotTable[20];
-    const abScore   = isRanger ? (parseInt(state.wis) || 10) : (parseInt(state.cha) || 10);
+    const abScore   = isRanger ? (effectiveAbScore('wis') ?? 10) : (effectiveAbScore('cha') ?? 10);
     const abMod     = Math.floor((abScore - 10) / 2);
     const abLabel   = isRanger ? 'WIS' : 'CHA';
     const abClass   = isRanger ? 'cs-attr-wis' : 'cs-attr-cha';
@@ -3842,34 +3861,27 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   // fixedAmount1: override the bonus for ab1 (use 1 for fixed +1 feats; null = default 2/1 logic)
   function applyAsiChange(data, newAb1, newAb2, fixedAmount1 = null) {
-    function setAbScore(ab, val) {
-      state[ab] = String(val);
-      const el = document.getElementById(CS_ID_MAP[ab]);
-      if (el && document.activeElement !== el) el.value = state[ab];
-      const modEl = document.getElementById(`cs-${ab}-mod`);
-      if (modEl) modEl.textContent = abilityMod(val);
-    }
-    if (data.ab1 && data.bonus1) setAbScore(data.ab1, parseInt(state[data.ab1] || '10') - data.bonus1);
-    if (data.ab2 && data.bonus2) setAbScore(data.ab2, parseInt(state[data.ab2] || '10') - data.bonus2);
+    // Temporarily clear this feature's existing bonuses so effectiveAbScore gives
+    // the score without this feature's own contribution when computing the new cap.
+    data.ab1 = ''; data.bonus1 = 0;
+    data.ab2 = ''; data.bonus2 = 0;
+
     const intended1 = newAb1 ? (fixedAmount1 !== null ? fixedAmount1 : (newAb2 ? 1 : 2)) : 0;
     const intended2 = newAb2 ? 1 : 0;
     let bonus1 = 0, bonus2 = 0;
     if (newAb1) {
-      const cur = parseInt(state[newAb1] || '10');
-      const after = Math.min(20, cur + intended1);
-      bonus1 = after - cur;
-      setAbScore(newAb1, after);
+      const eff = effectiveAbScore(newAb1) ?? 10;
+      bonus1 = Math.min(20, eff + intended1) - eff;
     }
     if (newAb2) {
-      const cur = parseInt(state[newAb2] || '10');
-      const after = Math.min(20, cur + intended2);
-      bonus2 = after - cur;
-      setAbScore(newAb2, after);
+      const eff = effectiveAbScore(newAb2) ?? 10;
+      bonus2 = Math.min(20, eff + intended2) - eff;
     }
     data.ab1 = newAb1 || '';
     data.ab2 = newAb2 || '';
     data.bonus1 = bonus1;
     data.bonus2 = bonus2;
+    updateCsCalculations();
   }
 
   function reverseToughBonus(data) {
@@ -4354,10 +4366,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const profBonus = (!isNaN(level) && level >= 1)
       ? Math.ceil(level / 4) + 1
       : (parseInt(state.proficiency) || 2);
-    const strScore = parseInt(state.str);
-    const dexScore = parseInt(state.dex);
-    const strMod = !isNaN(strScore) ? Math.floor((strScore - 10) / 2) : 0;
-    const dexMod = !isNaN(dexScore) ? Math.floor((dexScore - 10) / 2) : 0;
+    const strScore = effectiveAbScore('str');
+    const dexScore = effectiveAbScore('dex');
+    const strMod = strScore !== null ? Math.floor((strScore - 10) / 2) : 0;
+    const dexMod = dexScore !== null ? Math.floor((dexScore - 10) / 2) : 0;
     let mod, usesStr;
     if (info.isRanged)       { mod = dexMod; usesStr = false; }
     else if (info.isFinesse) { mod = Math.max(strMod, dexMod); usesStr = strMod >= dexMod; }
@@ -4377,8 +4389,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const profBonus = (!isNaN(level) && level >= 1)
       ? Math.ceil(level / 4) + 1
       : (parseInt(state.proficiency) || 2);
-    const strScore = parseInt(state.str);
-    const strMod = !isNaN(strScore) ? Math.floor((strScore - 10) / 2) : 0;
+    const strScore = effectiveAbScore('str');
+    const strMod = strScore !== null ? Math.floor((strScore - 10) / 2) : 0;
     const toHitVal = strMod + profBonus - (state.exhaustion || 0);
     const toHit = toHitVal >= 0 ? `+${toHitVal}` : `${toHitVal}`;
     const rageApplied = isRaging();
@@ -5063,8 +5075,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const scoreEl = document.getElementById(`cs-${ab}`);
     const modEl   = document.getElementById(`cs-${ab}-mod`);
     if (!scoreEl || !modEl) return;
-    scoreEl.addEventListener('input', e => {
-      modEl.textContent = abilityMod(e.target.value);
+    scoreEl.addEventListener('input', () => {
+      // state[ab] is already updated by the CS_FIELDS handler above
+      modEl.textContent = abilityMod(effectiveAbScore(ab));
       updateCsCalculations();
     });
   });
@@ -5655,7 +5668,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const csState   = Object.fromEntries(CS_FIELDS.map(([, k]) => [k, state[k] || '']));
       const profState = Object.fromEntries(PROF_KEYS.map(k => [k, !!state[k]]));
       return JSON.parse(JSON.stringify({
-        charName:      state.charName,
+        charName:         state.charName,
+        abScoreBaseFormat: true,
         carryCapacity: state.carryCapacity,
         containers:    state.containers,
         attacks:          state.attacks,
@@ -5793,9 +5807,26 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       updateArmorDisplay();
       updateShieldDisplay();
       PROF_KEYS.forEach(k => { state[k] = !!newState[k]; });
+      // Migration: old saves had feature bonuses baked into the stored score.
+      // Recover the base score by subtracting out the bonuses recorded in featureData.
+      if (!newState.abScoreBaseFormat) {
+        ['str','dex','con','int','wis','cha'].forEach(ab => {
+          let score = parseInt(state[ab]);
+          if (isNaN(score)) return;
+          state.activeFeatures.forEach(fid => {
+            const fd = state.featureData[fid];
+            if (!fd) return;
+            if (fd.ab1 === ab && fd.bonus1) score -= fd.bonus1;
+            if (fd.ab2 === ab && fd.bonus2) score -= fd.bonus2;
+          });
+          state[ab] = String(score);
+          const el = document.getElementById(CS_ID_MAP[ab]);
+          if (el) el.value = state[ab];
+        });
+      }
       ['str','dex','con','int','wis','cha'].forEach(ab => {
         const modEl = document.getElementById(`cs-${ab}-mod`);
-        if (modEl) modEl.textContent = abilityMod(state[ab]);
+        if (modEl) modEl.textContent = abilityMod(effectiveAbScore(ab));
       });
       updateProfButtons();
       updateCsCalculations();
