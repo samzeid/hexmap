@@ -6204,24 +6204,24 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   const WEAPON_WEIGHTS = {
-    "Longsword": 8, "Rapier": 7,
-    "Shortsword": 6, "Greatsword": 6, "Greataxe": 6,
-    "Dagger": 5, "Handaxe": 5, "Longbow": 5,
-    "Glaive": 4, "Halberd": 4, "Maul": 4, "Battleaxe": 4,
-    "Warhammer": 3, "Scimitar": 3, "Hand Crossbow": 3,
-    "Flail": 2, "Morningstar": 2, "Trident": 2, "Spear": 2, "Quarterstaff": 2,
-    "Light Crossbow": 2, "Shortbow": 2, "Whip": 2,
+    "Longsword": 16, "Rapier": 8,
+    "Shortsword": 8, "Greatsword": 6, "Greataxe": 6,
+    "Dagger": 2, "Handaxe": 2, "Longbow": 4,
+    "Glaive": 3, "Halberd": 3, "Maul": 3, "Battleaxe": 6,
+    "Warhammer": 6, "Scimitar": 4, "Hand Crossbow": 2,
+    "Flail": 2, "Morningstar": 4, "Trident": 3, "Spear": 3, "Quarterstaff": 1,
+    "Light Crossbow": 2, "Shortbow": 3, "Whip": 1,
     "Heavy Crossbow": 1, "War Pick": 1, "Lance": 1, "Pike": 1,
-    "Club": 1, "Greatclub": 1, "Sickle": 1, "Mace": 1,
-    "Javelin": 1, "Light Hammer": 1, "Sling": 1, "Dart": 1, "Blowgun": 1,
+    "Club": 1, "Greatclub": 1, "Sickle": 1, "Mace": 2,
+    "Javelin": 2, "Light Hammer": 1, "Sling": 0, "Dart": 0, "Blowgun": 0,
   };
 
   const ARMOR_WEIGHTS = {
-    "Chain Mail": 6,
-    "Full Plate": 5, "Half Plate": 5, "Studded Leather Armor": 5,
-    "Breastplate": 4,
-    "Splint Armor": 3, "Scale Mail": 3, "Leather Armor": 3, "Chain Shirt": 3,
-    "Hide Armor": 2, "Ring Mail": 2,
+    "Chain Mail": 8,
+    "Full Plate": 1, "Half Plate": 2, "Studded Leather Armor": 8,
+    "Breastplate": 2,
+    "Splint Armor": 2, "Scale Mail": 4, "Leather Armor": 4, "Chain Shirt": 4,
+    "Hide Armor": 3, "Ring Mail": 3,
     "Padded Armor": 1,
   };
 
