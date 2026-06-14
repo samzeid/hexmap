@@ -6157,6 +6157,8 @@ window.CharacterManager = ({ auth, database }) => {
     if (window._isDM) {
       const RAND_EXCLUDED = new Set(['Currency', 'Valuables']);
       const sectionItems = {};
+      const randItemSectionMap = new Map();
+      const randItemRarityMap = new Map();
       let _rs = null, _rr = null;
       ITEM_LIBRARY.forEach(li => {
         if (li._section) { _rs = li._section; _rr = null; return; }
@@ -6167,6 +6169,8 @@ window.CharacterManager = ({ auth, database }) => {
         const rKey = _rr || '';
         if (!sectionItems[_rs][rKey]) sectionItems[_rs][rKey] = [];
         sectionItems[_rs][rKey].push(li);
+        randItemSectionMap.set(li, _rs);
+        randItemRarityMap.set(li, _rr || '');
       });
 
       const panel = document.createElement('div');
@@ -6179,6 +6183,39 @@ window.CharacterManager = ({ auth, database }) => {
 
       const controls = document.createElement('div');
       controls.className = 'dm-randomizer-controls';
+
+      // Count stepper — first in row
+      let randCount = 1;
+      const countWrap = document.createElement('div');
+      countWrap.className = 'dm-rand-label';
+      const countLabel = document.createElement('span');
+      countLabel.textContent = 'Count';
+      countWrap.appendChild(countLabel);
+      const countStepper = document.createElement('div');
+      countStepper.className = 'dm-rand-stepper';
+      const countDecBtn = document.createElement('button');
+      countDecBtn.type = 'button';
+      countDecBtn.className = 'dm-rand-stepper-btn';
+      countDecBtn.textContent = '−';
+      const countValSpan = document.createElement('span');
+      countValSpan.className = 'dm-rand-stepper-val';
+      countValSpan.textContent = '1';
+      const countIncBtn = document.createElement('button');
+      countIncBtn.type = 'button';
+      countIncBtn.className = 'dm-rand-stepper-btn';
+      countIncBtn.textContent = '+';
+      const updateCountBtns = () => {
+        countDecBtn.disabled = randCount <= 1;
+        countIncBtn.disabled = randCount >= 20;
+      };
+      countDecBtn.addEventListener('click', () => { randCount = Math.max(1, randCount - 1); countValSpan.textContent = randCount; updateCountBtns(); });
+      countIncBtn.addEventListener('click', () => { randCount = Math.min(20, randCount + 1); countValSpan.textContent = randCount; updateCountBtns(); });
+      updateCountBtns();
+      countStepper.appendChild(countDecBtn);
+      countStepper.appendChild(countValSpan);
+      countStepper.appendChild(countIncBtn);
+      countWrap.appendChild(countStepper);
+      controls.appendChild(countWrap);
 
       const tableWrap = document.createElement('label');
       tableWrap.className = 'dm-rand-label';
@@ -6204,7 +6241,6 @@ window.CharacterManager = ({ auth, database }) => {
 
       const randResult = document.createElement('div');
       randResult.className = 'dm-rand-result';
-      randResult.hidden = true;
 
       function updateRarities() {
         raritySelect.innerHTML = '';
@@ -6217,65 +6253,25 @@ window.CharacterManager = ({ auth, database }) => {
           });
         }
       }
-      tableSelect.addEventListener('change', () => { updateRarities(); randResult.hidden = true; });
+      tableSelect.addEventListener('change', () => { updateRarities(); randResult.innerHTML = ''; });
       updateRarities();
 
       const btn = document.createElement('button');
       btn.className = 'dm-rand-btn';
       btn.textContent = 'Randomize';
-      controls.appendChild(btn);
+      const btnWrap = document.createElement('div');
+      btnWrap.className = 'dm-rand-label';
+      const btnSpacer = document.createElement('span');
+      btnSpacer.className = 'dm-rand-label-spacer';
+      btnSpacer.textContent = ' ';
+      btnWrap.appendChild(btnSpacer);
+      btnWrap.appendChild(btn);
+      controls.appendChild(btnWrap);
 
       panel.appendChild(controls);
       panel.appendChild(randResult);
 
-      btn.addEventListener('click', () => {
-        const map = sectionItems[tableSelect.value] || {};
-        const rarity = rarityWrap.hidden ? '' : raritySelect.value;
-        const pool = [];
-        if (rarity === '__all__' || rarity === '') {
-          Object.values(map).forEach(arr => pool.push(...arr));
-        } else {
-          pool.push(...(map[rarity] || []));
-        }
-        if (!pool.length) { randResult.innerHTML = '<em>No items in this selection.</em>'; randResult.hidden = false; return; }
-        const item = pool[Math.floor(Math.random() * pool.length)];
-        let itemRarity = '';
-        let _is = null, _ir = null;
-        for (const li of ITEM_LIBRARY) {
-          if (li._section) { _is = li._section; _ir = null; continue; }
-          if (li._rarity)  { _ir = li._rarity; continue; }
-          if (li === item) { itemRarity = _ir || ''; break; }
-        }
-
-        // Dice cycling animation
-        btn.disabled = true;
-        btn.style.width  = btn.offsetWidth  + 'px';
-        btn.style.height = btn.offsetHeight + 'px';
-        randResult.hidden = true;
-        const diceIcons = ['fa-dice-one','fa-dice-two','fa-dice-three','fa-dice-four','fa-dice-five','fa-dice-six'];
-        const step = Math.floor(Math.random() * 5) + 1; // 1–5, never repeats same face
-        let iconIdx = Math.floor(Math.random() * diceIcons.length);
-        const nextIcon = () => { iconIdx = (iconIdx + step) % diceIcons.length; return diceIcons[iconIdx]; };
-        const diceHtml = () => `<span class="dm-rand-dice-wrap"><i class="fas ${nextIcon()} dm-rand-dice-jump"></i><span class="dm-rand-dice-ground"></span></span>`;
-        btn.innerHTML = diceHtml();
-        const cycleInterval = setInterval(() => {
-          btn.innerHTML = diceHtml();
-        }, 350);
-
-        setTimeout(() => {
-          clearInterval(cycleInterval);
-          btn.querySelector('.dm-rand-dice-jump')?.classList.remove('dm-rand-dice-jump');
-        }, 1000);
-
-        setTimeout(() => {
-          btn.disabled = false;
-          btn.style.width  = '';
-          btn.style.height = '';
-          btn.textContent = 'Randomize';
-
-        randResult.innerHTML = '';
-        randResult.hidden = false;
-
+      const buildRandResultRow = (item, itemSection, itemRarity) => {
         const slotData = buildShopSlotData(
           item,
           item.variables?.weapon?.value || item.variables?.armor?.value || null,
@@ -6287,19 +6283,63 @@ window.CharacterManager = ({ auth, database }) => {
         const row = document.createElement('div');
         row.className = 'shop-item-row';
         row.dataset.itemName = item.name;
+        row.dataset.section = itemSection || '';
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'shop-item-name';
         nameSpan.textContent = item.name;
         row.appendChild(nameSpan);
 
-        const metaSpan = document.createElement('span');
-        metaSpan.className = 'shop-item-cost';
-        metaSpan.textContent = [itemRarity, item.cost].filter(Boolean).join(' · ');
-        row.appendChild(metaSpan);
+        if (itemRarity) {
+          const raritySpan = document.createElement('span');
+          raritySpan.className = 'dm-rand-row-rarity';
+          raritySpan.textContent = itemRarity;
+          row.appendChild(raritySpan);
+        }
+
+        const availBtn = document.createElement('button');
+        availBtn.className = 'shop-item-avail-btn';
+        const updateAvailBtn = () => {
+          const avail = isItemAvailable(item.name);
+          availBtn.innerHTML = avail ? '<i class="fas fa-check"></i>' : '<i class="fas fa-ban"></i>';
+          availBtn.title = avail ? 'Mark as unavailable' : 'Mark as available';
+          availBtn.classList.toggle('unavailable', !avail);
+          row.classList.toggle('shop-item-unavailable', !avail);
+        };
+        updateAvailBtn();
+        availBtn.addEventListener('pointerdown', e => e.stopPropagation());
+        availBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          shopAvailability[item.name] = !isItemAvailable(item.name);
+          saveShopAvailability();
+          updateAvailBtn();
+          buildShop();
+        });
+        row.appendChild(availBtn);
+
+        const visBtn = document.createElement('button');
+        visBtn.className = 'shop-item-vis-btn';
+        const updateVisBtn = () => {
+          const visible = isItemVisible(item.name, itemSection);
+          visBtn.innerHTML = visible ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+          visBtn.title = visible ? 'Hide from players' : 'Show to players';
+          row.classList.toggle('shop-item-hidden', !visible);
+        };
+        updateVisBtn();
+        visBtn.addEventListener('pointerdown', e => e.stopPropagation());
+        visBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          shopVisibility[item.name] = !isItemVisible(item.name, itemSection);
+          saveShopVisibility();
+          updateVisBtn();
+          buildShop();
+        });
+        row.appendChild(visBtn);
 
         row.addEventListener('click', e => {
-          if (row._shopDragging) return;
+          if (row._shopDragging
+            || e.target.closest('.shop-item-vis-btn')
+            || e.target.closest('.shop-item-avail-btn')) return;
           inv.toggleShopItem(slotData, `rand-${item.name}`);
         });
 
@@ -6340,7 +6380,56 @@ window.CharacterManager = ({ auth, database }) => {
         row.addEventListener('pointerup', cancelLP);
         row.addEventListener('pointercancel', cancelLP);
 
-        randResult.appendChild(row);
+        return row;
+      };
+
+      btn.addEventListener('click', () => {
+        const map = sectionItems[tableSelect.value] || {};
+        const rarity = rarityWrap.hidden ? '' : raritySelect.value;
+        const pool = [];
+        if (rarity === '__all__' || rarity === '') {
+          Object.values(map).forEach(arr => pool.push(...arr));
+        } else {
+          pool.push(...(map[rarity] || []));
+        }
+        if (!pool.length) { randResult.innerHTML = '<em>No items in this selection.</em>'; randResult.style.visibility = ''; return; }
+
+        const shuffled = [...pool].sort(() => Math.random() - 0.5);
+        const picked = shuffled.slice(0, randCount);
+
+        // Dice cycling animation
+        btn.disabled = true;
+        btn.style.width  = btn.offsetWidth  + 'px';
+        btn.style.height = btn.offsetHeight + 'px';
+        randResult.style.visibility = 'hidden';
+        const diceIcons = ['fa-dice-one','fa-dice-two','fa-dice-three','fa-dice-four','fa-dice-five','fa-dice-six'];
+        const step = Math.floor(Math.random() * 5) + 1; // 1–5, never repeats same face
+        let iconIdx = Math.floor(Math.random() * diceIcons.length);
+        const nextIcon = () => { iconIdx = (iconIdx + step) % diceIcons.length; return diceIcons[iconIdx]; };
+        const diceHtml = () => `<span class="dm-rand-dice-wrap"><i class="fas ${nextIcon()} dm-rand-dice-jump"></i><span class="dm-rand-dice-ground"></span></span>`;
+        btn.innerHTML = diceHtml();
+        const cycleInterval = setInterval(() => {
+          btn.innerHTML = diceHtml();
+        }, 350);
+
+        setTimeout(() => {
+          clearInterval(cycleInterval);
+          btn.querySelector('.dm-rand-dice-jump')?.classList.remove('dm-rand-dice-jump');
+        }, 1000);
+
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.style.width  = '';
+          btn.style.height = '';
+          btn.textContent = 'Randomize';
+
+          randResult.innerHTML = '';
+          picked.forEach(item => {
+            const itemSection = randItemSectionMap.get(item) || '';
+            const itemRarity  = randItemRarityMap.get(item) || '';
+            randResult.appendChild(buildRandResultRow(item, itemSection, itemRarity));
+          });
+          randResult.style.visibility = '';
         }, 1250); // end setTimeout
       });
 

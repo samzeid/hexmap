@@ -583,7 +583,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 }
 .dm-randomizer-controls {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -609,6 +609,45 @@ input, textarea, select { font-size: max(16px, 1em); }
   max-width: 160px;
 }
 .dm-rand-select:focus { border-color: rgba(255,200,50,0.4); }
+.dm-rand-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dm-rand-stepper-btn {
+  background: none;
+  border: 1px solid rgba(255,200,50,0.3);
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  color: rgba(255,200,50,0.85);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition: background 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.dm-rand-stepper-btn:disabled { opacity: 0.25; cursor: default; }
+.dm-rand-stepper-btn:not(:disabled):active { background: rgba(255,200,50,0.15); }
+.dm-rand-stepper-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255,200,50,0.9);
+  min-width: 20px;
+  text-align: center;
+}
+.dm-rand-row-rarity {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.6;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .dm-rand-btn {
   background: rgba(255,200,50,0.12);
   border: 1px solid rgba(255,200,50,0.3);
@@ -652,11 +691,12 @@ input, textarea, select { font-size: max(16px, 1em); }
   margin-top: -3px;
 }
 .dm-rand-btn:active { background: rgba(255,200,50,0.35); }
-.dm-rand-result {
+.dm-rand-result:not(:empty) {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid rgba(255,255,255,0.08);
 }
+.dm-rand-label-spacer { visibility: hidden; }
 
 .shop-mat-btn {
   background: rgba(255,255,255,0.06);
