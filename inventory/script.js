@@ -207,7 +207,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const scoreEl = document.getElementById(`cs-${ab}`);
       const eff = effectiveAbScore(ab);
       const effEl = document.getElementById(`cs-${ab}-eff`);
-      if (effEl) effEl.textContent = (_isEditing && eff !== null && eff !== parseInt(state[ab])) ? `(${eff})` : '';
+      if (effEl) effEl.textContent = (_isEditing && eff !== null) ? `(${eff})` : '';
       if (!scoreEl || document.activeElement === scoreEl) return;
       scoreEl.value = _isEditing ? (state[ab] || '') : (eff !== null ? String(eff) : '');
     });
@@ -2911,11 +2911,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     });
   }
 
-  function featureDisplayName(feature, isEditing) {
-    if (!isEditing) return feature.name;
+  function featureDisplayName(feature, isEditing, data) {
+    let name = feature.name;
+    if (feature.type === 'feat' && data?.feat) {
+      const chosen = FEAT_OPTIONS.find(f => f.id === data.feat);
+      if (chosen) name = `Feat - ${chosen.name}`;
+    }
+    if (!isEditing) return name;
     const source = feature.subclass || feature.subrace || feature.class || feature.race || '';
     const level  = feature.level ? ` Level ${feature.level}` : '';
-    return `${source}${level} - ${feature.name}`;
+    return `${source}${level} - ${name}`;
   }
 
   function syncFeatures() {
@@ -4138,7 +4143,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 'cs-feature-name';
-      nameSpan.textContent = featureDisplayName(feature, isEditing);
+      nameSpan.textContent = featureDisplayName(feature, isEditing, data);
       toggle.appendChild(nameSpan);
 
       if (id === 'sorcerer-innate-sorcery') {
