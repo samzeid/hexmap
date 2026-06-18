@@ -1742,110 +1742,145 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     const weaponMeta = slotData.variables && slotData.variables.weapon;
     if (weaponMeta && weaponMeta.control === 'select') {
-      const sel = document.createElement('select');
-      sel.className = 'insp-select';
-      (weaponMeta.options || []).forEach(opt => {
-        const o = document.createElement('option');
-        o.value = opt; o.textContent = opt;
-        if (opt === weaponMeta.value) o.selected = true;
-        sel.appendChild(o);
-      });
-      _addPlaceholder(sel, 'Weapon', weaponMeta.value);
-      sel.addEventListener('change', () => {
-        slotData.variables.weapon.value = sel.value;
-        const libWeapon = getLibraryItem(sel.value);
-        if (libWeapon && libWeapon.bulk) slotData.bulk = libWeapon.bulk;
-        _updateUnresolved();
-        if (!container) refreshShopRow();
-        render();
-        showInspector(slotData, container, r, c);
-      });
-      ctrlTarget.appendChild(sel);
+      if ((weaponMeta.options || []).length === 1) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = weaponMeta.value;
+        ctrlTarget.appendChild(span);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (weaponMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === weaponMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        _addPlaceholder(sel, 'Weapon', weaponMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.weapon.value = sel.value;
+          const libWeapon = getLibraryItem(sel.value);
+          if (libWeapon && libWeapon.bulk) slotData.bulk = libWeapon.bulk;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+          showInspector(slotData, container, r, c);
+        });
+        ctrlTarget.appendChild(sel);
+      }
     }
 
     const armorMeta = slotData.variables && slotData.variables.armor;
     if (armorMeta && armorMeta.control === 'select') {
-      const sel = document.createElement('select');
-      sel.className = 'insp-select';
-      (armorMeta.options || []).forEach(opt => {
-        const o = document.createElement('option');
-        o.value = opt; o.textContent = opt;
-        if (opt === armorMeta.value) o.selected = true;
-        sel.appendChild(o);
-      });
-      _addPlaceholder(sel, 'Armor', armorMeta.value);
-      sel.addEventListener('change', () => {
-        slotData.variables.armor.value = sel.value;
-        const libArmor = getLibraryItem(sel.value);
-        if (libArmor && libArmor.bulk) slotData.bulk = libArmor.bulk;
-        _updateUnresolved();
-        if (!container) refreshShopRow();
-        render();
-        showInspector(slotData, container, r, c);
-      });
-      ctrlTarget.appendChild(sel);
+      if ((armorMeta.options || []).length === 1) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = armorMeta.value;
+        ctrlTarget.appendChild(span);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (armorMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === armorMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        _addPlaceholder(sel, 'Armor', armorMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.armor.value = sel.value;
+          const libArmor = getLibraryItem(sel.value);
+          if (libArmor && libArmor.bulk) slotData.bulk = libArmor.bulk;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+          showInspector(slotData, container, r, c);
+        });
+        ctrlTarget.appendChild(sel);
+      }
     }
 
     const elementMeta = slotData.variables && slotData.variables.element;
     if (elementMeta && elementMeta.control === 'select') {
-      const sel = document.createElement('select');
-      sel.className = 'insp-select';
-      (elementMeta.options || []).forEach(opt => {
-        const o = document.createElement('option');
-        o.value = opt; o.textContent = opt;
-        if (opt === elementMeta.value) o.selected = true;
-        sel.appendChild(o);
-      });
-      _addPlaceholder(sel, 'Elemental', elementMeta.value);
-      sel.addEventListener('change', () => {
-        slotData.variables.element.value = sel.value;
-        _updateUnresolved();
-        if (!container) refreshShopRow();
-        render();
-      });
-      ctrlTarget.appendChild(sel);
+      if ((elementMeta.options || []).length === 1) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = elementMeta.value;
+        ctrlTarget.appendChild(span);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (elementMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === elementMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        _addPlaceholder(sel, 'Elemental', elementMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.element.value = sel.value;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+        });
+        ctrlTarget.appendChild(sel);
+      }
     }
 
     const creatureMeta = slotData.variables && slotData.variables.creature;
     if (creatureMeta && creatureMeta.control === 'select') {
-      const sel = document.createElement('select');
-      sel.className = 'insp-select';
-      (creatureMeta.options || []).forEach(opt => {
-        const o = document.createElement('option');
-        o.value = opt; o.textContent = opt;
-        if (opt === creatureMeta.value) o.selected = true;
-        sel.appendChild(o);
-      });
-      _addPlaceholder(sel, 'Creature', creatureMeta.value);
-      sel.addEventListener('change', () => {
-        slotData.variables.creature.value = sel.value;
-        _updateUnresolved();
-        if (!container) refreshShopRow();
-        render();
-        showInspector(slotData, container, r, c);
-      });
-      ctrlTarget.appendChild(sel);
+      if ((creatureMeta.options || []).length === 1) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = creatureMeta.value;
+        ctrlTarget.appendChild(span);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (creatureMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === creatureMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        _addPlaceholder(sel, 'Creature', creatureMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.creature.value = sel.value;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+          showInspector(slotData, container, r, c);
+        });
+        ctrlTarget.appendChild(sel);
+      }
     }
 
     const spellMeta = slotData.variables && slotData.variables.spell;
     if (spellMeta && spellMeta.control === 'select') {
-      const sel = document.createElement('select');
-      sel.className = 'insp-select';
-      (spellMeta.options || []).forEach(opt => {
-        const o = document.createElement('option');
-        o.value = opt; o.textContent = opt;
-        if (opt === spellMeta.value) o.selected = true;
-        sel.appendChild(o);
-      });
-      _addPlaceholder(sel, 'Spell', spellMeta.value);
-      sel.addEventListener('change', () => {
-        slotData.variables.spell.value = sel.value;
-        _updateUnresolved();
-        if (!container) refreshShopRow();
-        render();
-        showInspector(slotData, container, r, c);
-      });
-      ctrlTarget.appendChild(sel);
+      if ((spellMeta.options || []).length === 1) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = spellMeta.value;
+        ctrlTarget.appendChild(span);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (spellMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === spellMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        _addPlaceholder(sel, 'Spell', spellMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.spell.value = sel.value;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+          showInspector(slotData, container, r, c);
+        });
+        ctrlTarget.appendChild(sel);
+      }
     }
 
     propsEl.hidden = propsEl.children.length === 0;
@@ -1889,16 +1924,23 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const label = document.createElement('span');
       label.className = 'insp-var-label';
       label.textContent = key;
-      const sel = document.createElement('select');
-      sel.className = 'insp-select';
-      (meta.options || []).forEach(opt => {
-        const o = document.createElement('option');
-        o.value = opt; o.textContent = opt;
-        if (opt === meta.value) o.selected = true;
-        sel.appendChild(o);
-      });
-      sel.addEventListener('change', () => { slotData.variables[key].value = sel.value; _updateUnresolved(); render(); showInspector(slotData, container, r, c, packIdx); });
-      div.appendChild(label); div.appendChild(sel);
+      if ((meta.options || []).length === 1) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = meta.value;
+        div.appendChild(label); div.appendChild(span);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (meta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === meta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        sel.addEventListener('change', () => { slotData.variables[key].value = sel.value; _updateUnresolved(); render(); showInspector(slotData, container, r, c, packIdx); });
+        div.appendChild(label); div.appendChild(sel);
+      }
       varsEl.appendChild(div);
     }
 
@@ -4366,10 +4408,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     return weapons;
   }
 
+  const WEAPON_STAT_ALIASES = { "Staff": "Quarterstaff" };
   function getWeaponBaseInfo(slotData) {
     const wv = slotData.variables && slotData.variables.weapon;
     const baseName = (wv && wv.value) ? wv.value : slotData.name;
-    const lib = getLibraryItem(baseName);
+    const lib = getLibraryItem(WEAPON_STAT_ALIASES[baseName] || baseName);
     if (!lib || !lib.description) return null;
     const desc = lib.description;
     const isRanged  = /Simple Ranged|Martial Ranged/i.test(desc);
@@ -4377,7 +4420,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const afterBr   = desc.split('<br>')[1] || desc;
     const diceMatch = afterBr.match(/^(\d+d\d+|\d+)/);
     const damageDice = diceMatch ? diceMatch[1] : null;
-    const typeMatch  = afterBr.match(/^\d+d\d+\s+(\w+)/);
+    const typeMatch  = afterBr.match(/^(?:\d+d\d+|\d+)\s+(\w+)/);
     const damageType = typeMatch ? typeMatch[1] : null;
     const rangeMatch = afterBr.match(/(?:Thrown|Ammunition)\s*\((\d+\/\d+)\)/i);
     const range = rangeMatch ? rangeMatch[1] : 'Melee';

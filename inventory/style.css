@@ -2315,6 +2315,12 @@ body.is-dragging #inv-scroll {
 }
 
 
+.insp-select--fixed {
+  cursor: default;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
 .insp-select.flash-required {
   animation: select-flash 0.28s ease-in-out 3 forwards;
 }
