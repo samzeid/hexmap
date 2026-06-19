@@ -49,6 +49,13 @@ window.LIGHT_WEAPON_OPTIONS = [
   "Dagger","Handaxe","Light Hammer","Sickle","Scimitar","Shortsword","Hand Crossbow",
 ];
 
+// Precise/patient weapons — for timing and setup-based items
+window.PATIENT_WEAPON_OPTIONS = [
+  "Quarterstaff","Spear","Battleaxe","Glaive","Greataxe","Greatsword","Halberd",
+  "Longsword","Maul","Morningstar","Rapier","Shortsword","Trident","Warhammer",
+  "Shortbow","Longbow",
+];
+
 // Heavy/brutal melee weapons — for crit-focused and killing-blow items
 window.BRUTAL_WEAPON_OPTIONS = [
   "Mace","Pike","Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd",
@@ -434,10 +441,10 @@ window.ITEM_LIBRARY = [
   { id: 211, name: "Keen Weapon",             bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you roll a 19 or 20 on an attack roll for this weapon, the hit is a critical hit.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Dagger","Spear","Battleaxe","Glaive","Greataxe","Greatsword","Halberd","Longsword","Morningstar","Rapier","Scimitar","Shortsword","Trident"] } } },
   { id: 212, name: "Fell Weapon",             bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you score a critical hit with this weapon, you can roll two additional weapon damage dice and add them to the extra damage.`, variables: { weapon: { control: "select", value: "Longsword", options: BRUTAL_WEAPON_OPTIONS } } },
   { id: 213, name: "Striving Weapon",         bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>Once each turn, you can reroll one damage die for an attack made with this weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
-  { id: 214, name: "Boundless Weapon",        bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you roll the maximum result on a weapon damage die from this weapon, roll an additional weapon damage die and add it as extra damage.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Longsword","Rapier","Scimitar","Shortsword","Trident","Glaive","Longbow"] } } },
+  { id: 214, name: "Boundless Weapon",        bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you roll the maximum result on a weapon damage die from this weapon, roll an additional weapon damage die and add it as extra damage.`, variables: { weapon: { control: "select", value: "Longsword", options: PATIENT_WEAPON_OPTIONS } } },
 
   { _rarity: "Rare" },
-  { id: 215, name: "Patient Weapon",          bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>When you take the attack action, you can forgo one attack. If you do, the next attack you make with this weapon before the end of your next turn is made with advantage, even if you would have disadvantage.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Mace","Quarterstaff","Spear","Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd","Longsword","Maul","Morningstar","Rapier","Scimitar","Shortsword","Trident","Warhammer","Shortbow","Hand Crossbow","Heavy Crossbow","Longbow"] } } },
+  { id: 215, name: "Patient Weapon",          bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>When you take the attack action, you can forgo one attack. If you do, the next attack you make with this weapon before the end of your next turn is made with advantage, even if you would have disadvantage.`, variables: { weapon: { control: "select", value: "Longsword", options: PATIENT_WEAPON_OPTIONS } } },
   { id: 216, name: "Brutal Weapon",           bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>When you take the attack action, you can forgo advantage on one attack to have that attack deal an additional 1d8 damage of the weapon's damage type.`, variables: { weapon: { control: "select", value: "Longsword", options: BRUTAL_WEAPON_OPTIONS } } },
   { id: 217, name: "Vigilant Weapon",         bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>When you take the attack action with this weapon, you can forgo one attack. Then, if a creature moves into your reach before the start of your next turn, you can make an opportunity attack against it using this weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Quarterstaff","Spear","Glaive","Greatsword","Halberd","Longsword","Rapier","Shortsword","Trident","Pike"] } } },
   { id: 218, name: "Shifting Weapon",         bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>As a <i>free object interaction</i> you can change this weapon's form to any simple or martial melee weapon. It is made of a single piece of unique metal, is immune to effects that corrode items, and cannot be silvered.`, variables: { weapon: { control: "select", value: "Longsword", options: MELEE_WEAPON_OPTIONS } } },
