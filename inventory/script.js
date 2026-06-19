@@ -1451,9 +1451,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
       const costBase2 = lib && lib.costBase ? parseCostCp(lib.costBase) : 0;
       const typeCost2 = getSlotTypeCostCp(slotData);
+      const matCost2 = getSlotMaterialCostCp(slotData, lib?.category === 'ammunition');
       const total2 = costBase2 > 0
-        ? base2 * mult + typeCost2 + costBase2
-        : (base2 + typeCost2) * mult;
+        ? base2 * mult + typeCost2 + costBase2 + matCost2
+        : (base2 + typeCost2 + matCost2) * mult;
       const parts2 = [];
       let rem2 = total2;
       const gp2 = Math.floor(rem2 / 100); rem2 %= 100;
