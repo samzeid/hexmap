@@ -7743,6 +7743,7 @@ window.CharacterManager = ({ auth, database }) => {
         tab.addEventListener('click', () => {
           if (char.id === currentCharId) {
             if (shopOpen) {
+              _shopFromHexmap = false;
               closeShop();
               if (_hexmapMode) {
                 _hexmapMode = false;
