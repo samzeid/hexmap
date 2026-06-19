@@ -48,6 +48,15 @@ window.CELESTIA_WEAPON_OPTIONS = [
 window.LIGHT_WEAPON_OPTIONS = [
   "Dagger","Handaxe","Light Hammer","Sickle","Scimitar","Shortsword","Hand Crossbow",
 ];
+
+// All simple and martial melee weapons (no ranged)
+window.MELEE_WEAPON_OPTIONS = [
+  "Club","Dagger","Greatclub","Handaxe","Javelin","Light Hammer","Mace",
+  "Quarterstaff","Sickle","Spear",
+  "Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd","Lance",
+  "Longsword","Maul","Morningstar","Pike","Rapier","Scimitar","Shortsword",
+  "Trident","Warhammer","War Pick","Whip",
+];
 window.WEAPON_TYPES = {
   // Thrown
   "Dagger":"thrown","Handaxe":"thrown","Javelin":"thrown","Light Hammer":"thrown",
@@ -417,7 +426,7 @@ window.ITEM_LIBRARY = [
   { id: 215, name: "Patient Weapon",          bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>When you take the attack action, you can forgo one attack. If you do, the next attack you make with this weapon before the end of your next turn is made with advantage, even if you would have disadvantage.`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
   { id: 216, name: "Brutal Weapon",           bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>When you take the attack action, you can forgo advantage on one attack to have that attack deal an additional 1d8 damage of the weapon's damage type.`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
   { id: 217, name: "Vigilant Weapon",         bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>When you take the attack action with this weapon, you can forgo one attack. Then, if a creature moves into your reach before the start of your next turn, you can make an opportunity attack against it using this weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
-  { id: 218, name: "Shifting Weapon",         bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>As a <i>free object interaction</i> you can change this weapon's form to any simple or martial melee weapon. It is made of a single piece of unique metal, is immune to effects that corrode items, and cannot be silvered.`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
+  { id: 218, name: "Shifting Weapon",         bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>As a <i>free object interaction</i> you can change this weapon's form to any simple or martial melee weapon. It is made of a single piece of unique metal, is immune to effects that corrode items, and cannot be silvered.`, variables: { weapon: { control: "select", value: "Longsword", options: MELEE_WEAPON_OPTIONS } } },
   { id: 219, name: "Weapon of Echoes",        bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>A second Weapon of Echoes can be attuned without occupying an attunement slot. When this weapon hits a target already struck by a Weapon of Echoes this round, deal an additional 1d4 thunder damage.`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
   { id: 220, name: "Weapon of Mastery",       bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>You gain proficiency with this weapon and can use its weapon mastery. If you already could, choose one other mastery when you attune to this weapon. You can use the chosen mastery with this weapon. Only one weapon mastery property can apply to an attack.`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
   { id: 221, name: "Fatal Weapon",            bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>After dealing damage with this weapon, if the target has hit points equal to or less than the maximum result of this weapon's damage dice, they die.`, variables: { weapon: { control: "select", value: "Longsword", options: WEAPON_OPTIONS } } },
