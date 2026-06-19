@@ -1444,12 +1444,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const costEl = document.getElementById('insp-cost');
       if (!costEl || costEl.hidden) return;
       const cv = slotData.variables || {};
-      const mult = Math.max(1, cv.uses?.value ?? cv.count?.value ?? 1);
+      const mult = Math.max(0, cv.uses?.value ?? cv.count?.value ?? 1);
       const cc2 = slotData.costCoins;
       const base2 = cc2
         ? (cc2.pp||0)*1000 + (cc2.gp||0)*100 + (cc2.sp||0)*10 + (cc2.cp||0)
         : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
-      const total2 = (base2 + getSlotTypeCostCp(slotData)) * mult;
+      const costBase2 = lib && lib.costBase ? parseCostCp(lib.costBase) : 0;
+      const total2 = (base2 + getSlotTypeCostCp(slotData)) * mult + costBase2;
       const parts2 = [];
       let rem2 = total2;
       const gp2 = Math.floor(rem2 / 100); rem2 %= 100;
@@ -6749,9 +6750,12 @@ window.CharacterManager = ({ auth, database }) => {
         let base = baseCostCp + getTypeCostCp()
           + (cachedSlotData.silvered ? silverCp : 0)
           + (cachedSlotData.material ? metalCp  : 0);
+        const costBaseCp = item.costBase ? shopCostToCp(item.costBase) : 0;
         if (item.hasUses === 'coins') {
           const cv = cachedSlotData.variables || {};
-          base *= Math.max(1, cv.uses?.value ?? cv.count?.value ?? 1);
+          base = base * Math.max(0, cv.uses?.value ?? cv.count?.value ?? 1) + costBaseCp;
+        } else {
+          base += costBaseCp;
         }
         return base * Math.max(1, cachedSlotData.variables?.qty?.value || 1);
       };
