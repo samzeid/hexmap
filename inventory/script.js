@@ -1550,7 +1550,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (typeCostCp > 0 || materialCostCp > 0 || coinUsesMult > 1 || costBaseCp > 0) {
       const baseCp = ccTotalCp > 0 ? ccTotalCp : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
       const totalCp = costBaseCp > 0
-        ? (baseCp + materialCostCp) * coinUsesMult + typeCostCp + costBaseCp
+        ? baseCp * coinUsesMult + typeCostCp + costBaseCp + materialCostCp
         : (baseCp + typeCostCp + materialCostCp) * coinUsesMult;
       const parts = [];
       let rem = totalCp;
@@ -5401,12 +5401,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const sc = slotData.costCoins;
       const qty = slotData.variables?.qty?.value || 1;
       const _matCp = getSlotMaterialCostCp(slotData, lib?.category === 'ammunition');
-      const unitCp = ((sc
+      const _costBaseCp = lib && lib.costBase ? parseCostCp(lib.costBase) : 0;
+      const _basePlusTp = (sc
         ? (sc.pp||0)*1000 + (sc.gp||0)*100 + (sc.sp||0)*10 + (sc.cp||0)
         : (lib && lib.cost ? parseCostCp(lib.cost) : 0))
-        + getSlotTypeCostCp(slotData) + _matCp)
-        * getSlotCoinUsesMultiplier(slotData)
-        + (lib && lib.costBase ? parseCostCp(lib.costBase) : 0);
+        + getSlotTypeCostCp(slotData);
+      const unitCp = _costBaseCp > 0
+        ? _basePlusTp * getSlotCoinUsesMultiplier(slotData) + _costBaseCp + _matCp
+        : (_basePlusTp + _matCp) * getSlotCoinUsesMultiplier(slotData);
       const fullCp = unitCp * qty;
       const halfCp = fullCp > 0 ? (isTreasure ? fullCp : Math.floor(fullCp / 2)) : 0;
       if (halfCp > 0) {
@@ -6761,7 +6763,7 @@ window.CharacterManager = ({ auth, database }) => {
           const cv = cachedSlotData.variables || {};
           const charges = Math.max(0, cv.uses?.value ?? cv.count?.value ?? 1);
           base = costBaseCp > 0
-            ? (baseCostCp + materialExtra) * charges + typeCostCp + costBaseCp
+            ? baseCostCp * charges + typeCostCp + costBaseCp + materialExtra
             : (baseCostCp + typeCostCp + materialExtra) * charges;
         } else {
           base = baseCostCp + typeCostCp + materialExtra + costBaseCp;
