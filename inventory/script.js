@@ -1541,10 +1541,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const typeCostCp = getSlotTypeCostCp(slotData);
     const materialCostCp = getSlotMaterialCostCp(slotData, lib?.category === 'ammunition');
     const coinUsesMult = getSlotCoinUsesMultiplier(slotData);
+    const costBaseCp = lib && lib.costBase ? parseCostCp(lib.costBase) : 0;
     let displayCostStr;
-    if (typeCostCp > 0 || materialCostCp > 0 || coinUsesMult > 1) {
+    if (typeCostCp > 0 || materialCostCp > 0 || coinUsesMult > 1 || costBaseCp > 0) {
       const baseCp = ccTotalCp > 0 ? ccTotalCp : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
-      const totalCp = (baseCp + typeCostCp + materialCostCp) * coinUsesMult;
+      const totalCp = (baseCp + typeCostCp + materialCostCp) * coinUsesMult + costBaseCp;
       const parts = [];
       let rem = totalCp;
       const gp = Math.floor(rem / 100); rem %= 100;
@@ -5217,7 +5218,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const hasUses = slotData.hasUses ?? getLibraryItem(slotData.name)?.hasUses;
     if (hasUses !== 'coins') return 1;
     const v = slotData.variables || {};
-    return Math.max(1, v.uses?.value ?? v.count?.value ?? 1);
+    return Math.max(0, v.uses?.value ?? v.count?.value ?? 1);
   }
 
   function parseCostCp(costStr) {
@@ -5398,7 +5399,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         ? (sc.pp||0)*1000 + (sc.gp||0)*100 + (sc.sp||0)*10 + (sc.cp||0)
         : (lib && lib.cost ? parseCostCp(lib.cost) : 0))
         + getSlotTypeCostCp(slotData) + _matCp)
-        * getSlotCoinUsesMultiplier(slotData);
+        * getSlotCoinUsesMultiplier(slotData)
+        + (lib && lib.costBase ? parseCostCp(lib.costBase) : 0);
       const fullCp = unitCp * qty;
       const halfCp = fullCp > 0 ? (isTreasure ? fullCp : Math.floor(fullCp / 2)) : 0;
       if (halfCp > 0) {
