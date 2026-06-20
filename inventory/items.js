@@ -63,8 +63,8 @@ window.PATIENT_WEAPON_OPTIONS = [
 
 // Heavy/brutal melee weapons — for crit-focused and killing-blow items
 window.BRUTAL_WEAPON_OPTIONS = [
-  "Mace","Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd",
-  "Longsword","Maul","Morningstar","Trident","War Pick","Warhammer",
+  "Mace","Battleaxe","Flail","Greataxe","Greatsword",
+  "Longsword","Maul","Morningstar","War Pick","Warhammer",
 ];
 
 // Curated list for generic magic weapons — removes niche/minor weapons
@@ -442,7 +442,7 @@ window.ITEM_LIBRARY = [
   { id: 208, name: "Crestfall Weapon",        bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>While bloodied you can treat this as a +1 weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
   { id: 209, name: "Branding Weapon",         bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you hit a creature with this weapon you can choose to brand it. Until the end of your next turn, the target sheds bright light in a 5-foot radius, and it can't benefit from the <i>invisible</i> condition.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
   { id: 210, name: "Envious Weapon",          bulk: Bulk.STOCK, cost: "500 gp",  description: `When wielded with another <i>light</i> weapon, this weapon copies its magical properties and effects. Charges and uses are shared between both weapons. As a bonus action, you can transform this weapon into the kind of weapon in your other hand, or back.`, variables: { weapon: { control: "select", value: "Shortsword", options: LIGHT_WEAPON_OPTIONS } } },
-  { id: 211, name: "Keen Weapon",             bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you roll a 19 or 20 on an attack roll for this weapon, the hit is a critical hit.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Dagger","Spear","Battleaxe","Glaive","Greataxe","Greatsword","Halberd","Longsword","Morningstar","Rapier","Scimitar","Shortsword","Trident"] } } },
+  { id: 211, name: "Keen Weapon",             bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you roll a 19 or 20 on an attack roll for this weapon, the hit is a critical hit.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Dagger","Handaxe","Sickle","Spear","Battleaxe","Glaive","Greataxe","Greatsword","Halberd","Longsword","Morningstar","Pike","Rapier","Scimitar","Shortsword","Trident","War Pick"] } } },
   { id: 212, name: "Fell Weapon",             bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you score a critical hit with this weapon, you can roll two additional weapon damage dice and add them to the extra damage.`, variables: { weapon: { control: "select", value: "Longsword", options: BRUTAL_WEAPON_OPTIONS } } },
   { id: 213, name: "Striving Weapon",         bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>Once each turn, you can reroll one damage die for an attack made with this weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
   { id: 214, name: "Boundless Weapon",        bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you roll the maximum result on a weapon damage die from this weapon, roll an additional weapon damage die and add it as extra damage.`, variables: { weapon: { control: "select", value: "Longsword", options: PATIENT_WEAPON_OPTIONS } } },

@@ -6744,13 +6744,14 @@ window.CharacterManager = ({ auth, database }) => {
       const cachedSlotData = buildShopSlotData(
         item, typeVar?.value, false, null, elementVar?.value, 0
       );
-      if (typeVar    && cachedSlotData.variables?.weapon?.control  === 'select') cachedSlotData.variables.weapon.value  = '';
-      if (typeVar    && cachedSlotData.variables?.armor?.control   === 'select') cachedSlotData.variables.armor.value   = '';
+      const typeNeedsChoice = typeVar && (typeVar.options || []).length > 1;
+      if (typeNeedsChoice && cachedSlotData.variables?.weapon?.control === 'select') cachedSlotData.variables.weapon.value = '';
+      if (typeNeedsChoice && cachedSlotData.variables?.armor?.control  === 'select') cachedSlotData.variables.armor.value  = '';
       if (elementVar && cachedSlotData.variables?.element?.control === 'select') cachedSlotData.variables.element.value = '';
       if (spellVar    && cachedSlotData.variables?.spell?.control    === 'select') cachedSlotData.variables.spell.value    = '';
       if (creatureVar && cachedSlotData.variables?.creature?.control === 'select') cachedSlotData.variables.creature.value = '';
       // Explicit unresolved flag — more reliable than checking '' values at drag time
-      if (typeVar || elementVar || spellVar || creatureVar) cachedSlotData._unresolved = true;
+      if (typeNeedsChoice || elementVar || spellVar || creatureVar) cachedSlotData._unresolved = true;
       // Base Ammunition requires a material (silvered/mithral/adamantine) before purchase
       if (item.name === 'Ammunition' && !cachedSlotData.silvered && !cachedSlotData.material) cachedSlotData._unresolved = true;
 
