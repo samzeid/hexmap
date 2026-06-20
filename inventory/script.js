@@ -1758,12 +1758,27 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       } else {
         const sel = document.createElement('select');
         sel.className = 'insp-select';
+        const _curatedSet = new Set(weaponMeta.options || []);
         (weaponMeta.options || []).forEach(opt => {
           const o = document.createElement('option');
           o.value = opt; o.textContent = opt;
           if (opt === weaponMeta.value) o.selected = true;
           sel.appendChild(o);
         });
+        if (window._isDM) {
+          const _extras = (window.WEAPON_OPTIONS || []).filter(opt => !_curatedSet.has(opt));
+          if (_extras.length) {
+            const grp = document.createElement('optgroup');
+            grp.label = '─── Non-Standard ───';
+            _extras.forEach(opt => {
+              const o = document.createElement('option');
+              o.value = opt; o.textContent = opt;
+              if (opt === weaponMeta.value) o.selected = true;
+              grp.appendChild(o);
+            });
+            sel.appendChild(grp);
+          }
+        }
         _addPlaceholder(sel, 'Weapon', weaponMeta.value);
         sel.addEventListener('change', () => {
           slotData.variables.weapon.value = sel.value;

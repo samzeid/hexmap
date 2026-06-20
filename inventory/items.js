@@ -40,13 +40,13 @@ window.ROGUE_WEAPON_OPTIONS = [
 
 // Assassin/stealth weapons — quiet, precise melee
 window.ASSASSIN_WEAPON_OPTIONS = [
-  "Dagger","Shortsword","Rapier","Scimitar","Longsword",
+  "Dagger","Shortsword","Rapier","Scimitar",
 ];
 
 // Heroic martial weapons for Weapon of Celestia (no ranged, no purely utilitarian weapons)
 window.CELESTIA_WEAPON_OPTIONS = [
-  "Mace","Longsword","Morningstar","Rapier","Shortsword",
-  "Greatsword","Glaive","Halberd","Lance",
+  "Longsword","Morningstar","Rapier","Shortsword",
+  "Greatsword","Glaive","Halberd",
 ];
 
 // Light weapons — for items requiring dual-wield eligibility
@@ -63,8 +63,8 @@ window.PATIENT_WEAPON_OPTIONS = [
 
 // Heavy/brutal melee weapons — for crit-focused and killing-blow items
 window.BRUTAL_WEAPON_OPTIONS = [
-  "Mace","Pike","Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd",
-  "Longsword","Maul","Morningstar","Rapier","Scimitar","Shortsword","Trident","Warhammer",
+  "Mace","Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd",
+  "Longsword","Maul","Morningstar","Trident","War Pick","Warhammer",
 ];
 
 // Curated list for generic magic weapons — removes niche/minor weapons
@@ -457,7 +457,7 @@ window.ITEM_LIBRARY = [
   { id: 221, name: "Fatal Weapon",            bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>After dealing damage with this weapon, if the target has hit points equal to or less than the maximum result of this weapon's damage dice, they die.`, variables: { weapon: { control: "select", value: "Longsword", options: BRUTAL_WEAPON_OPTIONS } } },
   { id: 222, name: "Mage Blade",              bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement by a spellcaster)</i><br>As a bonus action, you can expend a 2nd level or higher spell slot to treat this sword as a +1 weapon that deals Force damage until your next long rest.`, variables: { weapon: { control: "select", value: "Longsword", options: SWORD_OPTIONS } } },
   { id: 223, name: "Weeping Weapon",          bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>A poison coating this weapon doesn't lose potency over time. As a bonus action, you can have a poison you coated this weapon with in the past bleed from the ouroboros encircled eye etched in its blade, magically coating it. This property can't be used again until you finish a long rest.`, hasUses: true, variables: { weapon: { control: "select", value: "Shortsword", options: ASSASSIN_WEAPON_OPTIONS }, uses: { value: 1, control: "both", min: 0, max: 1 } } },
-  { id: 224, name: "Blink Weapon",            bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>While holding this weapon, you can cast <i>misty step</i>. Once used, this property can't be used again until you finish a long rest. Immediately after you teleport no more than 30ft and make an attack with this weapon, you can teleport back to your previous space if it is unoccupied.`, hasUses: true, variables: { weapon: { control: "select", value: "Longsword", options: ASSASSIN_WEAPON_OPTIONS }, uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 224, name: "Blink Weapon",            bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>While holding this weapon, you can cast <i>misty step</i>. Once used, this property can't be used again until you finish a long rest. Immediately after you teleport no more than 30ft and make an attack with this weapon, you can teleport back to your previous space if it is unoccupied.`, hasUses: true, variables: { weapon: { control: "select", value: "Shortsword", options: ASSASSIN_WEAPON_OPTIONS }, uses: { value: 1, control: "both", min: 0, max: 1 } } },
   { id: 225, name: "Elemental Sword",         bulk: Bulk.STOCK, cost: "800 gp",  category: "weapon", description: `<i>(requires attunement)</i><br>As a bonus action, while holding the hilt, you can form a longsword from elemental energy of the chosen type. While formed, it deals that damage type, sheds bright light in a 15-foot radius and dim light for an additional 15 feet, and has the <i>finesse</i> property. It remains formed until you dismiss it as a bonus action, or you drop or stow it.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Longsword"] }, element: { control: "select", value: "Acid", options: ["Acid","Cold","Fire","Lightning","Radiant","Thunder"] } } },
   { id: 226, name: "Weapon of Slots",         bulk: Bulk.STOCK, cost: "800 gp",  description: `The total attunement cost of gems attached to this weapon is reduced by 1 (to a minimum of 1). You can remove a gem attached from this weapon for no cost.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
 
