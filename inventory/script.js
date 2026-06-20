@@ -6282,7 +6282,7 @@ window.CharacterManager = ({ auth, database }) => {
     "Glaive": 3, "Halberd": 3, "Maul": 3, "Battleaxe": 6,
     "Warhammer": 6, "Scimitar": 3, "Hand Crossbow": 1,
     "Flail": 3, "Morningstar": 3, "Trident": 3, "Spear": 3, "Quarterstaff": 1,
-    "Light Crossbow": 1, "Shortbow": 3, "Whip": 1,
+    "Light Crossbow": 1, "Shortbow": 2, "Whip": 1,
     "Heavy Crossbow": 1, "War Pick": 1, "Lance": 1, "Pike": 1,
     "Club": 1, "Greatclub": 1, "Sickle": 1, "Mace": 2,
     "Javelin": 1, "Light Hammer": 1, "Sling": 1, "Dart": 1, "Blowgun": 1,
