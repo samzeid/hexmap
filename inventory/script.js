@@ -6276,16 +6276,16 @@ window.CharacterManager = ({ auth, database }) => {
   let _randLastRoll = []; // [{ item, itemSection, itemRarity }]
 
   const WEAPON_WEIGHTS = {
-    "Longsword": 16, "Rapier": 8,
-    "Shortsword": 8, "Greatsword": 6, "Greataxe": 6,
-    "Dagger": 2, "Handaxe": 2, "Longbow": 4,
+    "Longsword": 12, "Rapier": 8,
+    "Shortsword": 8, "Greatsword": 8, "Greataxe": 6,
+    "Dagger": 3, "Handaxe": 1, "Longbow": 6,
     "Glaive": 3, "Halberd": 3, "Maul": 3, "Battleaxe": 6,
-    "Warhammer": 6, "Scimitar": 4, "Hand Crossbow": 2,
-    "Flail": 2, "Morningstar": 4, "Trident": 3, "Spear": 3, "Quarterstaff": 1,
-    "Light Crossbow": 2, "Shortbow": 3, "Whip": 1,
+    "Warhammer": 6, "Scimitar": 3, "Hand Crossbow": 1,
+    "Flail": 3, "Morningstar": 3, "Trident": 3, "Spear": 3, "Quarterstaff": 1,
+    "Light Crossbow": 1, "Shortbow": 3, "Whip": 1,
     "Heavy Crossbow": 1, "War Pick": 1, "Lance": 1, "Pike": 1,
     "Club": 1, "Greatclub": 1, "Sickle": 1, "Mace": 2,
-    "Javelin": 2, "Light Hammer": 1, "Sling": 0, "Dart": 0, "Blowgun": 0,
+    "Javelin": 1, "Light Hammer": 1, "Sling": 1, "Dart": 1, "Blowgun": 1,
   };
 
   const ARMOR_WEIGHTS = {
