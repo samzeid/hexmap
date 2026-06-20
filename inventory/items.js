@@ -56,8 +56,8 @@ window.LIGHT_WEAPON_OPTIONS = [
 
 // Precise/patient weapons — for timing and setup-based items
 window.PATIENT_WEAPON_OPTIONS = [
-  "Quarterstaff","Spear","Battleaxe","Glaive","Greataxe","Greatsword","Halberd",
-  "Longsword","Maul","Morningstar","Rapier","Shortsword","Trident","Warhammer",
+  "Quarterstaff","Spear","Battleaxe","Glaive","Greatsword","Halberd",
+  "Longsword","Morningstar","Rapier","Scimitar","Shortsword","Trident","Warhammer",
   "Shortbow","Longbow",
 ];
 
