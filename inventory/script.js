@@ -6276,8 +6276,8 @@ window.CharacterManager = ({ auth, database }) => {
   let _randLastRoll = []; // [{ item, itemSection, itemRarity }]
 
   const WEAPON_WEIGHTS = {
-    "Longsword": 10, "Rapier": 8,
-    "Shortsword": 8, "Greatsword": 8, "Greataxe": 6,
+    "Longsword": 10, "Rapier": 6,
+    "Shortsword": 8, "Greatsword": 6, "Greataxe": 6,
     "Dagger": 3, "Handaxe": 1, "Longbow": 8,
     "Glaive": 3, "Halberd": 3, "Maul": 3, "Battleaxe": 6,
     "Warhammer": 6, "Scimitar": 3, "Hand Crossbow": 1,
