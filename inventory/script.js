@@ -1765,6 +1765,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           if (opt === weaponMeta.value) o.selected = true;
           sel.appendChild(o);
         });
+        if (weaponMeta.value && !_curatedSet.has(weaponMeta.value) && !window._isDM) {
+          const o = document.createElement('option');
+          o.value = weaponMeta.value; o.textContent = weaponMeta.value;
+          o.selected = true;
+          sel.insertBefore(o, sel.firstChild);
+        }
         if (window._isDM) {
           const _extras = (window.WEAPON_OPTIONS || []).filter(opt => !_curatedSet.has(opt));
           if (_extras.length) {
