@@ -1740,6 +1740,23 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
     };
 
+    const _addLockBtn = (meta, target = ctrlTarget) => {
+      if (!window._isDM) return;
+      const lockBtn = document.createElement('button');
+      lockBtn.className = 'prop-chip insp-lock-btn' + (meta.locked ? ' active-lock' : '');
+      lockBtn.title = meta.locked ? 'Unlock' : 'Lock';
+      const lockIcon = document.createElement('i');
+      lockIcon.className = meta.locked ? 'fas fa-lock' : 'fas fa-lock-open';
+      lockBtn.appendChild(lockIcon);
+      lockBtn.onclick = () => {
+        meta.locked = !meta.locked;
+        if (onChange) onChange();
+        render();
+        showInspector(slotData, container, r, c);
+      };
+      target.appendChild(lockBtn);
+    };
+
     // After a select changes, sync _unresolved with whether any select still holds ''
     const _updateUnresolved = () => {
       const v = slotData.variables || {};
@@ -1750,28 +1767,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     const weaponMeta = slotData.variables && slotData.variables.weapon;
     if (weaponMeta && weaponMeta.control === 'select') {
-      const _addWeaponLockBtn = () => {
-        if (!window._isDM) return;
-        const lockBtn = document.createElement('button');
-        lockBtn.className = 'prop-chip insp-lock-btn' + (weaponMeta.locked ? ' active-lock' : '');
-        lockBtn.title = weaponMeta.locked ? 'Unlock weapon type' : 'Lock weapon type';
-        const lockIcon = document.createElement('i');
-        lockIcon.className = weaponMeta.locked ? 'fas fa-lock' : 'fas fa-lock-open';
-        lockBtn.appendChild(lockIcon);
-        lockBtn.onclick = () => {
-          weaponMeta.locked = !weaponMeta.locked;
-          if (onChange) onChange();
-          render();
-          showInspector(slotData, container, r, c);
-        };
-        ctrlTarget.appendChild(lockBtn);
-      };
       if ((weaponMeta.options || []).length === 1 || weaponMeta.locked) {
         const span = document.createElement('span');
         span.className = 'insp-select insp-select--fixed';
         span.textContent = weaponMeta.value;
         ctrlTarget.appendChild(span);
-        _addWeaponLockBtn();
+        _addLockBtn(weaponMeta);
       } else {
         const sel = document.createElement('select');
         sel.className = 'insp-select';
@@ -1813,17 +1814,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           showInspector(slotData, container, r, c);
         });
         ctrlTarget.appendChild(sel);
-        _addWeaponLockBtn();
+        _addLockBtn(weaponMeta);
       }
     }
 
     const armorMeta = slotData.variables && slotData.variables.armor;
     if (armorMeta && armorMeta.control === 'select') {
-      if ((armorMeta.options || []).length === 1) {
+      if ((armorMeta.options || []).length === 1 || armorMeta.locked) {
         const span = document.createElement('span');
         span.className = 'insp-select insp-select--fixed';
         span.textContent = armorMeta.value;
         ctrlTarget.appendChild(span);
+        _addLockBtn(armorMeta);
       } else {
         const sel = document.createElement('select');
         sel.className = 'insp-select';
@@ -1844,16 +1846,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           showInspector(slotData, container, r, c);
         });
         ctrlTarget.appendChild(sel);
+        _addLockBtn(armorMeta);
       }
     }
 
     const elementMeta = slotData.variables && slotData.variables.element;
     if (elementMeta && elementMeta.control === 'select') {
-      if ((elementMeta.options || []).length === 1) {
+      if ((elementMeta.options || []).length === 1 || elementMeta.locked) {
         const span = document.createElement('span');
         span.className = 'insp-select insp-select--fixed';
         span.textContent = elementMeta.value;
         ctrlTarget.appendChild(span);
+        _addLockBtn(elementMeta);
       } else {
         const sel = document.createElement('select');
         sel.className = 'insp-select';
@@ -1871,16 +1875,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           render();
         });
         ctrlTarget.appendChild(sel);
+        _addLockBtn(elementMeta);
       }
     }
 
     const creatureMeta = slotData.variables && slotData.variables.creature;
     if (creatureMeta && creatureMeta.control === 'select') {
-      if ((creatureMeta.options || []).length === 1) {
+      if ((creatureMeta.options || []).length === 1 || creatureMeta.locked) {
         const span = document.createElement('span');
         span.className = 'insp-select insp-select--fixed';
         span.textContent = creatureMeta.value;
         ctrlTarget.appendChild(span);
+        _addLockBtn(creatureMeta);
       } else {
         const sel = document.createElement('select');
         sel.className = 'insp-select';
@@ -1899,16 +1905,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           showInspector(slotData, container, r, c);
         });
         ctrlTarget.appendChild(sel);
+        _addLockBtn(creatureMeta);
       }
     }
 
     const spellMeta = slotData.variables && slotData.variables.spell;
     if (spellMeta && spellMeta.control === 'select') {
-      if ((spellMeta.options || []).length === 1) {
+      if ((spellMeta.options || []).length === 1 || spellMeta.locked) {
         const span = document.createElement('span');
         span.className = 'insp-select insp-select--fixed';
         span.textContent = spellMeta.value;
         ctrlTarget.appendChild(span);
+        _addLockBtn(spellMeta);
       } else {
         const sel = document.createElement('select');
         sel.className = 'insp-select';
@@ -1927,6 +1935,37 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           showInspector(slotData, container, r, c);
         });
         ctrlTarget.appendChild(sel);
+        _addLockBtn(spellMeta);
+      }
+    }
+
+    const variantMeta = slotData.variables && slotData.variables.variant;
+    if (variantMeta && variantMeta.control === 'select') {
+      if ((variantMeta.options || []).length === 1 || variantMeta.locked) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = variantMeta.value;
+        ctrlTarget.appendChild(span);
+        _addLockBtn(variantMeta);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (variantMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === variantMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        _addPlaceholder(sel, 'Variant', variantMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.variant.value = sel.value;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+          showInspector(slotData, container, r, c);
+        });
+        ctrlTarget.appendChild(sel);
+        _addLockBtn(variantMeta);
       }
     }
 
@@ -1964,18 +2003,19 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     for (const [key, meta] of Object.entries(slotData.variables || {})) {
       // Numeric → shown inline; weapon/armor select → shown in props row
       if (meta.control === 'plusminus' || meta.control === 'both') continue;
-      if ((key === 'weapon' || key === 'armor' || key === 'element' || key === 'spell' || key === 'creature') && meta.control === 'select') continue;
+      if ((key === 'weapon' || key === 'armor' || key === 'element' || key === 'spell' || key === 'creature' || key === 'variant') && meta.control === 'select') continue;
 
       const div = document.createElement('div');
       div.className = 'insp-var';
       const label = document.createElement('span');
       label.className = 'insp-var-label';
       label.textContent = key;
-      if ((meta.options || []).length === 1) {
+      if ((meta.options || []).length === 1 || meta.locked) {
         const span = document.createElement('span');
         span.className = 'insp-select insp-select--fixed';
         span.textContent = meta.value;
         div.appendChild(label); div.appendChild(span);
+        _addLockBtn(meta, div);
       } else {
         const sel = document.createElement('select');
         sel.className = 'insp-select';
@@ -1987,6 +2027,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         });
         sel.addEventListener('change', () => { slotData.variables[key].value = sel.value; _updateUnresolved(); render(); showInspector(slotData, container, r, c, packIdx); });
         div.appendChild(label); div.appendChild(sel);
+        _addLockBtn(meta, div);
       }
       varsEl.appendChild(div);
     }
