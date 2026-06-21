@@ -6278,7 +6278,7 @@ window.CharacterManager = ({ auth, database }) => {
   const WEAPON_WEIGHTS = {
     "Longsword": 10, "Rapier": 6,
     "Shortsword": 8, "Greatsword": 6, "Greataxe": 6,
-    "Dagger": 3, "Handaxe": 1, "Longbow": 8,
+    "Dagger": 4, "Handaxe": 1, "Longbow": 8,
     "Glaive": 3, "Halberd": 3, "Maul": 3, "Battleaxe": 6,
     "Warhammer": 6, "Scimitar": 3, "Hand Crossbow": 1,
     "Flail": 3, "Morningstar": 3, "Trident": 3, "Spear": 1, "Quarterstaff": 1,
