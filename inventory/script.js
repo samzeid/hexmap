@@ -1750,11 +1750,28 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     const weaponMeta = slotData.variables && slotData.variables.weapon;
     if (weaponMeta && weaponMeta.control === 'select') {
-      if ((weaponMeta.options || []).length === 1) {
+      const _addWeaponLockBtn = () => {
+        if (!window._isDM) return;
+        const lockBtn = document.createElement('button');
+        lockBtn.className = 'prop-chip insp-lock-btn' + (weaponMeta.locked ? ' active-lock' : '');
+        lockBtn.title = weaponMeta.locked ? 'Unlock weapon type' : 'Lock weapon type';
+        const lockIcon = document.createElement('i');
+        lockIcon.className = weaponMeta.locked ? 'fas fa-lock' : 'fas fa-lock-open';
+        lockBtn.appendChild(lockIcon);
+        lockBtn.onclick = () => {
+          weaponMeta.locked = !weaponMeta.locked;
+          if (onChange) onChange();
+          render();
+          showInspector(slotData, container, r, c);
+        };
+        ctrlTarget.appendChild(lockBtn);
+      };
+      if ((weaponMeta.options || []).length === 1 || weaponMeta.locked) {
         const span = document.createElement('span');
         span.className = 'insp-select insp-select--fixed';
         span.textContent = weaponMeta.value;
         ctrlTarget.appendChild(span);
+        _addWeaponLockBtn();
       } else {
         const sel = document.createElement('select');
         sel.className = 'insp-select';
@@ -1796,6 +1813,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           showInspector(slotData, container, r, c);
         });
         ctrlTarget.appendChild(sel);
+        _addWeaponLockBtn();
       }
     }
 
@@ -7391,6 +7409,12 @@ window.CharacterManager = ({ auth, database }) => {
       }
     }
 
+    if (raw._varLocked) {
+      for (const [k, locked] of Object.entries(raw._varLocked)) {
+        if (resolved.variables?.[k] && locked) resolved.variables[k].locked = true;
+      }
+    }
+
     return resolved;
   };
 
@@ -7405,11 +7429,14 @@ window.CharacterManager = ({ auth, database }) => {
       if (slotData[k] !== undefined) compact[k] = slotData[k];
     if (slotData.variables) {
       const vars = {};
+      const lockedVars = {};
       for (const [k, v] of Object.entries(slotData.variables)) {
         const libVal = lib.variables?.[k]?.value;
         if (libVal === undefined || v.value !== libVal) vars[k] = v.value;
+        if (v.locked) lockedVars[k] = true;
       }
       if (Object.keys(vars).length) compact._vars = vars;
+      if (Object.keys(lockedVars).length) compact._varLocked = lockedVars;
     }
     return compact;
   };

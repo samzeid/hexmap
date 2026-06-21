@@ -2321,6 +2321,9 @@ body.is-dragging #inv-scroll {
   pointer-events: none;
 }
 
+.insp-lock-btn { padding: 4px 7px; font-size: 11px; }
+.insp-lock-btn.active-lock { background: rgba(255,200,80,0.18); border-color: rgba(255,200,80,0.5); color: #ffc850; }
+
 .insp-select.flash-required {
   animation: select-flash 0.28s ease-in-out 3 forwards;
 }
