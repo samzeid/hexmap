@@ -56,7 +56,12 @@ window.LIGHT_WEAPON_OPTIONS = [
 
 // Precise/patient weapons — for timing and setup-based items
 window.PATIENT_WEAPON_OPTIONS = [
-  "Quarterstaff","Spear","Battleaxe","Glaive","Greatsword","Halberd",
+  "Quarterstaff","Spear","Glaive","Halberd","Longsword",
+  "Rapier","Scimitar","Shortsword","Trident",
+  "Shortbow","Longbow",
+];
+window.BOUNDLESS_WEAPON_OPTIONS = [
+  "Spear","Flail","War Pick","Battleaxe","Greataxe","Glaive","Greatsword","Halberd",
   "Longsword","Morningstar","Rapier","Scimitar","Shortsword","Trident","Warhammer",
   "Shortbow","Longbow",
 ];
@@ -445,7 +450,7 @@ window.ITEM_LIBRARY = [
   { id: 211, name: "Keen Weapon",             bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you roll a 19 or 20 on an attack roll for this weapon, the hit is a critical hit.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Dagger","Handaxe","Sickle","Spear","Battleaxe","Glaive","Greataxe","Greatsword","Halberd","Longsword","Morningstar","Pike","Rapier","Scimitar","Shortsword","Trident","War Pick"] } } },
   { id: 212, name: "Fell Weapon",             bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you score a critical hit with this weapon, you can roll two additional weapon damage dice and add them to the extra damage.`, variables: { weapon: { control: "select", value: "Longsword", options: BRUTAL_WEAPON_OPTIONS } } },
   { id: 213, name: "Striving Weapon",         bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>Once each turn, you can reroll one weapon damage die for an attack made with this weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
-  { id: 214, name: "Boundless Weapon",        bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you roll the maximum result on a weapon damage die from this weapon, roll an additional weapon damage die and add it as extra damage.`, variables: { weapon: { control: "select", value: "Longsword", options: PATIENT_WEAPON_OPTIONS } } },
+  { id: 214, name: "Boundless Weapon",        bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you roll the maximum result on a weapon damage die from this weapon, roll an additional weapon damage die and add it as extra damage.`, variables: { weapon: { control: "select", value: "Longsword", options: BOUNDLESS_WEAPON_OPTIONS } } },
 
   { _rarity: "Rare" },
   { id: 215, name: "Patient Weapon",          bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>When you take the attack action, you can forgo one attack. If you do, the next attack you make with this weapon before the end of your next turn is made with advantage, even if you would have disadvantage.`, variables: { weapon: { control: "select", value: "Longsword", options: PATIENT_WEAPON_OPTIONS } } },
