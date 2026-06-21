@@ -1,4 +1,4 @@
-window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, isHiddenFromPlayer, onSound }) => {
+window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, onDmListingDrop, isHiddenFromPlayer, onSound }) => {
 
   // ── STATE ──────────────────────────────────────────────────────────────
   function createDefaultContainers() {
@@ -5409,7 +5409,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     const wrap = el && el.closest('[data-container-id]');
     const targetContainer = wrap && state.containers.find(c => c.id === wrap.dataset.containerId);
-    const isShopDrag = !!dragState._shopDrag;
+    const isShopDrag   = !!dragState._shopDrag;
+    const isDmListing  = !!dragState._isDmListing;
+    const _randRemove  = dragState._randRemove || null;
     const { slotData, srcContainer, srcR, srcC, srcCenter, removeFromSource } = dragState;
     dragState = null;
 
@@ -5505,6 +5507,15 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       return;
     }
 
+    // Drop into DM Listings zone
+    const dmListingsZone = el && el.closest('[data-dm-listings-drop]');
+    if (dmListingsZone && window._isDM && !isDmListing) {
+      if (onDmListingDrop) onDmListingDrop(slotData);
+      if (_randRemove) _randRemove();
+      render();
+      return;
+    }
+
     if (targetContainer) {
       const tR = parseInt(wrap.dataset.r);
       const tC = parseInt(wrap.dataset.c);
@@ -5577,6 +5588,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const _placed = placeSlotData(slotData, targetContainer, tR, tC);
       if (_placed && !slotData._unresolved && isShopDrag && onShopPurchase) onShopPurchase(slotData);
       if (_placed && onSound) onSound(isShopDrag ? 'coin' : 'place');
+      if (_placed && isDmListing && shopOpen) buildShop();
       const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
       if (srcCenter) spawnFlightClone(slotData.name || '', srcCenter, actualDest);
     } else {
@@ -5682,6 +5694,17 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const overShop = e.clientX >= str.left && e.clientX <= str.right
                     && e.clientY >= str.top  && e.clientY <= str.bottom;
       _shopTabBtn.classList.toggle('shop-tab-sell-hover', overShop);
+    }
+
+    // Highlight DM listings drop zone when DM is dragging over it
+    if (window._isDM && !dragState._isDmListing) {
+      const listZone = document.querySelector('[data-dm-listings-drop]');
+      if (listZone) {
+        const lz = listZone.getBoundingClientRect();
+        const overList = e.clientX >= lz.left && e.clientX <= lz.right
+                      && e.clientY >= lz.top  && e.clientY <= lz.bottom;
+        listZone.classList.toggle('dm-listings-drag-over', overList);
+      }
     }
 
     dragScrollVel = 0;
@@ -5817,6 +5840,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
     // ── SHOP API ────────────────────────────────────────────────
     computeDisplayName(slotData) { return computeDisplayName(slotData); },
+    getSlotTypeCostCp(slotData) { return getSlotTypeCostCp(slotData); },
+    getSlotMaterialCostCp(slotData, isAmmo) { return getSlotMaterialCostCp(slotData, isAmmo); },
     toggleShopItem(slotData, key) {
       toggleInspectorFor(key, slotData, null, -1, -1);
     },
@@ -5828,6 +5853,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     startShopDrag(slotData, x, y) {
       startDrag(slotData, null, -1, -1, x, y, null, () => {});
       dragState._shopDrag = true;
+    },
+    startRandItemDrag(slotData, x, y, randRemove) {
+      startDrag(slotData, null, -1, -1, x, y, null, () => {});
+      dragState._shopDrag = true;
+      if (randRemove) dragState._randRemove = randRemove;
+    },
+    startDmListingDrag(slotData, x, y, removeCallback) {
+      startDrag(slotData, null, -1, -1, x, y, null, removeCallback || (() => {}));
+      dragState._shopDrag = true;
+      dragState._isDmListing = true;
     },
     addItem(slotData) {
       addItemLocal(slotData);
@@ -6005,6 +6040,7 @@ window.CharacterManager = ({ auth, database }) => {
     onChange:            handleInventoryChange,
     onCrossCharDrop:     handleCrossCharDrop,
     onShopPurchase:      handleShopPurchase,
+    onDmListingDrop:     handleDmListingDrop,
     isHiddenFromPlayer:  (itemName) => !isItemVisible(itemName, getItemSection(itemName)),
     onSound:             playSound,
   });
@@ -6265,6 +6301,28 @@ window.CharacterManager = ({ auth, database }) => {
     shopAvailRef = database.ref('/inventory_shop_availability');
     shopAvailRef.on('value', snap => {
       shopAvailability = decodeVisObj(snap.val() || {});
+      if (shopOpen) buildShop();
+    });
+  }
+
+  let dmListings = [];
+  let dmListingsRef = null;
+  let dmListingsCollapsed = localStorage.getItem('dmListingsCollapsed') === 'true';
+
+  function saveDmListings() {
+    if (!dmListingsRef) return;
+    const compact = dmListings.map(s => compactSlotData(s)).filter(Boolean);
+    dmListingsRef.set(compact.length ? JSON.stringify(compact) : null);
+  }
+
+  function subscribeToDmListings() {
+    if (dmListingsRef) dmListingsRef.off('value');
+    dmListingsRef = database.ref('/inventory_dm_listings');
+    dmListingsRef.on('value', snap => {
+      try {
+        const raw = JSON.parse(snap.val() || '[]');
+        dmListings = raw.map(r => resolveSlotData(r)).filter(Boolean);
+      } catch { dmListings = []; }
       if (shopOpen) buildShop();
     });
   }
@@ -6603,7 +6661,17 @@ window.CharacterManager = ({ auth, database }) => {
             row._shopDragging = true;
             row.classList.add('shop-item-dragging');
             document.documentElement.setPointerCapture(lpPointerId);
-            inv.startShopDrag(slotData, e.clientX, e.clientY);
+            inv.startRandItemDrag(slotData, e.clientX, e.clientY, () => {
+              const i = _randLastRoll.findIndex(r => r.slotData === slotData);
+              if (i !== -1) {
+                _randLastRoll.splice(i, 1);
+                randResult.innerHTML = '';
+                _randLastRoll.forEach(({ item, itemSection, itemRarity, slotData: sd }) => {
+                  randResult.appendChild(buildRandResultRow(item, itemSection, itemRarity, sd));
+                });
+                if (!_randLastRoll.length) randResult.style.visibility = 'hidden';
+              }
+            });
             const cleanup = () => {
               row._shopDragging = false;
               row.classList.remove('shop-item-dragging');
@@ -6696,6 +6764,119 @@ window.CharacterManager = ({ auth, database }) => {
       }
     }
     // ── END DM RANDOMIZER ─────────────────────────────────────────────────────
+
+    // ── DM LISTINGS SECTION ───────────────────────────────────────────────────
+    if (dmListings.length > 0 || window._isDM) {
+      const listSection = document.createElement('div');
+      listSection.className = 'dm-listings-section';
+      if (window._isDM) listSection.dataset.dmListingsDrop = 'true';
+
+      const listHeading = document.createElement('button');
+      listHeading.className = 'dm-listings-toggle';
+      const _listCount = dmListings.length;
+      listHeading.innerHTML = `For Sale${_listCount ? ` <span class="dm-listings-count">${_listCount}</span>` : ''}<i class="fas fa-chevron-${dmListingsCollapsed ? 'down' : 'up'} dm-listings-chevron"></i>`;
+      listHeading.addEventListener('click', () => {
+        dmListingsCollapsed = !dmListingsCollapsed;
+        localStorage.setItem('dmListingsCollapsed', dmListingsCollapsed);
+        buildShop();
+      });
+      listSection.appendChild(listHeading);
+
+      if (!dmListingsCollapsed) {
+      if (dmListings.length === 0) {
+        const emptyEl = document.createElement('div');
+        emptyEl.className = 'dm-listings-empty';
+        emptyEl.textContent = 'Drag items here to list for sale';
+        listSection.appendChild(emptyEl);
+      }
+
+      dmListings.forEach((listingData, listIdx) => {
+        const listRow = document.createElement('div');
+        listRow.className = 'shop-item-row';
+
+        const listNameSpan = document.createElement('span');
+        listNameSpan.className = 'shop-item-name';
+        const _ls = listingData.silvered ? 'Silvered ' : '';
+        const _lm = (listingData.material === 'mithral' || listingData.material === 'adamantine')
+          ? listingData.material.charAt(0).toUpperCase() + listingData.material.slice(1) + ' ' : '';
+        listNameSpan.textContent = _ls + _lm + inv.computeDisplayName(listingData);
+        listRow.appendChild(listNameSpan);
+
+        const listTotalCp = (listingData.cost ? shopCostToCp(listingData.cost) : 0)
+          + inv.getSlotTypeCostCp(listingData)
+          + inv.getSlotMaterialCostCp(listingData, listingData.category === 'ammunition');
+        const listCostEl = document.createElement('span');
+        listCostEl.className = 'shop-item-cost';
+        if (listTotalCp > 0) listCostEl.innerHTML = renderCostHtml(listTotalCp, '');
+        listRow.appendChild(listCostEl);
+
+        if (window._isDM) {
+          const listRemoveBtn = document.createElement('button');
+          listRemoveBtn.className = 'shop-item-vis-btn';
+          listRemoveBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+          listRemoveBtn.title = 'Remove listing';
+          listRemoveBtn.addEventListener('pointerdown', e => e.stopPropagation());
+          listRemoveBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            dmListings.splice(listIdx, 1);
+            saveDmListings();
+            buildShop();
+          });
+          listRow.appendChild(listRemoveBtn);
+        }
+
+        listRow.addEventListener('click', e => {
+          if (listRow._dragging || e.target.closest('.shop-item-vis-btn')) return;
+          inv.toggleShopItem(listingData, `dm-listing-${listIdx}`);
+        });
+
+        listRow.style.touchAction = 'none';
+        let _lt = null, _lx, _ly, _lpid, _ltrk = false;
+        listRow.addEventListener('pointerdown', e => {
+          if (e.button !== 0) return;
+          _lx = e.clientX; _ly = e.clientY; _lpid = e.pointerId; _ltrk = true;
+          _lt = setTimeout(() => {
+            _lt = null;
+            listRow._dragging = true;
+            listRow.classList.add('shop-item-dragging');
+            document.documentElement.setPointerCapture(_lpid);
+            inv.startDmListingDrag(listingData, e.clientX, e.clientY, () => {
+              dmListings.splice(listIdx, 1);
+              saveDmListings();
+            });
+            const _lclean = () => {
+              listRow._dragging = false;
+              listRow.classList.remove('shop-item-dragging');
+              document.removeEventListener('pointerup', _lclean);
+              document.removeEventListener('pointercancel', _lclean);
+            };
+            document.addEventListener('pointerup', _lclean);
+            document.addEventListener('pointercancel', _lclean);
+          }, 380);
+        });
+        listRow.addEventListener('pointermove', e => {
+          if (!_ltrk) return;
+          if ((e.clientX - _lx) ** 2 + (e.clientY - _ly) ** 2 > 64) {
+            if (_lt) { clearTimeout(_lt); _lt = null; }
+            _ltrk = false;
+          }
+        });
+        const _lcancel = () => {
+          if (_lt) { clearTimeout(_lt); _lt = null; }
+          _ltrk = false;
+          listRow._dragging = false;
+          listRow.classList.remove('shop-item-dragging');
+        };
+        listRow.addEventListener('pointerup', _lcancel);
+        listRow.addEventListener('pointercancel', _lcancel);
+
+        listSection.appendChild(listRow);
+      });
+      } // end !dmListingsCollapsed
+
+      scroll.appendChild(listSection);
+    }
+    // ── END DM LISTINGS ───────────────────────────────────────────────────────
 
     // Calculate current character's total wealth in cp for affordability display
     const charCoins = getCharCoins(currentCharId ? allChars[currentCharId]?.state : null);
@@ -7061,6 +7242,7 @@ window.CharacterManager = ({ auth, database }) => {
     const category = document.getElementById('shop-category').value;
     const scroll   = document.getElementById('shop-scroll');
     scroll.querySelectorAll('.shop-item-row').forEach(row => {
+      if (row.closest('.dm-listings-section')) return;
       const nameMatch = !query    || row.querySelector('.shop-item-name').textContent.toLowerCase().includes(query);
       const catMatch  = !category || row.dataset.section === category;
       const visMatch  = window._isDM || row.dataset.playerHidden !== 'true';
@@ -7267,10 +7449,13 @@ window.CharacterManager = ({ auth, database }) => {
       subscribeToChars();
       subscribeToShopVisibility();
       subscribeToShopAvailability();
+      subscribeToDmListings();
     } else {
-      if (charsRef)    { charsRef.off('value');    charsRef    = null; }
-      if (shopVisRef)  { shopVisRef.off('value');  shopVisRef  = null; }
-      if (shopAvailRef){ shopAvailRef.off('value'); shopAvailRef = null; }
+      if (charsRef)      { charsRef.off('value');      charsRef      = null; }
+      if (shopVisRef)    { shopVisRef.off('value');    shopVisRef    = null; }
+      if (shopAvailRef)  { shopAvailRef.off('value');  shopAvailRef  = null; }
+      if (dmListingsRef) { dmListingsRef.off('value'); dmListingsRef = null; }
+      dmListings = [];
       userCanBeDM    = false;
       window._isDM   = false;
       currentCharId  = null;
@@ -7635,6 +7820,15 @@ window.CharacterManager = ({ auth, database }) => {
     return confirm(`This will spend coins from ${charName} (owned by ${ownerName}). Continue?`);
   }
 
+  function handleDmListingDrop(slotData) {
+    const compact = compactSlotData(slotData);
+    const resolved = compact ? resolveSlotData(compact) : null;
+    if (!resolved) return;
+    dmListings.push(resolved);
+    saveDmListings();
+    if (shopOpen) buildShop();
+  }
+
   function handleShopPurchase(slotData, skipWalletConfirm = false) {
     if (slotData._unresolved) return;
     if (!skipWalletConfirm && !confirmSpendingOtherWallet()) {
@@ -7665,6 +7859,7 @@ window.CharacterManager = ({ auth, database }) => {
       }
     }
     if (shopOpen) updateShopWallet();
+    saveDmListings();
     saveChar(currentCharId);
   }
 

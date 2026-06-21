@@ -565,6 +565,55 @@ input, textarea, select { font-size: max(16px, 1em); }
 .shop-item-unaffordable .cost-sp,
 .shop-item-unaffordable .cost-cp { color: rgba(255, 80, 80, 0.85); }
 
+/* ── DM LISTINGS ──────────────────────────────────────────────────────────── */
+.dm-listings-section {
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg);
+}
+.dm-listings-section[data-dm-listings-drop] {
+  min-height: 52px;
+}
+.dm-listings-section[data-dm-listings-drop].dm-listings-drag-over {
+  background: rgba(255,255,255,0.04);
+  outline: 1px dashed rgba(255,255,255,0.2);
+  outline-offset: -4px;
+}
+.dm-listings-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 16px 14px 6px;
+}
+.dm-listings-toggle:hover { background: rgba(255,255,255,0.04); }
+.dm-listings-chevron { margin-left: auto; font-size: 10px; opacity: 0.5; }
+.dm-listings-count {
+  font-size: 10px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 1px 6px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.dm-listings-empty {
+  padding: 4px 14px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  opacity: 0.45;
+  font-style: italic;
+}
+
 /* ── DM RANDOMIZER ────────────────────────────────────────────────────────── */
 .dm-randomizer {
   margin: 12px 12px 4px;
