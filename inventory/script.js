@@ -7002,6 +7002,7 @@ window.CharacterManager = ({ auth, database }) => {
       if (item.name === 'Ammunition' && !cachedSlotData.silvered && !cachedSlotData.material) cachedSlotData._unresolved = true;
 
       const getTypeCostCp = () => {
+        if (!typeNeedsChoice) return 0;
         const typeName = cachedSlotData.variables?.weapon?.value
                       ?? cachedSlotData.variables?.armor?.value;
         if (typeName) {
