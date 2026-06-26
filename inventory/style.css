@@ -4236,7 +4236,7 @@ span.cs-feature-ticker {
   border: none;
   color: rgba(255, 255, 255, 0.3);
   font-size: 9px;
-  padding: 2px;
+  padding: 6px 8px;
   cursor: pointer;
   line-height: 1;
   -webkit-tap-highlight-color: transparent;
