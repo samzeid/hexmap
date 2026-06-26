@@ -4160,6 +4160,73 @@ span.cs-feature-ticker {
   background: rgba(255, 255, 255, 0.07);
 }
 
+.cs-notes-add-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.cs-notes-add-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10px;
+  font-family: inherit;
+  padding: 2px 7px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, color 0.15s;
+}
+.cs-notes-add-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.cs-notes-entry-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.cs-notes-entry {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 10px;
+  font-family: inherit;
+  padding: 4px 6px;
+  resize: none;
+  overflow: hidden;
+  outline: none;
+  min-height: 26px;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+.cs-notes-entry:focus {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cs-notes-remove-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 11px;
+  padding: 4px 3px;
+  cursor: pointer;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s;
+  margin-top: 3px;
+}
+.cs-notes-remove-btn:hover {
+  color: rgba(255, 100, 100, 0.7);
+}
+
 /* Narrow: stack vertically */
 .cs-main-cols {
   display: flex;

@@ -173,6 +173,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     hiddenFeatures:   [],
     featureData:      {},
     featureCollapsed: {},
+    notes: [],
   };
 
   function updateProfButtons() {
@@ -5014,6 +5015,71 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     });
   }
 
+  // ── NOTES ─────────────────────────────────────────────────────
+  const notesToggle = document.getElementById('cs-notes-toggle');
+  const notesBody   = document.getElementById('cs-notes-body');
+  const notesList   = document.getElementById('cs-notes-list');
+  const notesAdd    = document.getElementById('cs-notes-add');
+
+  function renderNotes() {
+    if (!notesList) return;
+    notesList.innerHTML = '';
+    state.notes.forEach((text, i) => {
+      const row = document.createElement('div');
+      row.className = 'cs-notes-entry-row';
+
+      const ta = document.createElement('textarea');
+      ta.className = 'cs-notes-entry';
+      ta.autocomplete = 'off';
+      ta.rows = 1;
+      ta.value = text;
+      ta.addEventListener('input', () => {
+        autoResizeTextarea(ta);
+        state.notes[i] = ta.value;
+        if (onChange) onChange();
+      });
+      setTimeout(() => autoResizeTextarea(ta), 0);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'cs-notes-remove-btn';
+      removeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      removeBtn.addEventListener('click', () => {
+        state.notes.splice(i, 1);
+        renderNotes();
+        if (onChange) onChange();
+      });
+
+      row.appendChild(ta);
+      row.appendChild(removeBtn);
+      notesList.appendChild(row);
+    });
+  }
+
+  if (notesToggle && notesBody) {
+    notesToggle.addEventListener('click', () => {
+      const open = notesBody.hidden;
+      notesBody.hidden = !open;
+      notesToggle.setAttribute('aria-expanded', String(open));
+      notesToggle.classList.toggle('cs-other-profs-open', open);
+    });
+  }
+
+  if (notesAdd) {
+    notesAdd.addEventListener('click', () => {
+      if (notesBody && notesBody.hidden) {
+        notesBody.hidden = false;
+        notesToggle?.setAttribute('aria-expanded', 'true');
+        notesToggle?.classList.add('cs-other-profs-open');
+      }
+      state.notes.push('');
+      renderNotes();
+      const entries = notesList?.querySelectorAll('.cs-notes-entry');
+      if (entries?.length) entries[entries.length - 1].focus();
+      if (onChange) onChange();
+    });
+  }
+
   // ── INSPIRATION ───────────────────────────────────────────────
   function updateInspirationDisplay() {
     const btn = document.getElementById('cs-inspiration-toggle');
@@ -5871,6 +5937,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         hiddenFeatures:   state.hiddenFeatures,
         featureData:      state.featureData,
         featureCollapsed: state.featureCollapsed,
+        notes:            state.notes,
         ...csState,
         ...profState,
       }));
@@ -5996,6 +6063,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       state.hiddenFeatures  = Array.isArray(newState.hiddenFeatures)   ? newState.hiddenFeatures  : [];
       state.featureData     = (newState.featureData && typeof newState.featureData === 'object') ? newState.featureData : {};
       state.featureCollapsed = (newState.featureCollapsed && typeof newState.featureCollapsed === 'object') ? newState.featureCollapsed : {};
+      state.notes = Array.isArray(newState.notes) ? newState.notes : [];
+      renderNotes();
       updateInspirationDisplay();
       updateDeathSavesDisplay();
       updateExhaustionDisplay();
@@ -6200,6 +6269,8 @@ window.CharacterManager = ({ auth, database }) => {
     const canEdit = canEditCurrentChar();
     charFieldsEditBtn.hidden = !canEdit;
     statsPanelEl.classList.toggle('char-view-only', !canEdit);
+    const notesSectionEl = document.getElementById('cs-notes-section');
+    if (notesSectionEl) notesSectionEl.hidden = !canEdit;
   }
 
   function setStatsEditing(on) {
