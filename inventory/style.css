@@ -4302,13 +4302,12 @@ span.cs-feature-ticker {
   background: none;
   border: none;
   color: rgba(255, 255, 255, 0.25);
-  font-size: 11px;
-  padding: 4px 3px;
+  font-size: 14px;
+  padding: 6px 8px;
   cursor: pointer;
   line-height: 1;
   -webkit-tap-highlight-color: transparent;
   transition: color 0.15s;
-  margin-top: 3px;
 }
 .cs-notes-remove-btn:hover {
   color: rgba(255, 100, 100, 0.7);
