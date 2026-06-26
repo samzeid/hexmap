@@ -5020,32 +5020,48 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   const notesBody   = document.getElementById('cs-notes-body');
   const notesList   = document.getElementById('cs-notes-list');
 
+  let dragSrcIdx = -1;
+
   function renderNotes() {
     if (!notesList) return;
     notesList.innerHTML = '';
-    state.notes.forEach((text, i) => {
+    state.notes.forEach((note, i) => {
       const row = document.createElement('div');
       row.className = 'cs-notes-entry-row';
+      row.draggable = true;
+      row.dataset.idx = i;
 
-      const ta = document.createElement('textarea');
-      ta.className = 'cs-notes-entry';
-      ta.autocomplete = 'off';
-      ta.rows = 1;
-      ta.value = text;
-      ta.addEventListener('input', () => {
-        autoResizeTextarea(ta);
-        state.notes[i] = ta.value;
+      // ── header ──────────────────────────────────────
+      const header = document.createElement('div');
+      header.className = 'cs-notes-entry-header';
+
+      const handle = document.createElement('span');
+      handle.className = 'cs-notes-drag-handle';
+      handle.innerHTML = '<i class="fa-solid fa-grip-vertical"></i>';
+      handle.title = 'Drag to reorder';
+
+      const chevron = document.createElement('button');
+      chevron.type = 'button';
+      chevron.className = 'cs-notes-chevron';
+      chevron.tabIndex = -1;
+      chevron.innerHTML = note.open
+        ? '<i class="fa-solid fa-chevron-down"></i>'
+        : '<i class="fa-solid fa-chevron-right"></i>';
+      chevron.addEventListener('click', () => {
+        state.notes[i].open = !state.notes[i].open;
+        renderNotes();
         if (onChange) onChange();
       });
-      setTimeout(() => autoResizeTextarea(ta), 0);
 
-      ta.addEventListener('blur', (e) => {
-        if (e.relatedTarget === removeBtn) return;
-        if (!ta.value.trim()) {
-          state.notes.splice(i, 1);
-          renderNotes();
-          if (onChange) onChange();
-        }
+      const titleInput = document.createElement('input');
+      titleInput.type = 'text';
+      titleInput.className = 'cs-notes-title';
+      titleInput.placeholder = 'Title…';
+      titleInput.autocomplete = 'off';
+      titleInput.value = note.title;
+      titleInput.addEventListener('input', () => {
+        state.notes[i].title = titleInput.value;
+        if (onChange) onChange();
       });
 
       const removeBtn = document.createElement('button');
@@ -5054,14 +5070,78 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       removeBtn.tabIndex = -1;
       removeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
       removeBtn.addEventListener('click', () => {
-        if (ta.value.trim() && !confirm('Delete this note?')) return;
+        const hasContent = note.title.trim() || note.body.trim();
+        if (hasContent && !confirm('Delete this note?')) return;
         state.notes.splice(i, 1);
         renderNotes();
         if (onChange) onChange();
       });
 
-      row.appendChild(ta);
-      row.appendChild(removeBtn);
+      header.appendChild(handle);
+      header.appendChild(chevron);
+      header.appendChild(titleInput);
+      header.appendChild(removeBtn);
+
+      // ── body ────────────────────────────────────────
+      const bodyDiv = document.createElement('div');
+      bodyDiv.className = 'cs-notes-entry-body';
+      bodyDiv.hidden = !note.open;
+
+      const ta = document.createElement('textarea');
+      ta.className = 'cs-notes-entry';
+      ta.autocomplete = 'off';
+      ta.rows = 1;
+      ta.value = note.body;
+      ta.addEventListener('input', () => {
+        autoResizeTextarea(ta);
+        state.notes[i].body = ta.value;
+        if (onChange) onChange();
+      });
+      setTimeout(() => autoResizeTextarea(ta), 0);
+
+      ta.addEventListener('blur', (e) => {
+        if (e.relatedTarget === removeBtn) return;
+        if (!ta.value.trim() && !note.title.trim()) {
+          state.notes.splice(i, 1);
+          renderNotes();
+          if (onChange) onChange();
+        }
+      });
+
+      bodyDiv.appendChild(ta);
+
+      // ── drag events ──────────────────────────────────
+      row.addEventListener('dragstart', (e) => {
+        dragSrcIdx = i;
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => row.classList.add('cs-notes-dragging'), 0);
+      });
+      row.addEventListener('dragend', () => {
+        row.classList.remove('cs-notes-dragging');
+        notesList.querySelectorAll('.cs-notes-entry-row').forEach(r => r.classList.remove('cs-notes-drag-over'));
+      });
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        notesList.querySelectorAll('.cs-notes-entry-row').forEach(r => r.classList.remove('cs-notes-drag-over'));
+        if (i !== dragSrcIdx) row.classList.add('cs-notes-drag-over');
+      });
+      row.addEventListener('dragleave', () => {
+        row.classList.remove('cs-notes-drag-over');
+      });
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        row.classList.remove('cs-notes-drag-over');
+        if (dragSrcIdx === -1 || dragSrcIdx === i) return;
+        const moved = state.notes.splice(dragSrcIdx, 1)[0];
+        state.notes.splice(i, 0, moved);
+        dragSrcIdx = -1;
+        renderNotes();
+        if (onChange) onChange();
+      });
+
+      row.appendChild(header);
+      row.appendChild(bodyDiv);
       notesList.appendChild(row);
     });
 
@@ -5070,9 +5150,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     addBtn.className = 'cs-notes-add-btn';
     addBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
     addBtn.addEventListener('click', () => {
-      state.notes.push('');
+      state.notes.push({ title: '', body: '', open: true });
       renderNotes();
-      notesList.querySelectorAll('.cs-notes-entry').item(state.notes.length - 1)?.focus();
+      notesList.querySelectorAll('.cs-notes-title').item(state.notes.length - 1)?.focus();
       if (onChange) onChange();
     });
     notesList.appendChild(addBtn);
@@ -6070,7 +6150,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       state.hiddenFeatures  = Array.isArray(newState.hiddenFeatures)   ? newState.hiddenFeatures  : [];
       state.featureData     = (newState.featureData && typeof newState.featureData === 'object') ? newState.featureData : {};
       state.featureCollapsed = (newState.featureCollapsed && typeof newState.featureCollapsed === 'object') ? newState.featureCollapsed : {};
-      state.notes = Array.isArray(newState.notes) ? newState.notes : [];
+      state.notes = Array.isArray(newState.notes)
+        ? newState.notes.map(n => typeof n === 'string'
+            ? { title: '', body: n, open: true }
+            : { title: n.title || '', body: n.body || '', open: !!n.open })
+        : [];
       renderNotes();
       updateInspirationDisplay();
       updateDeathSavesDisplay();

@@ -4161,7 +4161,9 @@ span.cs-feature-ticker {
 }
 
 #cs-notes-body textarea,
-#cs-notes-body .cs-notes-remove-btn {
+#cs-notes-body input,
+#cs-notes-body .cs-notes-remove-btn,
+#cs-notes-body .cs-notes-chevron {
   pointer-events: auto;
 }
 
@@ -4188,12 +4190,93 @@ span.cs-feature-ticker {
 
 .cs-notes-entry-row {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+}
+
+.cs-notes-entry-row + .cs-notes-entry-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 5px;
+  margin-top: 3px;
+}
+
+.cs-notes-drag-handle {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.18);
+  font-size: 11px;
+  padding: 4px 1px 4px 0;
+  cursor: grab;
+  line-height: 1;
+  margin-top: 3px;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s;
+  user-select: none;
+}
+
+.cs-notes-drag-handle:hover {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.cs-notes-entry-row.cs-notes-dragging {
+  opacity: 0.4;
+}
+
+.cs-notes-entry-row.cs-notes-drag-over {
+  border-top: 2px solid rgba(255, 255, 255, 0.45);
+}
+
+.cs-notes-entry-header {
+  display: flex;
+  align-items: center;
   gap: 4px;
 }
 
-.cs-notes-entry {
+.cs-notes-chevron {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 9px;
+  padding: 2px;
+  cursor: pointer;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s;
+}
+
+.cs-notes-chevron:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.cs-notes-title {
   flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 10px;
+  font-family: inherit;
+  font-weight: 600;
+  padding: 2px 2px;
+  outline: none;
+  min-width: 0;
+  transition: border-color 0.15s;
+}
+
+.cs-notes-title::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+  font-weight: 400;
+}
+
+.cs-notes-title:focus {
+  border-bottom-color: rgba(255, 255, 255, 0.25);
+}
+
+.cs-notes-entry-body {
+  padding: 4px 0 2px 18px;
+}
+
+.cs-notes-entry {
+  width: 100%;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 5px;
@@ -4208,6 +4291,7 @@ span.cs-feature-ticker {
   box-sizing: border-box;
   line-height: 1.5;
 }
+
 .cs-notes-entry:focus {
   border-color: rgba(255, 255, 255, 0.3);
   background: rgba(255, 255, 255, 0.08);
