@@ -5019,7 +5019,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   const notesToggle = document.getElementById('cs-notes-toggle');
   const notesBody   = document.getElementById('cs-notes-body');
   const notesList   = document.getElementById('cs-notes-list');
-  const notesAdd    = document.getElementById('cs-notes-add');
 
   function renderNotes() {
     if (!notesList) return;
@@ -5054,6 +5053,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       row.appendChild(removeBtn);
       notesList.appendChild(row);
     });
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'cs-notes-add-btn';
+    addBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+    addBtn.addEventListener('click', () => {
+      state.notes.push('');
+      renderNotes();
+      notesList.querySelectorAll('.cs-notes-entry').item(state.notes.length - 1)?.focus();
+      if (onChange) onChange();
+    });
+    notesList.appendChild(addBtn);
   }
 
   if (notesToggle && notesBody) {
@@ -5062,21 +5073,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       notesBody.hidden = !open;
       notesToggle.setAttribute('aria-expanded', String(open));
       notesToggle.classList.toggle('cs-other-profs-open', open);
-    });
-  }
-
-  if (notesAdd) {
-    notesAdd.addEventListener('click', () => {
-      if (notesBody && notesBody.hidden) {
-        notesBody.hidden = false;
-        notesToggle?.setAttribute('aria-expanded', 'true');
-        notesToggle?.classList.add('cs-other-profs-open');
-      }
-      state.notes.push('');
-      renderNotes();
-      const entries = notesList?.querySelectorAll('.cs-notes-entry');
-      if (entries?.length) entries[entries.length - 1].focus();
-      if (onChange) onChange();
     });
   }
 
