@@ -5039,11 +5039,22 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       });
       setTimeout(() => autoResizeTextarea(ta), 0);
 
+      ta.addEventListener('blur', (e) => {
+        if (e.relatedTarget === removeBtn) return;
+        if (!ta.value.trim()) {
+          state.notes.splice(i, 1);
+          renderNotes();
+          if (onChange) onChange();
+        }
+      });
+
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'cs-notes-remove-btn';
+      removeBtn.tabIndex = -1;
       removeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
       removeBtn.addEventListener('click', () => {
+        if (ta.value.trim() && !confirm('Delete this note?')) return;
         state.notes.splice(i, 1);
         renderNotes();
         if (onChange) onChange();
