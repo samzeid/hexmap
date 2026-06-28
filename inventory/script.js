@@ -5621,15 +5621,26 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       return;
     }
 
-    // Sell: dropped on shop tab button
+    // Sell / list for sale: dropped on shop tab button
     if (el && (el === _shopTabBtn || _shopTabBtn.contains(el)) && srcContainer) {
-      // Block selling a container that still has items
+      // Block if container still has items
       if (slotData.containerId) {
         const linked = state.containers.find(c => c.id === slotData.containerId);
         if (linked && containerHasItems(linked)) {
           flashBlockedContainer(srcContainer.id, srcR, srcC, slotData.containerId);
           return;
         }
+      }
+
+      // In DM mode: list for sale and remove from inventory
+      if (window._isDM) {
+        if (slotData.containerId)
+          state.containers = state.containers.filter(c => c.id !== slotData.containerId);
+        removeFromSource();
+        if (onDmListingDrop) onDmListingDrop(slotData);
+        if (onSound) onSound('place');
+        render();
+        return;
       }
 
       const lib = getLibraryItem(slotData.name);
