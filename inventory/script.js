@@ -1530,6 +1530,31 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         notesEl.value = slotData.notes || '';
         notesEl.oninput = () => { slotData.notes = notesEl.value; };
       }
+    } else if (lib && lib.linkedSpell) {
+      const _spell = (window.SPELLS_XPHB || []).find(s => s.n === lib.linkedSpell);
+      descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
+      if (_spell) {
+        const _lvlNames = ['Cantrip','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
+        const _lvlLabel = _spell.l === 0 ? `${_spell.sc} Cantrip` : `${_lvlNames[_spell.l]}-Level ${_spell.sc}`;
+        const _tags = [];
+        if (_spell.conc)   _tags.push('Concentration');
+        if (_spell.ritual) _tags.push('Ritual');
+        const _sub = _lvlLabel + (_tags.length ? ` · ${_tags.join(' · ')}` : '');
+        const _rd = t => (t || '').split('\n').map(ln =>
+          ln.startsWith('• ') ? `<div class="spell-detail-bullet">${ln.slice(2)}</div>` : `<p>${ln}</p>`
+        ).join('');
+        const _preamble = `<i>When casting a spell scroll, use your spell save DC and spell attack bonus, or DC 13 and +5 if yours are lower. If the spell is of a level above what you can cast, you must succeed on an Intelligence (Arcana) check with a DC equal to 10 plus the spell’s level, or the spell fails and the scroll is destroyed.</i>`;
+        let _html = _preamble + `<div class="scroll-spell-sub">${_sub}</div><div class="spell-detail-props">`;
+        [['Casting Time', _spell.t], ['Range', _spell.r], ['Components', _spell.c], ['Duration', _spell.d]].forEach(([lbl, val]) => {
+          if (val) _html += `<div class="spell-detail-prop"><span class="spell-detail-prop-lbl">${lbl}</span><span class="spell-detail-prop-val">${val}</span></div>`;
+        });
+        _html += `</div><div class="spell-detail-desc">${_rd(_spell.desc)}</div>`;
+        if (_spell.higher) _html += `<div class="spell-detail-higher"><div class="spell-detail-higher-lbl">At Higher Levels</div>${_rd(_spell.higher)}</div>`;
+        descP.innerHTML = _html;
+      } else {
+        descP.innerHTML = '<i>Spell data not found.</i>';
+      }
+      if (container) { notesEl.value = slotData.notes || ''; notesEl.oninput = () => { slotData.notes = notesEl.value; }; }
     } else {
       descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
       descP.innerHTML = resolveItemDescription(lib, slotData);

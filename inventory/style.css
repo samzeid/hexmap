@@ -3990,6 +3990,14 @@ span.cs-feature-ticker {
   color: rgba(162, 90, 222, 0.7);
   margin-bottom: 4px;
 }
+.scroll-spell-sub {
+  font-size: 10.5px;
+  color: rgb(162, 90, 222);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 8px 0 6px;
+}
+#insp-desc .spell-detail-props { margin-bottom: 8px; }
 
 /* ── Feature: Sorcery Points ─────────────────────────────────── */
 .cs-feat-sorcery { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 4px 0; }
