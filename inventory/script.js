@@ -7522,7 +7522,7 @@ window.CharacterManager = ({ auth, database }) => {
     if (!_handlingPopstate) history.pushState({ view: 'shop' }, '');
   }
 
-  function closeShop() {
+  function closeShop(replaceHistory = false) {
     shopOpen = false;
     shopTabBtn.classList.remove('active');
     shopPanel.hidden          = true;
@@ -7541,7 +7541,14 @@ window.CharacterManager = ({ auth, database }) => {
       inv.closeInspector();
     }
     updateCharSheetToggle();
-    if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
+    if (!_handlingPopstate) {
+      if (replaceHistory) {
+        history.replaceState({ view: 'inventory' }, '');
+      } else {
+        _suppressPopstate = true;
+        history.back();
+      }
+    }
   }
 
   shopTabBtn.addEventListener('click', () => {
@@ -8206,7 +8213,7 @@ window.CharacterManager = ({ auth, database }) => {
           if (char.id === currentCharId) {
             if (shopOpen) {
               _shopFromHexmap = false;
-              closeShop();
+              closeShop(true);
               if (_hexmapMode) {
                 _hexmapMode = false;
                 _applyViewMode();
