@@ -417,14 +417,22 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   // ── HELPERS ─────────────────────────────────────────────────────────────
   function resolveItemDescription(lib, slotData) {
     if (!lib) return '';
-    if (!lib.descriptions) return lib.description || '';
-    const vars = slotData.variables || {};
-    for (const meta of Object.values(vars)) {
-      if (meta.control === 'select' && meta.value && lib.descriptions[meta.value] !== undefined) {
-        return lib.descriptions[meta.value];
+    let desc;
+    if (lib.descriptions) {
+      const vars = slotData.variables || {};
+      desc = lib.description || '';
+      for (const meta of Object.values(vars)) {
+        if (meta.control === 'select' && meta.value && lib.descriptions[meta.value] !== undefined) {
+          desc = lib.descriptions[meta.value];
+          break;
+        }
       }
+    } else {
+      desc = lib.description || '';
     }
-    return lib.description || '';
+    const ev = slotData.variables?.element;
+    if (ev?.control === 'select' && ev.value) desc = desc.replace(/\bElemental\b/g, ev.value);
+    return desc;
   }
 
   function getLibraryItem(name) {
@@ -1543,8 +1551,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         const _rd = t => (t || '').split('\n').map(ln =>
           ln.startsWith('• ') ? `<div class="spell-detail-bullet">${ln.slice(2)}</div>` : `<p>${ln}</p>`
         ).join('');
-        const _preamble = `<i>When casting a spell scroll, use your spell save DC and spell attack bonus, or DC 13 and +5 if yours are lower. If the spell is of a level above what you can cast, you must succeed on an Intelligence (Arcana) check with a DC equal to 10 plus the spell’s level, or the spell fails and the scroll is destroyed.</i>`;
-        let _html = _preamble + `<div class="scroll-spell-sub">${_sub}</div><div class="spell-detail-props">`;
+        const _hasDesc = !!lib.description;
+        let _html = _hasDesc
+          ? resolveItemDescription(lib, slotData)
+          : `<i>When casting a spell scroll, use your spell save DC and spell attack bonus, or DC 13 and +5 if yours are lower. If the spell is of a level above what you can cast, you must succeed on an Intelligence (Arcana) check with a DC equal to 10 plus the spell’s level, or the spell fails and the scroll is destroyed.</i>`;
+        _html += `<div class="scroll-spell-sub">${_sub}</div><div class="spell-detail-props">`;
         [['Casting Time', _spell.t], ['Range', _spell.r], ['Components', _spell.c], ['Duration', _spell.d]].forEach(([lbl, val]) => {
           if (val) _html += `<div class="spell-detail-prop"><span class="spell-detail-prop-lbl">${lbl}</span><span class="spell-detail-prop-val">${val}</span></div>`;
         });
@@ -1899,6 +1910,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           _updateUnresolved();
           if (!container) refreshShopRow();
           render();
+          showInspector(slotData, container, r, c);
         });
         ctrlTarget.appendChild(sel);
         _addLockBtn(elementMeta);
