@@ -598,6 +598,6 @@ window.ITEM_LIBRARY = [
   { id: 334, name: "Scroll of Leomund's Tiny Hut", bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Leomund's Tiny Hut" },
   { id: 335, name: "Scroll of Major Image",        bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Major Image" },
   { id: 336, name: "Scroll of Mass Healing Word",  bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Mass Healing Word" },
-  { id: 337, name: "Scroll of Revivify",           bulk: Bulk.PACKABLE, cost: "480 gp", linkedSpell: "Revivify" },
+  { id: 337, name: "Scroll of Revivify",           bulk: Bulk.PACKABLE, cost: "500 gp", linkedSpell: "Revivify" },
 
 ];
