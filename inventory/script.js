@@ -6418,6 +6418,7 @@ window.CharacterManager = ({ auth, database }) => {
     charFieldsEditBtn.classList.toggle('active', on);
     charHeaderEl.classList.toggle('fields-open', on);
     if (inv) inv.updateCs();
+    if (window._isDM) renderTabs();
   }
 
   function openStats() {
@@ -7665,7 +7666,7 @@ window.CharacterManager = ({ auth, database }) => {
     if (window._isDM || !currentCharId) return;
     const vis = allChars[currentCharId]?.charVisibility || 'visible';
     if (vis === 'inventory-only' && statsOpen) closeStats();
-    charSheetToggleBtn.hidden = (vis === 'inventory-only');
+    charSheetToggleBtn.disabled = (vis === 'inventory-only');
   }
 
   function applyRole(role) {
@@ -8218,18 +8219,13 @@ window.CharacterManager = ({ auth, database }) => {
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'char-tab-name';
-        if (window._isDM && vis !== 'visible') {
-          const hiddenIcon = document.createElement('i');
-          hiddenIcon.className = `fas ${VISIBILITY_ICON[vis]} char-tab-hidden-icon`;
-          nameSpan.appendChild(hiddenIcon);
-        }
         nameSpan.appendChild(document.createTextNode(char.state.charName || 'Unnamed'));
         infoDiv.appendChild(nameSpan);
 
         tab.appendChild(infoDiv);
 
         // DM-only controls
-        if (window._isDM) {
+        if (window._isDM && char.id === currentCharId && statsEditing) {
 
           // Delete button
           const del = document.createElement('button');

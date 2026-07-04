@@ -123,6 +123,12 @@ input, textarea, select { font-size: max(16px, 1em); }
   background: rgba(255,255,255,0.08);
 }
 
+#char-sheet-toggle-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+
 #char-tabs-scroll {
   flex: 1;
   overflow-x: auto;
@@ -216,13 +222,6 @@ input, textarea, select { font-size: max(16px, 1em); }
 
 .char-tab.tab-hidden { opacity: 0.5; }
 .char-tab.tab-hidden.active { opacity: 0.8; }
-
-.char-tab-hidden-icon {
-  font-size: 9px;
-  color: rgba(255, 90, 90, 0.75);
-  pointer-events: none;
-  margin-right: 4px;
-}
 
 .char-tab-info {
   display: flex;
