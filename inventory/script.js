@@ -185,9 +185,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   // under /inventory_user_ui/{uid}/{charId}, a path scoped to the logged-in
   // viewer's own uid so it follows them across devices without ever being
   // visible to (or overwritten by) anyone else viewing the same character.
-  let localFeatureUi  = { collapsed: {}, order: null, textCollapsed: {} };
-  let localNotesUi    = { open: {} };
-  let localSectionsUi = { notes: false, otherProfs: false };
+  let localFeatureUi    = { collapsed: {}, order: null, textCollapsed: {} };
+  let localNotesUi      = { open: {} };
+  let localSectionsUi   = { notes: false, otherProfs: false };
+  let localContainersUi = { collapsed: {} };
 
   function normalizeFeatureUi(blob) {
     return {
@@ -206,6 +207,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     return { notes: !!s.notes, otherProfs: !!s.otherProfs };
   }
 
+  function normalizeContainersUi(blob) {
+    return { collapsed: (blob.containersCollapsed && typeof blob.containersCollapsed === 'object') ? blob.containersCollapsed : {} };
+  }
+
   function applySectionOpen(toggle, body, open) {
     if (!toggle || !body) return;
     body.hidden = !open;
@@ -215,11 +220,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
   function getLocalUiSnapshot() {
     return {
-      collapsed:     localFeatureUi.collapsed,
-      order:         localFeatureUi.order,
-      textCollapsed: localFeatureUi.textCollapsed,
-      notesOpen:     localNotesUi.open,
-      sections:      localSectionsUi,
+      collapsed:          localFeatureUi.collapsed,
+      order:              localFeatureUi.order,
+      textCollapsed:       localFeatureUi.textCollapsed,
+      notesOpen:          localNotesUi.open,
+      sections:           localSectionsUi,
+      containersCollapsed: localContainersUi.collapsed,
     };
   }
 
@@ -851,6 +857,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
   }
 
+  function renderContainers() {
+    containersEl.innerHTML = '';
+    state.containers.forEach(c => containersEl.appendChild(buildCard(c)));
+  }
+
   function render() {
     // Clear any accidentally persisted maxRows from strapped (it has no capacity cap)
     const _strapped = state.containers.find(c => c.id === 'strapped');
@@ -862,8 +873,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     state.containers.forEach(c => {
       if (c.linkedTo) { growContainer(c); shrinkContainer(c); }
     });
-    containersEl.innerHTML = '';
-    state.containers.forEach(c => containersEl.appendChild(buildCard(c)));
+    renderContainers();
     updateCurrencyDisplay();
     updateCarryDisplay();
 
@@ -919,7 +929,12 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       _capHtml = `<span class="container-capacity${_over ? ' container-capacity-over' : ''}">${parseFloat(_fillUsed.toFixed(2))}/${_fillCap}</span>`;
     }
     toggle.innerHTML = `<span>${container.name}${_capHtml}</span><span class="inv-chevron">${container.collapsed ? '▶' : '▼'}</span>`;
-    toggle.addEventListener('click', () => { container.collapsed = !container.collapsed; render(); });
+    toggle.addEventListener('click', () => {
+      container.collapsed = !container.collapsed;
+      localContainersUi.collapsed[container.id] = container.collapsed;
+      reportUiChange();
+      render();
+    });
 
     if (!container.permanent) {
       const handle = document.createElement('button');
@@ -1147,6 +1162,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         wrap.addEventListener('click', e => {
           if (e.target.closest('.slot-remove')) return;
           linkedContainer.collapsed = !linkedContainer.collapsed;
+          localContainersUi.collapsed[linkedContainer.id] = linkedContainer.collapsed;
+          reportUiChange();
           render();
         });
       } else {
@@ -6130,7 +6147,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         charName:         state.charName,
         abScoreBaseFormat: true,
         carryCapacity: state.carryCapacity,
-        containers:    state.containers,
+        containers:    state.containers.map(({ collapsed, ...rest }) => rest),
         attacks:          state.attacks,
         attackOrder:      state.attackOrder,
         weaponAttackData: state.weaponAttackData,
@@ -6233,6 +6250,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       state.carryCapacity = newState.carryCapacity || '';
       state.containers    = (newState.containers && newState.containers.length)
                             ? newState.containers : createDefaultContainers();
+      // Fold state is per-viewer (see applyLocalUi below) — never trust
+      // whatever collapsed value happens to be baked into synced data.
+      state.containers.forEach(c => { c.collapsed = false; });
       flattenPackableGroups(state.containers);
       for (const c of state.containers)
         for (const row of c.slots)
@@ -6273,9 +6293,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       // Reset to defaults; the caller (CharacterManager) follows loadState()
       // with applyLocalUi() once it has looked up this character's saved
       // per-viewer fold/order prefs.
-      localFeatureUi  = { collapsed: {}, order: null, textCollapsed: {} };
-      localNotesUi    = { open: {} };
-      localSectionsUi = { notes: false, otherProfs: false };
+      localFeatureUi    = { collapsed: {}, order: null, textCollapsed: {} };
+      localNotesUi      = { open: {} };
+      localSectionsUi   = { notes: false, otherProfs: false };
+      localContainersUi = { collapsed: {} };
       state.notes = Array.isArray(newState.notes)
         ? newState.notes.map((n, i) => typeof n === 'string'
             ? { id: `legacy-${i}`, title: '', body: n }
@@ -6325,13 +6346,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     // from /inventory_user_ui/{uid}/{charId} (or {} if there's nothing saved
     // yet / no signed-in user).
     applyLocalUi(blob) {
-      localFeatureUi  = normalizeFeatureUi(blob || {});
-      localNotesUi    = normalizeNotesUi(blob || {});
-      localSectionsUi = normalizeSectionsUi(blob || {});
+      localFeatureUi    = normalizeFeatureUi(blob || {});
+      localNotesUi      = normalizeNotesUi(blob || {});
+      localSectionsUi   = normalizeSectionsUi(blob || {});
+      localContainersUi = normalizeContainersUi(blob || {});
+      state.containers.forEach(c => { c.collapsed = !!localContainersUi.collapsed[c.id]; });
       applySectionOpen(otherProfsToggle, otherProfsBody, localSectionsUi.otherProfs);
       applySectionOpen(notesToggle, notesBody, localSectionsUi.notes);
       renderFeatures();
       renderNotes();
+      renderContainers();
     },
   };
 };
