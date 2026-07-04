@@ -1,4 +1,4 @@
-window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, onDmListingDrop, isHiddenFromPlayer, onSound }) => {
+window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, onDmListingDrop, isHiddenFromPlayer, onSound, onUiChange }) => {
 
   // ── STATE ──────────────────────────────────────────────────────────────
   function createDefaultContainers() {
@@ -172,9 +172,83 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     activeFeatures:   [],
     hiddenFeatures:   [],
     featureData:      {},
-    featureCollapsed: {},
     notes: [],
   };
+
+  // Feature accordion open/closed state, feature drag order, and note
+  // expand/collapse are per-viewer UI preferences, not character data.
+  // InventorySystem itself has no real Firebase connection (it's built with
+  // stub database/auth — see where it's constructed in CharacterManager), so
+  // persistence for this data is owned by CharacterManager, same as the rest
+  // of the app's Firebase I/O: CharacterManager feeds the loaded blob in via
+  // applyLocalUi(), and onUiChange() reports mutations back out to be saved
+  // under /inventory_user_ui/{uid}/{charId}, a path scoped to the logged-in
+  // viewer's own uid so it follows them across devices without ever being
+  // visible to (or overwritten by) anyone else viewing the same character.
+  let localFeatureUi  = { collapsed: {}, order: null, textCollapsed: {} };
+  let localNotesUi    = { open: {} };
+  let localSectionsUi = { notes: false, otherProfs: false };
+
+  function normalizeFeatureUi(blob) {
+    return {
+      collapsed: (blob.collapsed && typeof blob.collapsed === 'object') ? blob.collapsed : {},
+      order: Array.isArray(blob.order) ? blob.order : null,
+      textCollapsed: (blob.textCollapsed && typeof blob.textCollapsed === 'object') ? blob.textCollapsed : {},
+    };
+  }
+
+  function normalizeNotesUi(blob) {
+    return { open: (blob.notesOpen && typeof blob.notesOpen === 'object') ? blob.notesOpen : {} };
+  }
+
+  function normalizeSectionsUi(blob) {
+    const s = (blob.sections && typeof blob.sections === 'object') ? blob.sections : {};
+    return { notes: !!s.notes, otherProfs: !!s.otherProfs };
+  }
+
+  function applySectionOpen(toggle, body, open) {
+    if (!toggle || !body) return;
+    body.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.classList.toggle('cs-other-profs-open', open);
+  }
+
+  function getLocalUiSnapshot() {
+    return {
+      collapsed:     localFeatureUi.collapsed,
+      order:         localFeatureUi.order,
+      textCollapsed: localFeatureUi.textCollapsed,
+      notesOpen:     localNotesUi.open,
+      sections:      localSectionsUi,
+    };
+  }
+
+  function reportUiChange() {
+    if (onUiChange) onUiChange(getLocalUiSnapshot());
+  }
+
+  function saveLocalFeatureUi() { reportUiChange(); }
+
+  function getFeatureDisplayOrder() {
+    const base = state.activeFeatures;
+    const order = localFeatureUi.order;
+    if (!order || !order.length) return base;
+    const baseSet = new Set(base);
+    const ordered = order.filter(id => baseSet.has(id));
+    const orderedSet = new Set(ordered);
+    base.forEach(id => { if (!orderedSet.has(id)) ordered.push(id); });
+    return ordered;
+  }
+
+  function saveLocalNotesUi() { reportUiChange(); }
+
+  function genNoteId() {
+    return `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  }
+
+  function isNoteOpen(note) {
+    return localNotesUi.open[note.id] !== false;
+  }
 
   function updateProfButtons() {
     document.querySelectorAll('.cs-skill-dot[data-prof-key]').forEach(btn => {
@@ -3162,9 +3236,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
         const newOrder = [...listEl.querySelectorAll('.cs-feature[data-feature-id]')]
           .map(el => el.dataset.featureId);
-        state.activeFeatures = newOrder;
+        localFeatureUi.order = newOrder;
+        saveLocalFeatureUi();
         fDrag = null;
-        if (onChange) onChange();
         renderFeatures();
       };
 
@@ -3759,14 +3833,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if (i !== -1) collapseStart = i + 1;
       }
       if (collapseStart < collapseEnd) {
-        const collapsed = !!data.textCollapsed;
+        const collapsed = !!localFeatureUi.textCollapsed[feature.id];
         collapseToggle = document.createElement('button');
         collapseToggle.type = 'button';
         collapseToggle.className = 'cs-feature-text-toggle' + (collapsed ? '' : ' cs-open');
         collapseToggle.innerHTML = '<i class="fa-solid fa-chevron-down"></i><span>Details</span>';
         collapseToggle.addEventListener('click', () => {
-          data.textCollapsed = !data.textCollapsed;
-          if (onChange) onChange();
+          localFeatureUi.textCollapsed[feature.id] = !localFeatureUi.textCollapsed[feature.id];
+          saveLocalFeatureUi();
           renderFeatures();
         });
         collapseWrap = document.createElement('div');
@@ -4293,13 +4367,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     listEl.innerHTML = '';
 
     // Active features
-    state.activeFeatures.forEach(id => {
+    getFeatureDisplayOrder().forEach(id => {
       const feature = FEATURES_LIBRARY.find(f => f.id === id);
       if (!feature) return;
 
       if (!state.featureData[id]) state.featureData[id] = {};
       const data = state.featureData[id];
-      const collapsed = !!state.featureCollapsed[id];
+      const collapsed = !!localFeatureUi.collapsed[id];
 
       const el = document.createElement('div');
       el.className = 'cs-feature';
@@ -4319,8 +4393,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const toggle = document.createElement('div');
       toggle.className = 'cs-feature-toggle' + (collapsed ? '' : ' cs-feature-open');
       toggle.addEventListener('click', () => {
-        state.featureCollapsed[id] = !state.featureCollapsed[id];
-        if (onChange) onChange();
+        localFeatureUi.collapsed[id] = !localFeatureUi.collapsed[id];
+        saveLocalFeatureUi();
         renderFeatures();
       });
 
@@ -5046,9 +5120,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   if (otherProfsToggle && otherProfsBody) {
     otherProfsToggle.addEventListener('click', () => {
       const open = otherProfsBody.hidden;
-      otherProfsBody.hidden = !open;
-      otherProfsToggle.setAttribute('aria-expanded', String(open));
-      otherProfsToggle.classList.toggle('cs-other-profs-open', open);
+      localSectionsUi.otherProfs = open;
+      applySectionOpen(otherProfsToggle, otherProfsBody, open);
+      reportUiChange();
     });
   }
 
@@ -5081,13 +5155,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       chevron.type = 'button';
       chevron.className = 'cs-notes-chevron';
       chevron.tabIndex = -1;
-      chevron.innerHTML = note.open
+      chevron.innerHTML = isNoteOpen(note)
         ? '<i class="fa-solid fa-chevron-down"></i>'
         : '<i class="fa-solid fa-chevron-right"></i>';
       chevron.addEventListener('click', () => {
-        state.notes[i].open = !state.notes[i].open;
+        localNotesUi.open[note.id] = !isNoteOpen(note);
+        saveLocalNotesUi();
         renderNotes();
-        if (onChange) onChange();
       });
 
       const titleInput = document.createElement('input');
@@ -5122,7 +5196,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       // ── body ────────────────────────────────────────
       const bodyDiv = document.createElement('div');
       bodyDiv.className = 'cs-notes-entry-body';
-      bodyDiv.hidden = !note.open;
+      bodyDiv.hidden = !isNoteOpen(note);
 
       const ta = document.createElement('textarea');
       ta.className = 'cs-notes-entry';
@@ -5187,7 +5261,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     addBtn.className = 'cs-notes-add-btn';
     addBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
     addBtn.addEventListener('click', () => {
-      state.notes.push({ title: '', body: '', open: true });
+      state.notes.push({ id: genNoteId(), title: '', body: '' });
       renderNotes();
       notesList.querySelectorAll('.cs-notes-title').item(state.notes.length - 1)?.focus();
       if (onChange) onChange();
@@ -5198,9 +5272,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   if (notesToggle && notesBody) {
     notesToggle.addEventListener('click', () => {
       const open = notesBody.hidden;
-      notesBody.hidden = !open;
-      notesToggle.setAttribute('aria-expanded', String(open));
-      notesToggle.classList.toggle('cs-other-profs-open', open);
+      localSectionsUi.notes = open;
+      applySectionOpen(notesToggle, notesBody, open);
+      reportUiChange();
     });
   }
 
@@ -6071,7 +6145,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         activeFeatures:   state.activeFeatures,
         hiddenFeatures:   state.hiddenFeatures,
         featureData:      state.featureData,
-        featureCollapsed: state.featureCollapsed,
         notes:            state.notes,
         ...csState,
         ...profState,
@@ -6197,11 +6270,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       state.activeFeatures  = Array.isArray(newState.activeFeatures)  ? newState.activeFeatures  : [];
       state.hiddenFeatures  = Array.isArray(newState.hiddenFeatures)   ? newState.hiddenFeatures  : [];
       state.featureData     = (newState.featureData && typeof newState.featureData === 'object') ? newState.featureData : {};
-      state.featureCollapsed = (newState.featureCollapsed && typeof newState.featureCollapsed === 'object') ? newState.featureCollapsed : {};
+      // Reset to defaults; the caller (CharacterManager) follows loadState()
+      // with applyLocalUi() once it has looked up this character's saved
+      // per-viewer fold/order prefs.
+      localFeatureUi  = { collapsed: {}, order: null, textCollapsed: {} };
+      localNotesUi    = { open: {} };
+      localSectionsUi = { notes: false, otherProfs: false };
       state.notes = Array.isArray(newState.notes)
-        ? newState.notes.map(n => typeof n === 'string'
-            ? { title: '', body: n, open: true }
-            : { title: n.title || '', body: n.body || '', open: !!n.open })
+        ? newState.notes.map((n, i) => typeof n === 'string'
+            ? { id: `legacy-${i}`, title: '', body: n }
+            : { id: n.id || `legacy-${i}`, title: n.title || '', body: n.body || '' })
         : [];
       renderNotes();
       updateInspirationDisplay();
@@ -6241,6 +6319,19 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       renderFeatures();
       populateArmorDatalist();
       render();
+    },
+    // Per-viewer fold/order prefs for the character just loaded via
+    // loadState(). Called by CharacterManager once it has looked them up
+    // from /inventory_user_ui/{uid}/{charId} (or {} if there's nothing saved
+    // yet / no signed-in user).
+    applyLocalUi(blob) {
+      localFeatureUi  = normalizeFeatureUi(blob || {});
+      localNotesUi    = normalizeNotesUi(blob || {});
+      localSectionsUi = normalizeSectionsUi(blob || {});
+      applySectionOpen(otherProfsToggle, otherProfsBody, localSectionsUi.otherProfs);
+      applySectionOpen(notesToggle, notesBody, localSectionsUi.notes);
+      renderFeatures();
+      renderNotes();
     },
   };
 };
@@ -6292,6 +6383,7 @@ window.CharacterManager = ({ auth, database }) => {
     onDmListingDrop:     handleDmListingDrop,
     isHiddenFromPlayer:  (itemName) => !isItemVisible(itemName, getItemSection(itemName)),
     onSound:             playSound,
+    onUiChange:          saveUserUiBlob,
   });
 
   // ── CLOSE / LOGOUT ──────────────────────────────────────────────────────
@@ -6533,6 +6625,30 @@ window.CharacterManager = ({ auth, database }) => {
       shopVisibility = decodeVisObj(snap.val() || {});
       if (shopOpen) buildShop();
     });
+  }
+
+  // Per-viewer feature/notes fold state, scoped to this user's uid so it
+  // follows them across devices without ever being visible to other viewers
+  // of the same character. InventorySystem has no real Firebase connection
+  // of its own — it reports changes via onUiChange and receives the loaded
+  // blob via applyLocalUi(), both wired up below.
+  let userUiCache = {};
+  let userUiRef   = null;
+
+  function subscribeUserUi(uid) {
+    if (userUiRef) userUiRef.off('value');
+    userUiCache = {};
+    if (!uid) { userUiRef = null; return; }
+    userUiRef = database.ref(`/inventory_user_ui/${uid}`);
+    userUiRef.on('value', snap => {
+      userUiCache = snap.val() || {};
+      if (currentCharId) inv.applyLocalUi(userUiCache[currentCharId] || {});
+    });
+  }
+
+  function saveUserUiBlob(blob) {
+    if (!currentUser || !currentCharId) return;
+    database.ref(`/inventory_user_ui/${currentUser.uid}/${currentCharId}`).update(blob);
   }
 
   let shopAvailability = {};
@@ -7710,11 +7826,13 @@ window.CharacterManager = ({ auth, database }) => {
       subscribeToShopVisibility();
       subscribeToShopAvailability();
       subscribeToDmListings();
+      subscribeUserUi(user.uid);
     } else {
       if (charsRef)      { charsRef.off('value');      charsRef      = null; }
       if (shopVisRef)    { shopVisRef.off('value');    shopVisRef    = null; }
       if (shopAvailRef)  { shopAvailRef.off('value');  shopAvailRef  = null; }
       if (dmListingsRef) { dmListingsRef.off('value'); dmListingsRef = null; }
+      subscribeUserUi(null);
       dmListings = [];
       userCanBeDM    = false;
       window._isDM   = false;
@@ -7764,7 +7882,8 @@ window.CharacterManager = ({ auth, database }) => {
         } else {
           // Nothing pending locally — apply whatever Firebase has (another user's edit)
           suppressSave = true;
-          try { inv.loadState(allChars[currentCharId].state); } catch (e) { console.warn('loadState error:', e); }
+          try { inv.loadState(allChars[currentCharId].state, { charId: currentCharId }); } catch (e) { console.warn('loadState error:', e); }
+          inv.applyLocalUi(userUiCache[currentCharId] || {});
           suppressSave = false;
         }
       }
@@ -7937,7 +8056,8 @@ window.CharacterManager = ({ auth, database }) => {
     dirty = false;
     currentCharId = null;
     suppressSave = true;
-    try { inv.loadState(blankState()); } catch(e) {}
+    try { inv.loadState(blankState(), { charId: null }); } catch(e) {}
+    inv.applyLocalUi({});
     suppressSave = false;
 
     updateCharHideBtn();
@@ -7951,7 +8071,8 @@ window.CharacterManager = ({ auth, database }) => {
     dirty = false;
     currentCharId = charId;
     suppressSave = true;
-    try { inv.loadState(allChars[charId].state, { keepInspector: shopOpen }); } catch (e) { console.warn('loadState error:', e); }
+    try { inv.loadState(allChars[charId].state, { keepInspector: shopOpen, charId }); } catch (e) { console.warn('loadState error:', e); }
+    inv.applyLocalUi(userUiCache[charId] || {});
     suppressSave = false;
 
     updateCharHideBtn();
@@ -7999,7 +8120,8 @@ window.CharacterManager = ({ auth, database }) => {
       if (pendingNewChar === charData) pendingNewChar = null;
     });
     suppressSave = true;
-    try { inv.loadState(blank); } catch (e) { console.warn('loadState error:', e); }
+    try { inv.loadState(blank, { charId: newId }); } catch (e) { console.warn('loadState error:', e); }
+    inv.applyLocalUi(userUiCache[newId] || {});
     suppressSave = false;
     renderTabs();
   }
