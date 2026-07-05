@@ -798,7 +798,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   // almost immediately (DRAG_SCROLL_DWELL_MIN).
   const DRAG_SCROLL_EDGE      = 80;  // px band, measured inward from the pane edge
   const DRAG_SCROLL_MAX       = 10;  // px/frame at the true edge
-  const DRAG_SCROLL_DWELL_MAX = 500; // ms required at the band's outer edge (shallow)
+  const DRAG_SCROLL_DWELL_MAX = 400; // ms required at the band's outer edge (shallow)
   const DRAG_SCROLL_DWELL_MIN = 300; // ms required at the pane's true edge (deep)
 
   let dragScrollZone      = null; // 'top' | 'bottom' | null — band currently in
