@@ -790,11 +790,16 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   // means passing through the top band on the way there, since the tabs sit
   // right above the pane. A dwell requirement handles that: entering the
   // band doesn't scroll immediately, only staying there continuously past
-  // DRAG_SCROLL_DWELL does — a quick pass-through to drop on a tab is over
-  // well before that fires.
-  const DRAG_SCROLL_EDGE  = 70;   // px band, measured inward from the pane edge
-  const DRAG_SCROLL_MAX   = 10;   // px/frame at the true edge
-  const DRAG_SCROLL_DWELL = 500;  // ms the pointer must sit in the band first
+  // a dwell threshold does. That threshold is depth-dependent rather than
+  // flat: near the band's outer edge (shallow) you're likely just passing
+  // through toward a tab, so it takes longer (DRAG_SCROLL_DWELL_MAX) to
+  // confirm intent; right at the pane's true edge (deep) there's nothing
+  // above to reach for, so it's a clear "I want to scroll" and responds
+  // almost immediately (DRAG_SCROLL_DWELL_MIN).
+  const DRAG_SCROLL_EDGE      = 70;  // px band, measured inward from the pane edge
+  const DRAG_SCROLL_MAX       = 10;  // px/frame at the true edge
+  const DRAG_SCROLL_DWELL_MAX = 500; // ms required at the band's outer edge (shallow)
+  const DRAG_SCROLL_DWELL_MIN = 120; // ms required at the pane's true edge (deep)
 
   let dragScrollZone      = null; // 'top' | 'bottom' | null — band currently in
   let dragScrollZoneSince = 0;    // timestamp we entered it continuously
@@ -840,9 +845,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       dragScrollZone = zone;
       dragScrollZoneSince = now;
     }
-    if (now - dragScrollZoneSince < DRAG_SCROLL_DWELL) return 0;
 
-    const speed = DRAG_SCROLL_MAX * Math.min(1, depth / DRAG_SCROLL_EDGE);
+    // f: 0 at the band's outer edge, 1 at the pane's true edge.
+    const f = Math.min(1, depth / DRAG_SCROLL_EDGE);
+    const requiredDwell = DRAG_SCROLL_DWELL_MIN + (DRAG_SCROLL_DWELL_MAX - DRAG_SCROLL_DWELL_MIN) * (1 - f);
+    if (now - dragScrollZoneSince < requiredDwell) return 0;
+
+    const speed = DRAG_SCROLL_MAX * f;
     return zone === 'top' ? -speed : speed;
   }
 
