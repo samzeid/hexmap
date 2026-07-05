@@ -794,7 +794,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   // well before that fires.
   const DRAG_SCROLL_EDGE  = 80;   // px band, measured inward from the pane edge
   const DRAG_SCROLL_MAX   = 14;   // px/frame at the true edge
-  const DRAG_SCROLL_DWELL = 300;  // ms the pointer must sit in the band first
+  const DRAG_SCROLL_DWELL = 500;  // ms the pointer must sit in the band first
 
   let dragScrollZone      = null; // 'top' | 'bottom' | null — band currently in
   let dragScrollZoneSince = 0;    // timestamp we entered it continuously
