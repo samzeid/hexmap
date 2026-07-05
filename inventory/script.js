@@ -2435,7 +2435,6 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         && !e.target.closest('.slot')
         && !e.target.closest('.shop-item-row')
         && !e.target.closest('.char-tab')
-        && !e.target.closest('#inv-close-btn')
         && !e.target.closest('#shop-tab-btn')
         && !e.target.closest('#cs-armor-display')
         && !e.target.closest('#cs-shield-display')
@@ -6418,6 +6417,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       renderNotes();
       renderContainers();
     },
+    // Used to suppress the character/inventory swipe gesture while any drag
+    // (item, feature reorder, container reorder, note reorder) is in progress.
+    isDragging() {
+      return !!dragState || !!fDrag || !!cDrag || dragSrcIdx !== -1;
+    },
   };
 };
 
@@ -6475,48 +6479,170 @@ window.CharacterManager = ({ auth, database }) => {
   // ── VIEW TOGGLE (hexmap ↔ inventory) ────────────────────────────────────
   let _hexmapMode = true;
   let _shopFromHexmap = false;
-  const _closeBtn  = document.getElementById('inv-close-btn');
 
-  // Hoisted above _applyViewMode so the initial _applyViewMode() call (which now
-  // refreshes the inventory/character toggle) doesn't hit a temporal-dead-zone.
-  let statsOpen = true;
-  let shopOpen  = false;
-  const charSheetToggleBtn = document.getElementById('char-sheet-toggle-btn');
-  const charSheetToggleI   = charSheetToggleBtn.querySelector('i');
+  // ── RULES PAGE (empty placeholder for now — navigation only) ────────────
+  let rulesOpen = false;
+  // Remembers whichever character was selected when Rules opened, so
+  // returning from it (back button, or picking Character/Inventory from the
+  // hamburger) restores that exact character instead of falling back to an
+  // arbitrary one. Cleared once consumed.
+  let charIdBeforeRules = null;
+  const rulesBackBtn = document.getElementById('rules-back-btn');
 
-  // The top-left toggle. In inventory/character mode it switches between the two
-  // sub-views; in hexmap/shop mode it shows the view you'd return to (the last
-  // sub-view) so clicking it brings you back there.
-  function updateCharSheetToggle() {
-    const away = _hexmapMode || shopOpen;
-    // `destInventory` = the view a click will land you on, which drives the icon.
-    const destInventory = away ? !statsOpen : statsOpen;
-    charSheetToggleI.className = destInventory ? 'fa-solid fa-sack-xmark' : 'fa-solid fa-user';
-    charSheetToggleBtn.title   = destInventory ? 'Inventory' : 'Character sheet';
+  // State/CSS only — no history side effects, so other navigation (map,
+  // character, inventory, shop, tabs) can call this to stay exclusive
+  // without fighting over the history stack.
+  function setRulesMode(on) {
+    rulesOpen = on;
+    document.getElementById('app').classList.toggle('rules-mode', on);
+    updateHamburgerMenu();
   }
 
-  function _applyViewMode() {
-    document.getElementById('app').classList.toggle('hexmap-mode', _hexmapMode);
-    updateCharSheetToggle();
+  // Prefer restoring whichever character was selected before Rules opened
+  // (if it still exists); otherwise fall back to the normal auto-select.
+  // One-shot: the remembered id is consumed (cleared) either way, so a
+  // later Rules session always starts from a fresh currentCharId snapshot.
+  function restoreCharSelection() {
+    const restoreId = charIdBeforeRules;
+    charIdBeforeRules = null;
+    if (currentCharId) return;
+    if (restoreId && allChars[restoreId]) {
+      switchToChar(restoreId, true);
+    } else {
+      ensureCharSelected();
+    }
   }
 
-  // Open the hex map, closing the shop/character view. Not a toggle — it only
-  // ever goes to the map (it's hidden while already on the map).
-  _closeBtn.addEventListener('click', () => {
+  function openRules() {
+    closeHamburgerMenu();
+    charIdBeforeRules = currentCharId;
+    deselectChar();
+    setRulesMode(true);
+    history.pushState({ view: 'rules' }, '');
+  }
+
+  // Safe to call unconditionally from any other navigation action (map,
+  // character, inventory, shop, tab clicks, Escape) to keep Rules exclusive:
+  // no-ops if Rules isn't open, otherwise pops the history entry it pushed
+  // so the stack stays in sync with whatever's shown next.
+  function closeRules() {
+    if (!rulesOpen) return;
+    setRulesMode(false);
+    if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
+  }
+
+  // Used specifically for "just leave Rules, nothing else decides what's
+  // next" triggers (its own back button, the hardware/browser back button).
+  // Other navigation (goToMap, goToCharView, openShop, tab clicks) calls
+  // closeRules() directly since they already decide what to show next.
+  function goBackFromRules() {
+    closeRules();
+    restoreCharSelection();
+  }
+
+  rulesBackBtn.addEventListener('click', goBackFromRules);
+
+  // ── HAMBURGER MENU (replaces the old char/inventory toggle button) ──────
+  // Holds the low-frequency navigation actions: leaving to the map, opening
+  // the rules page, and signing out. Character ↔ inventory switching is now
+  // a swipe gesture (see below) since it's used far more often.
+  const hamburgerBtn    = document.getElementById('hamburger-btn');
+  const hamburgerMenu   = document.getElementById('hamburger-menu');
+  const menuMapBtn      = document.getElementById('menu-map-btn');
+  const menuCharacterBtn = document.getElementById('menu-character-btn');
+  const menuInventoryBtn = document.getElementById('menu-inventory-btn');
+  const menuRulesBtn    = document.getElementById('menu-rules-btn');
+  const menuSignoutBtn  = document.getElementById('menu-signout-btn');
+
+  function openHamburgerMenu()  { hamburgerMenu.hidden = false; }
+  function closeHamburgerMenu() { hamburgerMenu.hidden = true; }
+
+  // All nav items always show; the one matching where you already are is
+  // just disabled instead of hidden. Called from _applyViewMode, openStats/
+  // closeStats, openRules/closeRules, and openShop/closeShop.
+  function updateHamburgerMenu() {
+    // While rules-mode is on top, none of the pages underneath count as
+    // "current" — Map/Character/Inventory should stay clickable so they can
+    // be used to navigate away from Rules, not just Rules' own back button.
+    const inCharView = !rulesOpen && !_hexmapMode && !shopOpen;
+    menuMapBtn.disabled       = !rulesOpen && _hexmapMode;
+    menuCharacterBtn.disabled = inCharView && statsOpen;
+    menuInventoryBtn.disabled = inCharView && !statsOpen;
+    menuRulesBtn.disabled     = rulesOpen;
+  }
+
+  hamburgerBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (hamburgerMenu.hidden) openHamburgerMenu(); else closeHamburgerMenu();
+  });
+  document.addEventListener('pointerdown', e => {
+    if (!hamburgerMenu.hidden && !e.target.closest('#tab-bar-left')) closeHamburgerMenu();
+  });
+
+  // Leave the character/inventory/shop view for the hex map. The menu item
+  // is hidden while already on the map (see _applyViewMode below).
+  function goToMap() {
+    closeHamburgerMenu();
+    closeRules(); // pops its history entry first, if it was open
     if (shopOpen) { _shopFromHexmap = true; closeShop(); return; }
+    // Only pop history for the map transition itself if we actually needed
+    // one (i.e. we weren't already on the map — closeRules already popped
+    // its own entry above, so doing this unconditionally would over-pop).
+    const wasAway = !_hexmapMode;
     _hexmapMode = true;
     inv.collapsePanelInstant();
     _applyViewMode();
     window.hexOnGoToHexmap && window.hexOnGoToHexmap();
     deselectChar();
-    if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
+    if (wasAway && !_handlingPopstate) { _suppressPopstate = true; history.back(); }
+  }
+  menuMapBtn.addEventListener('click', goToMap);
+
+  // Land on the character sheet (showStats true) or inventory (false),
+  // getting there from the map/shop first if needed — the explicit,
+  // discoverable equivalent of the character/inventory swipe.
+  function goToCharView(showStats) {
+    closeHamburgerMenu();
+    closeRules(); // pops its history entry first, if it was open
+    if (shopOpen) {
+      _shopFromHexmap = false;
+      closeShop();
+    } else if (_hexmapMode) {
+      _hexmapMode = false;
+      inv.collapsePanelInstant();
+      _applyViewMode();
+      window.hexOnGoToInventory && window.hexOnGoToInventory();
+      if (!_handlingPopstate) history.pushState({ view: 'inventory' }, '');
+    }
+    // Not just the hexmap-transition case: Rules also leaves currentCharId
+    // null, and that can be reached here without ever passing through the
+    // branch above.
+    restoreCharSelection();
+    if (showStats && canOpenStats()) openStats(); else if (!showStats) closeStats();
+  }
+  menuCharacterBtn.addEventListener('click', () => goToCharView(true));
+  menuInventoryBtn.addEventListener('click', () => goToCharView(false));
+
+  menuRulesBtn.addEventListener('click', openRules);
+  menuSignoutBtn.addEventListener('click', () => {
+    closeHamburgerMenu();
+    auth.signOut().catch(() => {});
   });
+
+  // Hoisted above _applyViewMode so the initial _applyViewMode() call doesn't
+  // hit a temporal-dead-zone.
+  let statsOpen = true;
+  let shopOpen  = false;
+
+  function _applyViewMode() {
+    document.getElementById('app').classList.toggle('hexmap-mode', _hexmapMode);
+    updateHamburgerMenu();
+  }
 
   // ── HEXMAP TOOLBAR ──────────────────────────────────────────────────────
   const _hexToolBtn    = document.getElementById('hex-tool-btn');
   const _hexOverlayBtn = document.getElementById('hex-overlay-btn');
   const _hexClearBtn   = document.getElementById('hex-clear-btn');
-  const _hexSignOutBtn = document.getElementById('hex-sign-out-btn');
 
   _hexToolBtn.addEventListener('click',    () => window.hexAction && window.hexAction('toolToggle'));
   _hexOverlayBtn.addEventListener('click', () => window.hexAction && window.hexAction('overlayToggle'));
@@ -6529,9 +6655,6 @@ window.CharacterManager = ({ auth, database }) => {
     btn.addEventListener('click', () => {
       window.hexAction && window.hexAction('colorSelect', btn.dataset.color);
     });
-  });
-  _hexSignOutBtn.addEventListener('click', () => {
-    auth.signOut().catch(() => {});
   });
 
   // Start in hexmap-mode
@@ -6561,15 +6684,12 @@ window.CharacterManager = ({ auth, database }) => {
           btn.classList.toggle('active-color', !eraseActive && btn.dataset.color === e.data.activeColor);
         });
       }
-      if (e.data.signedIn !== undefined) {
-        _hexSignOutBtn.hidden = !e.data.signedIn;
-      }
     }
   });
 
   // ── STATS ───────────────────────────────────────────────────────────────
-  // statsOpen / charSheetToggleBtn / charSheetToggleI are declared above (with
-  // the view toggle) so the initial _applyViewMode() can refresh the toggle.
+  // statsOpen is declared above (with the view toggle) so the initial
+  // _applyViewMode() call doesn't hit a temporal-dead-zone.
   let statsEditing = false;
   const statsPanelEl       = document.getElementById('stats-panel');
   const charPanelsEl       = document.getElementById('char-panels');
@@ -6601,44 +6721,56 @@ window.CharacterManager = ({ auth, database }) => {
   function openStats() {
     statsOpen = true;
     charPanelsEl.classList.remove('show-inventory');
-    updateCharSheetToggle();
     updateEditBtn();
+    updateHamburgerMenu();
   }
 
   function closeStats() {
     statsOpen = false;
     setStatsEditing(false);
     charPanelsEl.classList.add('show-inventory');
-    updateCharSheetToggle();
+    updateHamburgerMenu();
   }
-
-  // Return to the inventory/character view (restoring the last sub-view) from
-  // wherever we are. Used when the toggle is clicked in hexmap or shop mode.
-  function returnToCharView() {
-    if (shopOpen) {
-      _shopFromHexmap = false;   // go back to the character view, not the map
-      closeShop();
-      return;
-    }
-    if (_hexmapMode) {
-      _hexmapMode = false;
-      inv.collapsePanelInstant();
-      _applyViewMode();
-      window.hexOnGoToInventory && window.hexOnGoToInventory();
-      ensureCharSelected();
-      if (!_handlingPopstate) history.pushState({ view: 'inventory' }, '');
-    }
-  }
-
-  charSheetToggleBtn.addEventListener('click', () => {
-    if (_hexmapMode || shopOpen) returnToCharView();
-    else if (statsOpen) closeStats();
-    else openStats();
-  });
 
   charFieldsEditBtn.addEventListener('click', () => {
     setStatsEditing(!statsEditing);
   });
+
+  // ── CHARACTER / INVENTORY SWIPE ──────────────────────────────────────────
+  // Replaces the old tap-to-toggle button. Swipe left: sheet → inventory.
+  // Swipe right: inventory → sheet. Disabled entirely while any drag (item,
+  // feature reorder, container reorder, note reorder) is in progress.
+  function canOpenStats() {
+    if (window._isDM || !currentCharId) return true;
+    return (allChars[currentCharId]?.charVisibility || 'visible') !== 'inventory-only';
+  }
+
+  (function () {
+    const SWIPE_MIN_DX    = 60;  // minimum horizontal travel to count as a swipe
+    const SWIPE_MAX_SLOPE = 0.6; // |dy| must stay under this fraction of |dx|
+    let startX = null, startY = null, tracking = false;
+
+    charPanelsEl.addEventListener('pointerdown', e => {
+      if (inv.isDragging()) { tracking = false; return; }
+      startX = e.clientX; startY = e.clientY; tracking = true;
+    });
+
+    charPanelsEl.addEventListener('pointerup', e => {
+      if (!tracking) return;
+      tracking = false;
+      if (inv.isDragging()) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.abs(dx) < SWIPE_MIN_DX || Math.abs(dy) > Math.abs(dx) * SWIPE_MAX_SLOPE) return;
+      if (dx < 0) {
+        if (statsOpen) closeStats();
+      } else if (!statsOpen && canOpenStats()) {
+        openStats();
+      }
+    });
+
+    charPanelsEl.addEventListener('pointercancel', () => { tracking = false; });
+  })();
 
   // shopOpen declared above with the view toggle.
   const shopTabBtn  = document.getElementById('shop-tab-btn');
@@ -7738,7 +7870,9 @@ window.CharacterManager = ({ auth, database }) => {
   }
 
   function openShop() {
+    closeRules(); // pops its history entry first, if it was open
     shopOpen = true;
+    updateHamburgerMenu();
     setStatsEditing(false);
     shopTabBtn.classList.add('active');
     charPanelsEl.hidden         = true;
@@ -7750,23 +7884,25 @@ window.CharacterManager = ({ auth, database }) => {
       _hexmapMode = false;
       _applyViewMode();
       window.hexOnGoToInventory && window.hexOnGoToInventory();
-      ensureCharSelected();
     }
+    // Not just the hexmap-transition case: Rules also leaves currentCharId
+    // null, and that can be reached here without ever passing through the
+    // branch above.
+    restoreCharSelection();
     inv.closeInspector();
     document.getElementById('shop-search').value = '';
     document.getElementById('shop-category').value = '';
     updateShopWallet();
     buildShop();
-    updateCharSheetToggle();
     if (!_handlingPopstate) history.pushState({ view: 'shop' }, '');
   }
 
   function closeShop(replaceHistory = false) {
     shopOpen = false;
+    updateHamburgerMenu();
     shopTabBtn.classList.remove('active');
     shopPanel.hidden          = true;
     charPanelsEl.hidden         = false;
-    charSheetToggleBtn.hidden   = false;
     updateEditBtn();
     if (_shopFromHexmap) {
       _shopFromHexmap = false;
@@ -7779,7 +7915,6 @@ window.CharacterManager = ({ auth, database }) => {
       inv.collapsePanelInstant();
       inv.closeInspector();
     }
-    updateCharSheetToggle();
     if (!_handlingPopstate) {
       if (replaceHistory) {
         history.replaceState({ view: 'inventory' }, '');
@@ -7867,7 +8002,6 @@ window.CharacterManager = ({ auth, database }) => {
     if (window._isDM || !currentCharId) return;
     const vis = allChars[currentCharId]?.charVisibility || 'visible';
     if (vis === 'inventory-only' && statsOpen) closeStats();
-    charSheetToggleBtn.disabled = (vis === 'inventory-only');
   }
 
   function applyRole(role) {
@@ -8450,6 +8584,7 @@ window.CharacterManager = ({ auth, database }) => {
         }
 
         tab.addEventListener('click', () => {
+          closeRules(); // pops its history entry first, if it was open
           if (char.id === currentCharId) {
             if (shopOpen) {
               _shopFromHexmap = false;
@@ -8566,6 +8701,7 @@ window.CharacterManager = ({ auth, database }) => {
   })();
 
   window.invGoToHexmap = function() {
+    closeRules(); // pops its history entry first, if it was open
     inv.collapsePanelInstant();
     _hexmapMode = true;
     _applyViewMode();
@@ -8582,6 +8718,7 @@ window.CharacterManager = ({ auth, database }) => {
     window._navCalc.handling = true;
     try {
       if (window._navCalc.open) { window._navCalc.hide?.(); return; }
+      if (rulesOpen) { goBackFromRules(); return; }
       const v = e.state?.view;
       if (!v || v === 'hexmap') {
         if (shopOpen) {

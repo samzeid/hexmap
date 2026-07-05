@@ -75,14 +75,55 @@ input, textarea, select { font-size: max(16px, 1em); }
 }
 
 #tab-bar-left {
+  position: relative;
   display: flex;
   align-items: stretch;
   flex-shrink: 0;
   border-right: 1px solid var(--card-border);
 }
 
+#hamburger-menu {
+  position: absolute;
+  top: 100%;
+  left: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  margin-top: 4px;
+  padding: 4px;
+  background: rgba(24,24,32,0.98);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+
+#hamburger-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.95rem;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#hamburger-menu button:hover  { background: rgba(255,255,255,0.08); }
+#hamburger-menu button:active { background: rgba(255,255,255,0.12); }
+#hamburger-menu button i { width: 1.1em; text-align: center; color: var(--muted); }
+#hamburger-menu button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
 /* ── TAB BAR ACTION BUTTONS ──────────────────────────────────── */
-#char-sheet-toggle-btn,
+#hamburger-btn,
 #add-char-btn,
 #shop-tab-btn,
 #role-btn {
@@ -109,24 +150,18 @@ input, textarea, select { font-size: max(16px, 1em); }
 }
 
 #shop-tab-btn,
-#char-sheet-toggle-btn { border-radius: 0; width: 48px; }
+#hamburger-btn { border-radius: 0; width: 48px; }
 
-#char-sheet-toggle-btn:hover, #add-char-btn:hover,
+#hamburger-btn:hover, #add-char-btn:hover,
 #shop-tab-btn:hover, #role-btn:hover {
   background: rgba(255,255,255,0.1);
   color: var(--text);
 }
 
-#char-sheet-toggle-btn:active, #add-char-btn:active,
+#hamburger-btn:active, #add-char-btn:active,
 #shop-tab-btn:active, #role-btn:active {
   transform: scale(0.92);
   background: rgba(255,255,255,0.08);
-}
-
-#char-sheet-toggle-btn:disabled {
-  opacity: 0.3;
-  cursor: default;
-  pointer-events: none;
 }
 
 #char-tabs-scroll {
@@ -1420,25 +1455,6 @@ main {
   min-height: 24px;
 }
 
-#char-header .char-coin-row > #inv-close-btn {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 13px;
-  width: auto;
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 6px;
-  -webkit-tap-highlight-color: transparent;
-  transition: color 0.15s, background 0.15s;
-}
-#char-header .char-coin-row > #inv-close-btn:hover  { color: var(--text); }
-#char-header .char-coin-row > #inv-close-btn:active { background: rgba(255,255,255,0.08); transform: translateY(-50%) scale(0.92); }
-
 .char-coin-row-right {
   position: absolute;
   right: 0;
@@ -2402,11 +2418,6 @@ body.is-dragging #inv-scroll {
   flex-shrink: 0;
 }
 
-#hex-sign-out-btn {
-  position: absolute;
-  right: 16px;
-}
-
 #hexmap-toolbar button {
   background: none;
   border: none;
@@ -2495,6 +2506,17 @@ body.is-dragging #inv-scroll {
 
 #app.hexmap-mode #char-header    { display: none; }
 #app.hexmap-mode #hexmap-toolbar { display: flex; }
+
+/* ── RULES MODE (shares the tab bar; hides every other view) ── */
+#app.rules-mode #hex-view,
+#app.rules-mode #hexmap-toolbar,
+#app.rules-mode #char-header,
+#app.rules-mode #char-panels,
+#app.rules-mode #shop-panel,
+#app.rules-mode #inspector,
+#app.rules-mode #drag-trash-btn { display: none !important; }
+
+#app.rules-mode #rules-page { display: flex; }
 
 /* ── CHARACTER SHEET STATS ───────────────────────────────────── */
 /* Attribute colour tokens (r g b, space-separated for rgb()/0.xx usage) */
