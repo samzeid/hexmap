@@ -4335,7 +4335,7 @@ span.cs-feature-ticker {
 }
 
 /* Wide: proficiency+skills left, combat right */
-@media (min-width: 400px) {
+@media (min-width: 500px) {
   .cs-main-cols {
     display: grid;
     grid-template-columns: 1fr 1fr;

@@ -7906,7 +7906,7 @@ window.CharacterManager = ({ auth, database }) => {
         } else {
           // Nothing pending locally — apply whatever Firebase has (another user's edit)
           suppressSave = true;
-          try { inv.loadState(allChars[currentCharId].state, { charId: currentCharId }); } catch (e) { console.warn('loadState error:', e); }
+          try { inv.loadState(allChars[currentCharId].state, { charId: currentCharId, keepInspector: true }); } catch (e) { console.warn('loadState error:', e); }
           inv.applyLocalUi(userUiCache[currentCharId] || {});
           suppressSave = false;
         }
