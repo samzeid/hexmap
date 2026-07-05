@@ -778,9 +778,78 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   let manualScrolling  = false;
   let manualScrollLastY = 0;
 
+  // Edge auto-scroll while dragging an item. The hot zone is measured from
+  // the scrollable pane's own top/bottom edges (not the raw screen edges),
+  // so it never reaches into the always-visible character tab bar above it
+  // — that region simply isn't part of the pane's rect. The trash button
+  // floats over the bottom of the pane though, so its bounding box (plus a
+  // little padding) is explicitly carved out of the bottom hot zone: hovering
+  // it to delete should never also start a scroll.
+  //
+  // Reaching a character tab (to hand an item to another character) still
+  // means passing through the top band on the way there, since the tabs sit
+  // right above the pane. A dwell requirement handles that: entering the
+  // band doesn't scroll immediately, only staying there continuously past
+  // DRAG_SCROLL_DWELL does — a quick pass-through to drop on a tab is over
+  // well before that fires.
+  const DRAG_SCROLL_EDGE  = 80;   // px band, measured inward from the pane edge
+  const DRAG_SCROLL_MAX   = 14;   // px/frame at the true edge
+  const DRAG_SCROLL_DWELL = 100;  // ms the pointer must sit in the band first
+
+  let dragScrollZone      = null; // 'top' | 'bottom' | null — band currently in
+  let dragScrollZoneSince = 0;    // timestamp we entered it continuously
+
+  function resetDragScrollZone() {
+    dragScrollZone = null;
+    dragScrollZoneSince = 0;
+  }
+
+  function dragScrollTarget() {
+    const shopPanelEl = document.getElementById('shop-panel');
+    const isShopView = shopPanelEl && !shopPanelEl.hidden;
+    return document.getElementById(isShopView ? 'shop-scroll' : 'inv-scroll');
+  }
+
+  function computeDragScrollVel(clientX, clientY) {
+    const el = dragScrollTarget();
+    if (!el) { resetDragScrollZone(); return 0; }
+    const rect = el.getBoundingClientRect();
+
+    let zone = null;
+    let depth = 0;
+
+    if (clientY >= rect.top && clientY < rect.top + DRAG_SCROLL_EDGE) {
+      zone = 'top';
+      depth = (rect.top + DRAG_SCROLL_EDGE) - clientY;
+    } else if (clientY <= rect.bottom && clientY > rect.bottom - DRAG_SCROLL_EDGE) {
+      const tr = !_trashBtn.hidden ? _trashBtn.getBoundingClientRect() : null;
+      const pad = 16;
+      const overTrash = tr
+        && clientX >= tr.left - pad && clientX <= tr.right + pad
+        && clientY >= tr.top  - pad && clientY <= tr.bottom + pad;
+      if (!overTrash) {
+        zone = 'bottom';
+        depth = clientY - (rect.bottom - DRAG_SCROLL_EDGE);
+      }
+    }
+
+    if (!zone) { resetDragScrollZone(); return 0; }
+
+    const now = performance.now();
+    if (zone !== dragScrollZone) {
+      dragScrollZone = zone;
+      dragScrollZoneSince = now;
+    }
+    if (now - dragScrollZoneSince < DRAG_SCROLL_DWELL) return 0;
+
+    const speed = DRAG_SCROLL_MAX * Math.min(1, depth / DRAG_SCROLL_EDGE);
+    return zone === 'top' ? -speed : speed;
+  }
+
   function dragScrollStep() {
     if (!dragState || dragScrollVel === 0) { dragScrollRaf = null; return; }
-    document.getElementById('inv-scroll').scrollTop += dragScrollVel;
+    const el = dragScrollTarget();
+    if (el) el.scrollTop += dragScrollVel;
     dragScrollRaf = requestAnimationFrame(dragScrollStep);
   }
 
@@ -5737,6 +5806,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   // removeFromSource: called only when a drop is committed, to extract the item from its origin.
   function startDrag(slotData, container, r, c, x, y, srcCenter, removeFromSource) {
     dragState = { slotData, srcContainer: container, srcR: r, srcC: c, srcCenter: srcCenter || null, removeFromSource };
+    resetDragScrollZone();
 
     ghostEl = document.createElement('div');
     ghostEl.className = 'drag-ghost';
@@ -5764,6 +5834,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   function endDrag(x, y) {
     if (!dragState) return;
     dragScrollVel = 0;
+    resetDragScrollZone();
     dragScrollRaf = null;
 
     // Capture trash position BEFORE deactivateTrash() hides the button (display:none
@@ -6100,7 +6171,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
     }
 
-    dragScrollVel = 0;
+    dragScrollVel = computeDragScrollVel(e.clientX, e.clientY);
+    if (dragScrollVel !== 0 && dragScrollRaf === null) {
+      dragScrollRaf = requestAnimationFrame(dragScrollStep);
+    }
   });
 
   document.addEventListener('pointerup', e => {
@@ -6110,6 +6184,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   document.addEventListener('pointercancel', () => {
     if (!dragState) return;
     dragScrollVel = 0;
+    resetDragScrollZone();
     dragScrollRaf = null;
     deactivateTrash();
     if (ghostEl) { ghostEl.remove(); ghostEl = null; }
@@ -6290,6 +6365,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     cancelDrag() {
       if (!dragState) return;
       dragScrollVel = 0;
+      resetDragScrollZone();
       dragScrollRaf = null;
       deactivateTrash();
       if (ghostEl) { ghostEl.remove(); ghostEl = null; }
