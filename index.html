@@ -415,7 +415,257 @@
         <button id="rules-back-btn" title="Back"><i class="fa-solid fa-arrow-left"></i></button>
         <h2>Rules</h2>
       </header>
-      <div id="rules-content"></div>
+      <div id="rules-content">
+
+        <details class="rules-section">
+          <summary>Dungeon Crawling in Nox</summary>
+          <div class="rules-section-body">
+            <p>Exploring dungeons in Nox is measured in minutes, players interact with rooms in their entirety through. Skill checks while dungeon crawling may be made by the DM so that the result is hidden from players.</p>
+
+            <h3>Room Entry</h3>
+            <p>When the party enters into a new area, each character chooses an approach before resolving any Room Actions.</p>
+            <div class="rules-table-wrap">
+              <table class="rules-table">
+                <tr><th>Approach</th><th>Effect</th></tr>
+                <tr><td>Cautious</td><td>Roll Perception as you enter the room. On a success, you uncover any hidden enemies, traps, or threats.</td></tr>
+                <tr><td>Charge</td><td>You charge forth. You immediately move up to your speed into the room. If combat begins, you may use Athletics for your initiative roll.</td></tr>
+                <tr><td>Sneak</td><td>If the room offers cover or concealment, you can take the Hide action moving into cover with half your speed. If combat begins, use your Hide's result for initiative.</td></tr>
+                <tr><td>Wait</td><td>You delay your entry. Choose another party member; If combat begins, you act immediately after them in the initiative order.</td></tr>
+              </table>
+            </div>
+
+            <h3>Room Actions</h3>
+            <p>Once in a room, characters notice all features detectable by their passive Perception. Each character may then declare a single Room Action, which the GM resolves in an order of their choosing. A round of Room Actions represents 10 minutes of exploration.</p>
+            <div class="rules-table-wrap">
+              <table class="rules-table">
+                <tr><th>Action</th><th>Effect</th><th>Check</th></tr>
+                <tr><td>Peek</td><td>Peek into a connected room using your passive perception. A Stealth or other ability check may be needed to avoid detection or enter safely.</td><td>Relevant Skill</td></tr>
+                <tr><td>Lookout</td><td>Watch for creatures hiding within, or approaching the room. If combat begins, you can use this roll for your initiative.</td><td>Perception</td></tr>
+                <tr><td>Search</td><td>Search the room for hidden doors, or secrets. An element is revealed if your result beats its concealment DC.</td><td>Perception</td></tr>
+                <tr><td>Examine</td><td>Study an object or feature to recall lore or investigate details.</td><td>Relevant Skill</td></tr>
+                <tr><td>Interact</td><td>Attempt a task requiring time such as disarming a trap, picking a lock, or blocking an exit.</td><td>Relevant Skill</td></tr>
+                <tr><td>Conceal</td><td>Hide an object or traces of your presence. The result sets the concealment DC.</td><td>Stealth or Survival</td></tr>
+                <tr><td>Heal</td><td>Use a healer's kit to restore a creature's hit points equal to half its total Hit Dice (minimum 1). Hit Dice are not expended, but the target can't benefit again until after a short rest.</td><td>Medicine</td></tr>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <details class="rules-section">
+          <summary>Downtime</summary>
+          <div class="rules-section-body">
+            <p>When in an established settlement, you can take a long rest whilst engaging in low-effort downtime activities.</p>
+
+            <h3>Downtime Activities</h3>
+            <p>Each character can perform up to 2 activities over the 7 days, rolling a DC 15 check for each.</p>
+            <div class="rules-table-wrap">
+              <table class="rules-table">
+                <tr><th>Activity</th><th>Roll</th><th>Result</th></tr>
+                <tr><td>Train</td><td>—</td><td>Swap a feature that can be swapped when you gain a level or long rest.</td></tr>
+                <tr><td>Network</td><td>Charisma (Persuasion)</td><td>Gain useful insight about a faction, group, or individual.</td></tr>
+                <tr><td>Craft</td><td>Proficiency with appropriate tools</td><td>Craft a nonmagical item at half the normal material cost.</td></tr>
+                <tr><td>Research</td><td>Intelligence (Investigation)</td><td>Uncover knowledge on a specific subject.</td></tr>
+                <tr><td>Work</td><td>d20 + appropriate proficiency</td><td>Earn 15 gp.</td></tr>
+                <tr><td>Recover</td><td>—</td><td>Remove 1 additional level of exhaustion or a condition.</td></tr>
+                <tr><td>Memorize</td><td>—</td><td>Memorize a spell scroll so you can cast it.</td></tr>
+              </table>
+            </div>
+
+            <h3>Lodging</h3>
+            <p>When you take a long rest you must choose lodging and pay for daily rations in addition to this cost.</p>
+            <div class="rules-table-wrap">
+              <table class="rules-table">
+                <tr><th>Lodging</th><th>Cost</th><th>Effect</th></tr>
+                <tr><td>-</td><td>-</td><td>Cannot long rest.</td></tr>
+                <tr><td>Poor</td><td>5sp/day</td><td>No downtime activities.</td></tr>
+                <tr><td>Comfortable</td><td>2gp/day</td><td>-</td></tr>
+                <tr><td>Wealthy</td><td>4gp/day</td><td>One downtime activity has advantage.</td></tr>
+              </table>
+            </div>
+
+            <h3>Leveling</h3>
+            <p>When you are able to increase in level, it occurs only after completing a long rest.</p>
+          </div>
+        </details>
+
+        <details class="rules-section">
+          <summary>Settlement Services</summary>
+          <div class="rules-section-body">
+            <p>During downtime, as a downtime activity you can access the following services. These services aren't always available, depending on the size of the settlement, the availability of skilled labour, or just bad luck.</p>
+
+            <h3>Storage and Transport Services</h3>
+            <p>You can rent storage in a settlement and pay for couriering between towns. Though travel paths are sometimes treacherous or not supported.</p>
+            <div class="rules-table-caption">Storage and Transport Costs</div>
+            <div class="rules-table-wrap">
+              <table class="rules-table">
+                <tr><th>Storage</th><th>Capacity</th><th>Cost/Day</th><th>Transport Cost/9miles</th></tr>
+                <tr><td>Chest</td><td>12 item slots</td><td>1gp</td><td>5gp</td></tr>
+                <tr><td>Area</td><td>10ftx10ft</td><td>3gp</td><td>30gp</td></tr>
+              </table>
+            </div>
+            <p>When transporting goods, there is a 5 percent chance of it being stolen, lost, or destroyed. This can raise in particularly treacherous territories. When this occurs it is normal to receive a refund on the transport costs.</p>
+
+            <h3>Hireling Services</h3>
+            <p>Hiring a skilled commoner, (commoner stat block), requires locating them through a successful research or network downtime activity. Once hired they expect:</p>
+            <ul>
+              <li>A minimum of 3 gp/day.</li>
+            </ul>
+            <p>If taken outside of their settlement:</p>
+            <ul>
+              <li>An additional 3gp/day.</li>
+              <li>Food, shelter, and safe transport for the duration of their service, including the return trip.</li>
+            </ul>
+            <p>A hireling's interests are self-serving, they are unlikely to put up with poor treatment for long.</p>
+            <p>More specialised hirelings are typically handled through an open quest, or seal wall post. Which will require negotiation with the DM.</p>
+
+            <h3>Messaging Services</h3>
+            <p>Messages can be sent between settlements by raven for 5 gold pieces per parchment. The price includes the bird, the message tube, a wax seal, and notification of the contact. Delivery time varies by distance and weather, but most arrive within 1–3 days.</p>
+          </div>
+        </details>
+
+        <details class="rules-section">
+          <summary>Exotic Metals</summary>
+          <div class="rules-section-body">
+            <h3>Silvered Weapon</h3>
+            <p>Undead with immunity or resistance to nonmagical weapons are susceptible to silvered ones. Additionally, vampires and shapechangers are vulnerable to a silvered weapon. Silvering a weapon or 10 pieces of ammunition costs 100 gp.</p>
+
+            <h3>Adamantine and Mithral</h3>
+            <p>Adamantine and mithral are not magical, but ignore effects that corrode items. An experienced smith can forge adamantine or mithral into armor, a weapon, or 10 pieces of ammunition, for an additional 500gp.</p>
+
+            <h3>Mithral Weapon</h3>
+            <p>When you roll heroic inspiration for a mithral weapon attack, you do so with advantage.</p>
+
+            <h3>Mithral Armor</h3>
+            <p>If the armor normally imposes disadvantage on Dexterity (Stealth) checks or has a Strength requirement, the mithral version of the armor doesn't.</p>
+
+            <h3>Adamantine Weapon</h3>
+            <p>When an adamantine weapon or piece of ammunition hits an object, the hit is a critical hit.</p>
+
+            <h3>Adamantine Armor</h3>
+            <p>While you're wearing adamantine armor, any critical hit against you becomes a normal hit.</p>
+          </div>
+        </details>
+
+        <details class="rules-section">
+          <summary>Hex Crawling in Nox</summary>
+          <div class="rules-section-body">
+            <p>Travel is measured in 9-mile hexes. Each hex consists of a terrain type and may contain additional elements of the following; hazards, creatures, or locations (such as ruins, lairs, settlements, etc.)</p>
+            <p>Each element can be either overt or concealed. Overt elements can be revealed with the Survey Hex Action. Concealed elements require the Track or Explore Hex Actions to be interacted with after entering the hex.</p>
+
+            <h3>Movement</h3>
+            <p>The party gains 6 travel points per day on foot, or if all are mounted, travel points as listed in the Mount Travel Points table. Each terrain type has a different travel point cost to traverse. Additionally, you can adjust your movement in one of the following ways:</p>
+            <ul>
+              <li><strong>Move cautiously.</strong> Spend 3 travel points; the party gains +5 to all skill checks or saving throws made.</li>
+              <li><strong>Forced march.</strong> Forgo rest to gain 3 travel points.</li>
+            </ul>
+
+            <h3>Hazards</h3>
+            <p>Hazards reflect dangerous terrain, enemy presence, or environmental threats. To avoid a hazard's effects, the party must succeed on a group check of the skill or saving throw listed in the Hex Hazards Table.</p>
+            <p><strong>Weather.</strong> Extreme weather conditions increase the terrain type's difficulty by one step. Severe weather may also introduce additional hazards in affected hexes.</p>
+
+            <h3>Rations and Rest</h3>
+            <p>Each creature consumes 1 ration per day of travel.</p>
+            <ul>
+              <li>A <strong>short rest</strong> takes 8 hours and fulfills sleep requirements for the day.</li>
+              <li>A <strong>long rest</strong> requires 7 days of downtime, which must take place in a town, city, or secured location. You regain all your hit die when you finish a long rest.</li>
+            </ul>
+            <p><strong>Deprivation.</strong> Each day a creature goes without either food or sleep, it must succeed on a DC 10 Constitution saving throw or gain one level of exhaustion. If the creature goes without both, increase the DC by 5. For every two consecutive days of deprivation, increase the DC by an additional 5.</p>
+
+            <h3>Hex Actions</h3>
+            <p>Each party member can perform one action from the Hex Actions table over the day. To do so, make the associated skill check against the terrain's DC (or the concealment DC). At the end of a travel day, one party member can perform an additional Camp action unless they made a forced march.</p>
+            <p><strong>Inhospitable.</strong> Some hexes may not allow certain hex actions due to their inhospitable nature. When this is the case, it is an overt feature of the hex.</p>
+
+            <div class="rules-table-caption">Hex Terrain</div>
+            <div class="rules-table-wrap">
+              <table class="rules-table">
+                <tr><th>Terrain</th><th>Cost</th><th>DC</th><th>Horse</th><th>Notes</th></tr>
+                <tr><td>Clear</td><td>2</td><td>5</td><td>Yes</td><td>Roads, clear planes</td></tr>
+                <tr><td>Light</td><td>3</td><td>10</td><td>Yes</td><td>Forests, hills, rocky ground</td></tr>
+                <tr><td>Difficult</td><td>4</td><td>15</td><td>No</td><td>Mountains, swamps, deep forest</td></tr>
+              </table>
+            </div>
+
+            <div class="rules-table-caption">Hex Actions</div>
+            <div class="rules-table-wrap">
+              <table class="rules-table">
+                <tr><th>Action</th><th>Description</th><th>Check(s)</th></tr>
+                <tr><td>Survey</td><td>On a success, learn the terrain and hidden hazards along your travel path before entering each hex.</td><td>Perception, Investigation</td></tr>
+                <tr><td>Forage</td><td>On a success, gain 1 days ration.</td><td>Survival, Nature</td></tr>
+                <tr><td>Track</td><td>On a success, uncover tracks and the direction of travel of a creature you wish to find within the travelled hexes. If the creature is in this hex, you find it.</td><td>Survival, Investigation</td></tr>
+                <tr><td>Conceal</td><td>Conceal an object or feature in a traversed hex. The concealment DC becomes the rolled result, or the terrain DC, whichever is higher.</td><td>Survival, Stealth</td></tr>
+                <tr><td>Explore</td><td>On a success, uncover hidden locations, ruins, or other features in this hex if there are any.</td><td>Perception, Investigation</td></tr>
+                <tr><td>Camp</td><td>Camp for a short rest. Only when the hex is dangerous is a check needed.</td><td>Survival</td></tr>
+              </table>
+            </div>
+
+            <div class="rules-table-caption">Hex Hazards</div>
+            <div class="rules-table-wrap">
+              <table class="rules-table">
+                <tr><th>Hazard</th><th>Effect</th><th>Check(s)</th></tr>
+                <tr><td>Obscured</td><td>Hex Actions for this location are made with disadvantage.</td><td>Perception</td></tr>
+                <tr><td>Delay</td><td>This hex costs 2 additional travel points to traverse.</td><td>Athletics</td></tr>
+                <tr><td>Harm</td><td>Each creature that fails takes 1d6 damage, plus 1d6 additional damage for every 5 points the check failed by.</td><td>Dexterity Saving Throw</td></tr>
+                <tr><td>Exposure</td><td>Each creature that fails is poisoned, gains 1 level of exhaustion, or contracts a disease.</td><td>Constitution Saving Throw</td></tr>
+                <tr><td>Lost</td><td>The group becomes lost; their next hex traversal is random and they repeat this hazard.</td><td>Survival</td></tr>
+                <tr><td>Enemy</td><td>A nearby hostile becomes aware of the group's presence.</td><td>Stealth</td></tr>
+              </table>
+            </div>
+
+            <div class="rules-table-caption">Mount Travel Points</div>
+            <div class="rules-table-wrap">
+              <table class="rules-table">
+                <tr><th>Mount</th><th>Travel Points</th></tr>
+                <tr><td>60ft speed</td><td>9</td></tr>
+                <tr><td>50ft speed</td><td>8</td></tr>
+                <tr><td>40ft speed</td><td>7</td></tr>
+                <tr><td>Sled (snow only)</td><td>7</td></tr>
+                <tr><td>Wagon (path only)</td><td>7</td></tr>
+              </table>
+            </div>
+            <p><em>The encumberance limit of a carriage is 10 times its mounts.</em></p>
+
+            <h3>Adventure Gear Usages</h3>
+            <div class="rules-table-wrap">
+              <table class="rules-table">
+                <tr><th>Item</th><th>Usage</th></tr>
+                <tr><td>Camp Supplies</td><td>When you short rest with rations and water, you can remove 1 level of exhaustion.</td></tr>
+                <tr><td>Cook's Utensils</td><td>One daily ration grants 1d4 temporary hit points when you short rest.</td></tr>
+                <tr><td>Healer's Kit</td><td>Maximum hit die recovery for one creature when you short rest.</td></tr>
+                <tr><td>Herbalism Kit</td><td>Once daily gain a potion of healing or antitoxins when you Forage instead of rations.</td></tr>
+                <tr><td>Poisoner's Kit</td><td>Once daily gain a basic poison or antitoxins when you Forage instead of rations.</td></tr>
+                <tr><td>Alchemist's Supplies</td><td>Craft acid, alchemist's fire or oil when you Forage instead of gaining rations.</td></tr>
+                <tr><td>Navigator's Tools</td><td>Advantage on Survey and Lost checks.</td></tr>
+                <tr><td>Climber's Tools</td><td>Advantage on climbing Hazard checks.</td></tr>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <details class="rules-section">
+          <summary>Exhaustion in Nox</summary>
+          <div class="rules-section-body">
+            <p>While you have the Exhaustion condition, you experience the following effects.</p>
+            <ul>
+              <li><strong>Exhaustion Levels.</strong> This condition is cumulative. Each time you receive it, you gain 1 Exhaustion level. If your Exhaustion level reaches 6, you die.</li>
+              <li><strong>D20 Tests Affected.</strong> When you make a D20 Test, the roll is reduced by your exhaustion level.</li>
+              <li><strong>Spell Save DC Affected.</strong> Subtract your exhaustion level from the Spell save DC of any Spell you cast.</li>
+              <li><strong>Speed Reduced.</strong> Your speed is reduced by 5 feet for every 2 levels of Exhaustion you have.</li>
+              <li><strong>Removing Exhaustion Levels.</strong> A long rest reduces your Exhaustion level by 1. When your Exhaustion level reaches 0, the condition ends.</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="rules-section">
+          <summary>Fall Damage in Nox</summary>
+          <div class="rules-section-body">
+            <ul>
+              <li><strong>Fall Damage.</strong> When you fall, you take 1d6 damage for every 5 feet fallen and land prone. If you willingly jump or drop, ignore the first 10 feet of the fall.</li>
+              <li><strong>Saving Throw.</strong> You can make a Dexterity (Acrobatics) check with a DC equal to the number of feet fallen beyond any ignored distance. On a success, reduce the fall by an additional 10 feet and land standing instead of prone.</li>
+            </ul>
+          </div>
+        </details>
+
+      </div>
     </div>
 
     <div id="autocomplete-dropdown" hidden></div>
