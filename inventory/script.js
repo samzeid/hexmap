@@ -1604,6 +1604,34 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       });
     });
 
+    // Coin values also get the same touch-friendly calculator popup used for
+    // HP/temp-HP/hit dice, so +/- amounts can be typed instead of tapped out.
+    inlineEl.querySelectorAll('.insp-num-coin').forEach(inp => {
+      const key  = inp.dataset.k;
+      const meta = slotData.variables[key];
+      if (!key || !meta || !calcShowCustom) return;
+      inp.addEventListener('touchstart', e => {
+        e.preventDefault();
+        inp.readOnly = true;
+      }, { passive: false });
+      inp.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse') return;
+        e.preventDefault();
+        calcShowCustom(inp, {
+          label: key.toUpperCase(),
+          min: typeof meta.min === 'number' ? meta.min : 0,
+          max: meta.max,
+          getValue: () => meta.value,
+          setValue: v => {
+            meta.value = v;
+            render();
+            refreshCostDisplay();
+            if (!container) refreshShopRow();
+          },
+        });
+      });
+    });
+
     // ── Warning ──
     const warnEl = document.getElementById('insp-warn');
     warnEl.hidden = !slotData.conflict;
@@ -1825,9 +1853,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
     };
 
-    if (canSilver) {
+    const isSilvered = slotData.silvered || slotData.material === 'silvered';
+    if (canSilver && (window._isDM || isSilvered)) {
       const btn = document.createElement('button');
-      const isSilvered = slotData.silvered || slotData.material === 'silvered';
       btn.className = 'prop-chip' + (isSilvered ? ' active-silvered' : '');
       btn.textContent = 'Silvered';
       btn.dataset.matChip = 'true';
@@ -1841,9 +1869,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       ctrlTarget.appendChild(btn);
     }
 
-    if (canMetal) {
+    const curMetal = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
+    if (canMetal && (window._isDM || curMetal)) {
       const metals = [null, 'mithral', 'adamantine'];
-      const curMetal = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
       const btn = document.createElement('button');
       btn.className = 'prop-chip' + (curMetal ? ` active-${curMetal}` : '');
       btn.textContent = curMetal ? curMetal.charAt(0).toUpperCase() + curMetal.slice(1) : 'Metal';
@@ -2412,7 +2440,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         && !e.target.closest('#cs-armor-display')
         && !e.target.closest('#cs-shield-display')
         && !e.target.closest('.cs-attack-weapon-name')
-        && !e.target.closest('.cs-spell-link');
+        && !e.target.closest('.cs-spell-link')
+        && !e.target.closest('#cs-calc-overlay')
+        && !e.target.closest('#cs-calc-backdrop');
     if (panelOpen && outsidePanel) {
       if (_spellDetailActive) closeSpellDetail();
       else if (inspectorItemKey !== null) { hideInspector(); render(); }
@@ -2468,6 +2498,11 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   });
 
   // ── CALCULATOR OVERLAY (touch devices) ───────────────────────────────────
+  // calcShowCustom lets other UI (e.g. the coin purse inputs in showInspector,
+  // defined above) reuse this same popup for values that don't live in
+  // state[CS_ID_TO_KEY[el.id]] (the HP/temp-HP/hit-dice fields it was built
+  // for) by passing a { label, min, max, getValue, setValue } descriptor.
+  let calcShowCustom = null;
   (function () {
     const overlay   = document.getElementById('cs-calc-overlay');
     const backdrop  = document.getElementById('cs-calc-backdrop');
@@ -2482,10 +2517,20 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       'cs-hit-dice-remaining': 'Hit Dice',
     };
 
-    let targetEl = null;
+    let targetEl     = null;
+    let customTarget = null; // { label, min, max, getValue, setValue } when open for a non-CS_FIELDS value
     let baseVal  = 0;
     let op       = '';   // '+' | '-' | ''
     let numStr   = '';
+
+    function clampResult(v) {
+      if (customTarget) {
+        if (typeof customTarget.min === 'number') v = Math.max(customTarget.min, v);
+        if (typeof customTarget.max === 'number') v = Math.min(customTarget.max, v);
+        return v;
+      }
+      return Math.max(0, v);
+    }
 
     function renderDisplay() {
       if (!op) {
@@ -2495,7 +2540,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         const sym = op === '-' ? '−' : '+';
         mainEl.textContent = `${baseVal} ${sym} ${numStr || '_'}`;
         if (numStr) {
-          const res = Math.max(0, op === '-' ? baseVal - parseInt(numStr) : baseVal + parseInt(numStr));
+          const res = clampResult(op === '-' ? baseVal - parseInt(numStr) : baseVal + parseInt(numStr));
           subEl.textContent = `= ${res}`;
         } else {
           subEl.textContent = '';
@@ -2503,19 +2548,27 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       }
     }
 
-    function show(el) {
-      if (document.getElementById('stats-panel')?.classList.contains('char-view-only')) return;
-      targetEl = el;
-      baseVal  = parseInt(el.value) || 0;
+    function show(el, custom) {
+      if (!custom && document.getElementById('stats-panel')?.classList.contains('char-view-only')) return;
+      targetEl     = el;
+      customTarget = custom || null;
+      baseVal  = custom ? (custom.getValue() || 0) : (parseInt(el.value) || 0);
       op       = '';
       numStr   = '';
-      headerEl.textContent = CALC_FIELDS[el.id] || '';
+      headerEl.textContent = custom ? custom.label : (CALC_FIELDS[el.id] || '');
       renderDisplay();
       overlay.classList.add('cs-calc-open');
       backdrop.classList.add('cs-calc-open');
       el.readOnly = true;
       window._navCalc.open = true;
       history.pushState({ overlay: 'calculator' }, '');
+      // If the item detail panel is open behind this (e.g. the coin purse),
+      // shift it up by the overlay's height so its contents — including the
+      // value being edited — stay visible above the keypad instead of being
+      // covered by it.
+      if (detailPanelEl && !detailPanelEl.classList.contains('detail-collapsed')) {
+        detailPanelEl.style.transform = `translateY(-${overlay.offsetHeight}px)`;
+      }
     }
 
     function hide() {
@@ -2529,6 +2582,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       overlay.classList.remove('cs-calc-open');
       backdrop.classList.remove('cs-calc-open');
       if (targetEl) { targetEl.readOnly = false; targetEl = null; }
+      if (detailPanelEl) detailPanelEl.style.transform = '';
+      customTarget = null;
       op = ''; numStr = '';
     }
 
@@ -2544,10 +2599,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           ? (op === '-' ? baseVal - parseInt(numStr) : baseVal + parseInt(numStr))
           : baseVal;
       }
-      result = Math.max(0, result);
+      result = clampResult(result);
       targetEl.value = String(result);
-      state[CS_ID_TO_KEY[targetEl.id]] = String(result);
-      updateCsCalculations();
+      if (customTarget) {
+        customTarget.setValue(result);
+      } else {
+        state[CS_ID_TO_KEY[targetEl.id]] = String(result);
+        updateCsCalculations();
+      }
       if (onChange) onChange();
       hide();
     }
@@ -2591,6 +2650,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         }
       });
     });
+
+    calcShowCustom = show;
   })();
 
   // ── FEATURES ─────────────────────────────────────────────────────────────
