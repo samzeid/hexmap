@@ -796,7 +796,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   // confirm intent; right at the pane's true edge (deep) there's nothing
   // above to reach for, so it's a clear "I want to scroll" and responds
   // almost immediately (DRAG_SCROLL_DWELL_MIN).
-  const DRAG_SCROLL_EDGE      = 70;  // px band, measured inward from the pane edge
+  const DRAG_SCROLL_EDGE      = 80;  // px band, measured inward from the pane edge
   const DRAG_SCROLL_MAX       = 10;  // px/frame at the true edge
   const DRAG_SCROLL_DWELL_MAX = 500; // ms required at the band's outer edge (shallow)
   const DRAG_SCROLL_DWELL_MIN = 120; // ms required at the pane's true edge (deep)
