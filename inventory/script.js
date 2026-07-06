@@ -6711,17 +6711,23 @@ window.CharacterManager = ({ auth, database }) => {
   rulesBackBtn.addEventListener('click', goBackFromRules);
 
   // ── HISTORY PANEL (DM-only audit log — sells/destroys/moves + HP/hit dice/
-  // exhaustion/feature-charge changes). Mirrors the Rules page mechanics
-  // exactly (own mode class, own history-stack entry) so it stays exclusive
-  // with every other view without fighting over the back-button stack.
+  // exhaustion/feature-charge changes — and a Backups tab for rolling
+  // per-character snapshots). Mirrors the Rules page mechanics exactly (own
+  // mode class, own history-stack entry) so it stays exclusive with every
+  // other view without fighting over the back-button stack. Log and Backups
+  // are two tabs on this one page/mode, not separate panels.
   let historyOpen = false;
   let historyRef  = null;
+  let historyActiveTab = 'log'; // 'log' | 'backups'
   const historyBackBtn      = document.getElementById('history-back-btn');
   const historyClearBtn     = document.getElementById('history-clear-btn');
   const historyListEl       = document.getElementById('history-list');
   const historyEmptyEl      = document.getElementById('history-empty');
   const historyFilterCharEl = document.getElementById('history-filter-char');
   const historyFilterTypeEl = document.getElementById('history-filter-type');
+  const historyTabButtons   = document.querySelectorAll('.history-tab-btn');
+  const historyTabLogEl     = document.getElementById('history-tab-log');
+  const historyTabBackupsEl = document.getElementById('history-tab-backups');
   let historyEntriesCache   = [];
 
   function setHistoryMode(on) {
@@ -6729,6 +6735,18 @@ window.CharacterManager = ({ auth, database }) => {
     document.getElementById('app').classList.toggle('history-mode', on);
     updateHamburgerMenu();
   }
+
+  function setHistoryTab(tab) {
+    historyActiveTab = tab;
+    historyTabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+    historyTabLogEl.hidden     = tab !== 'log';
+    historyTabBackupsEl.hidden = tab !== 'backups';
+    if (tab === 'backups') {
+      populateBackupsCharSelect();
+      loadBackupsForChar(backupsCharSelect.value);
+    }
+  }
+  historyTabButtons.forEach(btn => btn.addEventListener('click', () => setHistoryTab(btn.dataset.tab)));
 
   // ── RESTORE-FROM-HISTORY DRAG ─────────────────────────────────────────
   // Sell/destroy entries carry the item's full compact state (itemData),
@@ -6935,6 +6953,7 @@ window.CharacterManager = ({ auth, database }) => {
     deselectChar();
     setHistoryMode(true);
     history.pushState({ view: 'history' }, '');
+    setHistoryTab('log'); // always land on Log; Backups is opt-in via the tab
     populateHistoryCharFilter();
     loadHistoryEntries();
   }
@@ -6945,6 +6964,7 @@ window.CharacterManager = ({ auth, database }) => {
     if (!historyOpen) return;
     setHistoryMode(false);
     if (historyRef) { historyRef.off('value'); historyRef = null; }
+    if (backupsRef) { backupsRef.off('value'); backupsRef = null; }
     if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
   }
 
@@ -6960,6 +6980,83 @@ window.CharacterManager = ({ auth, database }) => {
     if (!confirm('Clear the entire history log? This deletes every sale, destroy, move, and character-change entry for every character and cannot be undone.')) return;
     database.ref('/inventory_history').remove();
   });
+
+  // ── BACKUPS TAB (DM-only rolling per-character snapshots) ────────────────
+  // Lives inside the same History page/mode as the Log tab (see
+  // setHistoryTab above) rather than being its own panel.
+  let backupsRef  = null;
+  const backupsCharSelect = document.getElementById('backups-char-select');
+  const backupsListEl    = document.getElementById('backups-list');
+  const backupsEmptyEl   = document.getElementById('backups-empty');
+
+  function populateBackupsCharSelect() {
+    const prev = backupsCharSelect.value;
+    backupsCharSelect.innerHTML = '<option value="">Select a character…</option>';
+    Object.values(allChars)
+      .sort((a, b) => (a.state?.charName || '').localeCompare(b.state?.charName || ''))
+      .forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.state?.charName || 'Unnamed';
+        backupsCharSelect.appendChild(opt);
+      });
+    if ([...backupsCharSelect.options].some(o => o.value === prev)) backupsCharSelect.value = prev;
+  }
+
+  function formatRelativeTime(ts) {
+    if (!ts) return '';
+    const diffMs = Date.now() - ts;
+    const mins = Math.round(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.round(hours / 24)}d ago`;
+  }
+
+  function formatBackupRow(key, entry) {
+    const row = document.createElement('div');
+    row.className = 'backup-row';
+
+    const label = document.createElement('div');
+    const timeStr = entry.ts ? new Date(entry.ts).toLocaleString() : 'Unknown time';
+    label.innerHTML = `<span class="backup-row-time">${escHtml(timeStr)}</span>`
+      + `<span class="backup-row-relative">${escHtml(formatRelativeTime(entry.ts))}</span>`;
+    row.appendChild(label);
+
+    const restoreBtn = document.createElement('button');
+    restoreBtn.className = 'backup-restore-btn';
+    restoreBtn.innerHTML = '<i class="fa-solid fa-clock-rotate-left"></i> Restore as New';
+    restoreBtn.addEventListener('click', () => {
+      if (!confirm(`Restore this snapshot from ${timeStr} as a brand-new character? The original character is left untouched.`)) return;
+      restoreBackupAsNewChar(entry.state, entry.ts);
+    });
+    row.appendChild(restoreBtn);
+
+    return row;
+  }
+
+  function loadBackupsForChar(charId) {
+    if (backupsRef) { backupsRef.off('value'); backupsRef = null; }
+    backupsListEl.innerHTML = '';
+    if (!charId) {
+      backupsEmptyEl.textContent = 'Select a character to view its backups.';
+      backupsEmptyEl.hidden = false;
+      return;
+    }
+    backupsEmptyEl.textContent = 'No backups yet for this character.';
+    backupsRef = database.ref(`/inventory_backups/${charId}`);
+    backupsRef.on('value', snap => {
+      const entries = [];
+      snap.forEach(child => { entries.push([child.key, child.val()]); }); // oldest-first
+      entries.reverse(); // newest-first for display
+      backupsListEl.innerHTML = '';
+      backupsEmptyEl.hidden = entries.length > 0;
+      entries.forEach(([key, entry]) => backupsListEl.appendChild(formatBackupRow(key, entry)));
+    });
+  }
+
+  backupsCharSelect.addEventListener('change', () => loadBackupsForChar(backupsCharSelect.value));
 
   // ── HAMBURGER MENU (replaces the old char/inventory toggle button) ──────
   // Holds the low-frequency navigation actions: leaving to the map, opening
@@ -8848,6 +8945,57 @@ window.CharacterManager = ({ auth, database }) => {
     renderTabs();
   }
 
+  // Restoring a backup always creates a brand-new character rather than
+  // overwriting anything — the whole point of a backup is a safety net, so
+  // the restore action itself must never be able to destroy current data.
+  function restoreBackupAsNewChar(backupStateJson, backupTs) {
+    if (!currentUser || !window._isDM || !backupStateJson) return;
+    // parseState (not a raw JSON.parse) is required here — backup snapshots
+    // store containers in the same compact _ref/_vars form used everywhere
+    // else in Firebase, and parseState is what resolves that back into full
+    // item objects (name, variables, description) that the inventory UI and
+    // loadState() actually expect.
+    const restoredState = parseState(backupStateJson);
+
+    const origName = restoredState.charName || 'Character';
+    const stamp = backupTs ? new Date(backupTs).toLocaleString() : '';
+    restoredState.charName = `${origName} (Restored${stamp ? ' ' + stamp : ''})`;
+
+    inv.cancelDrag();
+    if (currentCharId) saveChar(currentCharId, true);
+
+    const ref       = database.ref('/inventory_characters').push();
+    const newId     = ref.key;
+    const createdAt = Date.now();
+    const charData  = {
+      id: newId,
+      ownerUid: '',
+      ownerName: '',
+      state: restoredState,
+      createdAt,
+      sortOrder: createdAt,
+    };
+    allChars[newId] = charData;
+    pendingNewChar  = charData;
+
+    // Compact before writing, same as every other character save — restoredState
+    // itself (resolved/full form) stays as the local live copy in allChars.
+    const saveState = JSON.parse(JSON.stringify(restoredState));
+    compactContainerSlots(saveState.containers);
+    ref.set({
+      ownerUid: '',
+      ownerName: '',
+      state: JSON.stringify(saveState),
+      createdAt,
+      sortOrder: createdAt,
+    }).then(() => {
+      if (pendingNewChar === charData) pendingNewChar = null;
+    });
+
+    closeHistoryPanel();
+    switchToChar(newId, true);
+  }
+
   function deleteChar(charId) {
     if (!window._isDM && allChars[charId]?.ownerUid !== currentUser?.uid) return;
 
@@ -8880,11 +9028,64 @@ window.CharacterManager = ({ auth, database }) => {
     const saveState = JSON.parse(JSON.stringify(state));
     if (!saveState.charName) saveState.charName = 'Unnamed';
     compactContainerSlots(saveState.containers);
+    const saveStateJson = JSON.stringify(saveState);
     database.ref(`/inventory_characters/${charId}`).update({
-      state: JSON.stringify(saveState),
+      state: saveStateJson,
     }).then(() => {
       setTimeout(() => { localWriteInFlight = false; }, 200);
     });
+    scheduleBackupCheck(charId, saveStateJson);
+  }
+
+  // ── CHARACTER BACKUPS ─────────────────────────────────────────────────────
+  // Rolling, time-gated snapshots of a character's full compacted state,
+  // independent of who's editing (any save counts as "activity") — separate
+  // from the DM-only History page's Backups tab that lets you browse/restore
+  // them, which is the part actually gated to DM.
+  // 5 min * 20 kept = at least 1h40m of rewind coverage during continuous
+  // activity (real sessions have lulls, so actual wall-clock coverage is
+  // typically longer still).
+  const BACKUP_MIN_INTERVAL_MS = 5 * 60 * 1000;
+  const BACKUP_RETENTION_COUNT = 20;
+  let backupDebounceTimer = null;
+  let pendingBackup = null; // { charId, stateJson } — always the *latest* save seen
+
+  // Debounced so a burst of saves (typing, dragging) only triggers one
+  // Firebase round-trip to check eligibility, using whichever save was most
+  // recent by the time things settle.
+  function scheduleBackupCheck(charId, stateJson) {
+    pendingBackup = { charId, stateJson };
+    clearTimeout(backupDebounceTimer);
+    backupDebounceTimer = setTimeout(() => {
+      const pending = pendingBackup;
+      pendingBackup = null;
+      if (pending) maybeBackupChar(pending.charId, pending.stateJson);
+    }, 3000);
+  }
+
+  // Checks Firebase's actual last-backup timestamp (not an in-memory timer)
+  // so the 10-minute gate holds up across page reloads and multiple devices
+  // editing the same character.
+  function maybeBackupChar(charId, stateJson) {
+    const ref = database.ref(`/inventory_backups/${charId}`);
+    ref.limitToLast(1).once('value').then(snap => {
+      let lastTs = 0;
+      snap.forEach(child => { lastTs = child.val()?.ts || 0; });
+      if (Date.now() - lastTs < BACKUP_MIN_INTERVAL_MS) return false;
+      return ref.push().set({ ts: firebase.database.ServerValue.TIMESTAMP, state: stateJson }).then(() => true);
+    }).then(created => { if (created) trimOldBackups(charId); }).catch(() => {});
+  }
+
+  function trimOldBackups(charId) {
+    const ref = database.ref(`/inventory_backups/${charId}`);
+    ref.once('value').then(snap => {
+      const keys = [];
+      snap.forEach(child => { keys.push(child.key); }); // oldest-first, per Firebase's key ordering
+      if (keys.length <= BACKUP_RETENTION_COUNT) return;
+      const updates = {};
+      keys.slice(0, keys.length - BACKUP_RETENTION_COUNT).forEach(k => { updates[k] = null; });
+      ref.update(updates);
+    }).catch(() => {});
   }
 
   // ── INVENTORY CALLBACKS ──────────────────────────────────────────────────

@@ -669,27 +669,46 @@
       </div>
     </div>
 
-    <!-- DM-only audit log: sells, destroys, cross-character moves, HP/hit-dice/
-         exhaustion/feature-charge changes. Hamburger menu → History. -->
+    <!-- DM-only: audit log (sells, destroys, moves, character changes) and
+         rolling per-character backups (restorable as a brand-new character,
+         never overwrites), sharing one page with a Log/Backups tab strip.
+         Hamburger menu → History. -->
     <div id="history-page">
       <header id="history-header">
         <button id="history-back-btn" title="Back"><i class="fa-solid fa-arrow-left"></i></button>
         <h2>History</h2>
-        <button id="history-clear-btn" title="Clear history"><i class="fa-solid fa-trash"></i></button>
       </header>
-      <div id="history-filters">
-        <select id="history-filter-char">
-          <option value="">All characters</option>
-        </select>
-        <select id="history-filter-type">
-          <option value="">All events</option>
-          <option value="item">Item events</option>
-          <option value="character">Character changes</option>
-        </select>
+      <div id="history-tabs">
+        <button class="history-tab-btn active" data-tab="log">Log</button>
+        <button class="history-tab-btn" data-tab="backups">Backups</button>
       </div>
-      <div id="history-content">
-        <div id="history-empty" hidden>No activity logged yet.</div>
-        <div id="history-list"></div>
+      <div id="history-tab-log">
+        <div id="history-filters">
+          <select id="history-filter-char">
+            <option value="">All characters</option>
+          </select>
+          <select id="history-filter-type">
+            <option value="">All events</option>
+            <option value="item">Item events</option>
+            <option value="character">Character changes</option>
+          </select>
+          <button id="history-clear-btn" title="Clear history"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        <div id="history-content">
+          <div id="history-empty" hidden>No activity logged yet.</div>
+          <div id="history-list"></div>
+        </div>
+      </div>
+      <div id="history-tab-backups" hidden>
+        <div id="backups-filters">
+          <select id="backups-char-select">
+            <option value="">Select a character…</option>
+          </select>
+        </div>
+        <div id="backups-content">
+          <div id="backups-empty" hidden>No backups yet for this character.</div>
+          <div id="backups-list"></div>
+        </div>
       </div>
     </div>
 
