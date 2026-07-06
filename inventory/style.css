@@ -125,8 +125,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 /* ── TAB BAR ACTION BUTTONS ──────────────────────────────────── */
 #hamburger-btn,
 #add-char-btn,
-#shop-tab-btn,
-#role-btn {
+#shop-tab-btn {
   background: none;
   border: none;
   color: var(--muted);
@@ -143,8 +142,7 @@ input, textarea, select { font-size: max(16px, 1em); }
 }
 
 #add-char-btn,
-#shop-tab-btn,
-#role-btn {
+#shop-tab-btn {
   box-shadow: -1px 0 0 var(--card-border);
   margin-left: 2px;
 }
@@ -153,13 +151,13 @@ input, textarea, select { font-size: max(16px, 1em); }
 #hamburger-btn { border-radius: 0; width: 48px; }
 
 #hamburger-btn:hover, #add-char-btn:hover,
-#shop-tab-btn:hover, #role-btn:hover {
+#shop-tab-btn:hover {
   background: rgba(255,255,255,0.1);
   color: var(--text);
 }
 
 #hamburger-btn:active, #add-char-btn:active,
-#shop-tab-btn:active, #role-btn:active {
+#shop-tab-btn:active {
   transform: scale(0.92);
   background: rgba(255,255,255,0.08);
 }
@@ -842,9 +840,11 @@ input, textarea, select { font-size: max(16px, 1em); }
   font-weight: 600;
 }
 
-#role-btn { font-weight: 600; font-size: 0.85rem; white-space: nowrap; font-family: inherit; padding: 0 10px; }
-#role-btn[data-role="dm"]     { color: rgba(180,120,255,0.9); }
-#role-btn[data-role="player"] { opacity: 0.4; }
+#menu-role-btn[data-role="dm"],
+#menu-role-btn[data-role="dm"] i { color: rgba(180,120,255,0.9); }
+
+#hamburger-btn[data-role="dm"] { color: rgba(180,120,255,0.9); }
+#hamburger-btn[data-role="dm"]:hover { color: rgba(190,140,255,1); }
 
 #drag-trash-btn {
   position: fixed;

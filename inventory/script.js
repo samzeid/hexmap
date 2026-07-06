@@ -8503,7 +8503,7 @@ window.CharacterManager = ({ auth, database }) => {
   });
 
   // ── ROLE (DM / PLAYER) ──────────────────────────────────────────────────
-  const roleBtn = document.getElementById('role-btn');
+  const menuRoleBtn   = document.getElementById('menu-role-btn');
   let userCanBeDM = false;
 
   // ── ASSIGN CHARACTER TO PLAYER ───────────────────────────────────────────
@@ -8580,16 +8580,16 @@ window.CharacterManager = ({ auth, database }) => {
   function applyRole(role) {
     const isDM = (role === 'dm') && userCanBeDM;
     window._isDM         = isDM;
-    roleBtn.hidden       = !userCanBeDM;
+    menuRoleBtn.hidden   = !userCanBeDM;
     charAssignBtn.hidden = !isDM;
     charHideBtn.hidden   = !isDM;
     _hexClearBtn.hidden  = !isDM;
     menuHistoryBtn.hidden = !isDM;
     if (!isDM && historyOpen) closeHistoryPanel();
     window.hexSetDmStatus && window.hexSetDmStatus(isDM);
-    roleBtn.textContent  = 'DM';
-    roleBtn.title        = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
-    roleBtn.dataset.role = isDM ? 'dm' : 'player';
+    menuRoleBtn.dataset.role = isDM ? 'dm' : 'player';
+    menuRoleBtn.title = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
+    hamburgerBtn.dataset.role = isDM ? 'dm' : 'player';
     if (isDM) updateCharHideBtn();
     updateEditBtn();
     if (shopOpen) buildShop();
@@ -8597,8 +8597,9 @@ window.CharacterManager = ({ auth, database }) => {
     if (Object.keys(allChars).length) renderTabs();
   }
 
-  roleBtn.addEventListener('click', () => {
+  menuRoleBtn.addEventListener('click', () => {
     if (!currentUser || !userCanBeDM) return;
+    closeHamburgerMenu();
     const next = window._isDM ? 'player' : 'dm';
     database.ref(`/inventory_roles/${currentUser.uid}`).set(next);
     applyRole(next);
