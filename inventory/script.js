@@ -8585,7 +8585,8 @@ window.CharacterManager = ({ auth, database }) => {
           suppressSave = false;
           // A remote edit, not a local one — reset the diff baseline instead of
           // logging it, since we can't reliably attribute it to this user.
-          resetCharSnapshot(currentCharId, allChars[currentCharId].state);
+          // Post-render state, same reasoning as switchToChar() below.
+          resetCharSnapshot(currentCharId, inv.getState());
         }
       }
 
@@ -8757,6 +8758,15 @@ window.CharacterManager = ({ auth, database }) => {
   function deselectChar() {
     if (currentCharId) saveChar(currentCharId, true);
     dirty = false;
+    // Flush the outgoing character's pending diff while state/currentCharId
+    // still belong to it. Without this, a debounce timer armed by a recent
+    // edit fires ~900ms later — after loadState(blankState()) below has
+    // already wiped state — and diffs the old baseline against blank data,
+    // logging every tracked field as having changed to empty/zero. This is
+    // the same class of bug fixed in switchToChar/createChar, but this
+    // function (called from Map/Rules/History nav and same-tab re-clicks)
+    // was missed the first time since it doesn't go through switchToChar.
+    flushCharDiff();
     currentCharId = null;
     suppressSave = true;
     try { inv.loadState(blankState(), { charId: null }); } catch(e) {}
@@ -8778,7 +8788,12 @@ window.CharacterManager = ({ auth, database }) => {
     try { inv.loadState(allChars[charId].state, { keepInspector: shopOpen, charId }); } catch (e) { console.warn('loadState error:', e); }
     inv.applyLocalUi(userUiCache[charId] || {});
     suppressSave = false;
-    resetCharSnapshot(charId, allChars[charId].state);
+    // Snapshot the post-render state, not the raw stored state — loadState()
+    // calls renderFeatures() synchronously, and some feature renderers (e.g.
+    // Sorcery Points) lazily auto-fill fields like `current` the first time
+    // they're drawn. Baselining off the pre-render data would make that
+    // auto-fill look like a real edit the moment anything else changes.
+    resetCharSnapshot(charId, inv.getState());
 
     updateCharHideBtn();
     updateEditBtn();
@@ -8829,7 +8844,7 @@ window.CharacterManager = ({ auth, database }) => {
     try { inv.loadState(blank, { charId: newId }); } catch (e) { console.warn('loadState error:', e); }
     inv.applyLocalUi(userUiCache[newId] || {});
     suppressSave = false;
-    resetCharSnapshot(newId, blank);
+    resetCharSnapshot(newId, inv.getState());
     renderTabs();
   }
 
