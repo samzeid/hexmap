@@ -2518,6 +2518,17 @@ body.is-dragging #inv-scroll {
 
 #app.rules-mode #rules-page { display: flex; }
 
+/* ── HISTORY MODE (DM-only audit log; shares the tab bar) ─────── */
+#app.history-mode #hex-view,
+#app.history-mode #hexmap-toolbar,
+#app.history-mode #char-header,
+#app.history-mode #char-panels,
+#app.history-mode #shop-panel,
+#app.history-mode #inspector,
+#app.history-mode #drag-trash-btn { display: none !important; }
+
+#app.history-mode #history-page { display: flex; }
+
 /* ── CHARACTER SHEET STATS ───────────────────────────────────── */
 /* Attribute colour tokens (r g b, space-separated for rgb()/0.xx usage) */
 :root {

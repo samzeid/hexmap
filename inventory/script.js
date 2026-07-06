@@ -1,4 +1,4 @@
-window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, onDmListingDrop, isHiddenFromPlayer, onSound, onUiChange }) => {
+window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, onDmListingDrop, onItemSell, onItemDestroy, isHiddenFromPlayer, onSound, onUiChange }) => {
 
   // ── STATE ──────────────────────────────────────────────────────────────
   function createDefaultContainers() {
@@ -523,6 +523,32 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       (i.aliases && i.aliases.some(a => a.toLowerCase() === key))
     )) || null;
   }
+
+  // Captures the instance-specific data a history log entry would otherwise
+  // lose once the item is sold/destroyed/moved: coin amounts (a Coin Purse
+  // holding real gold), any dropdown/select choice (weapon type, material),
+  // and free-text notes. Returns null when there's nothing notable to show.
+  function summarizeItemDetail(slotData) {
+    if (!slotData) return null;
+    const vars = slotData.variables || {};
+    const parts = [];
+
+    const COIN_KEYS = ['pp', 'gp', 'sp', 'cp'];
+    const coinParts = COIN_KEYS
+      .filter(k => vars[k] && vars[k].value > 0)
+      .map(k => `${vars[k].value}${k}`);
+    if (coinParts.length) parts.push(coinParts.join(' '));
+
+    Object.entries(vars).forEach(([key, meta]) => {
+      if (COIN_KEYS.includes(key) || key === 'qty') return;
+      if (meta && meta.control === 'select' && meta.value) parts.push(`${key}: ${meta.value}`);
+    });
+
+    if (slotData.notes && slotData.notes.trim()) parts.push(`note: "${slotData.notes.trim()}"`);
+
+    return parts.length ? parts.join(', ') : null;
+  }
+  window.summarizeItemDetail = summarizeItemDetail;
 
   function getLibraryItemSection(name) {
     let section = null;
@@ -1415,6 +1441,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     if (cardEl) { reflow(cardEl); cardEl.classList.add('card-blocked-flash'); }
   }
 
+  // The single choke point for genuinely removing an item from a slot — the
+  // trash drop, the inspector's "Remove item" button, and clearing a slot's
+  // name field all route through here, so this is the one place a "destroy"
+  // history event needs to be logged rather than instrumenting each call site.
   function clearSlot(container, r, c) {
     ignoreNextBlur = true;
     const slotData = container.slots[r][c];
@@ -1430,6 +1460,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     }
 
     container.slots[r][c] = null;
+    if (slotData && onItemDestroy) {
+      onItemDestroy({
+        name: slotData.name,
+        qty: slotData.variables?.qty?.value || 1,
+        detail: summarizeItemDetail(slotData),
+        itemData: window.compactSlotData ? window.compactSlotData(slotData) : null,
+      });
+    }
     closeDropdown();
     render();
     hideInspector();
@@ -2540,7 +2578,17 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   CS_FIELDS.forEach(([id, k]) => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.addEventListener('blur', () => updateCsCalculations());
+    // While this field has focus, the history-diff debounce (see
+    // handleInventoryChange) is suppressed entirely rather than just reset —
+    // otherwise a long-enough typing pause ("2", pause, "6" to make "26")
+    // would still let the timer fire mid-edit and log the transient "2" as
+    // if it were a real value. Blur is what actually means "done here."
+    el.addEventListener('focus', () => { window.historyFieldFocused = true; });
+    el.addEventListener('blur', () => {
+      window.historyFieldFocused = false;
+      updateCsCalculations();
+      if (window.flushCharDiff) window.flushCharDiff();
+    });
     el.addEventListener('input', e => {
       state[k] = e.target.value;
       if (onChange) onChange();
@@ -2685,6 +2733,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         updateCsCalculations();
       }
       if (onChange) onChange();
+      if (window.flushCharDiff) window.flushCharDiff();
       hide();
     }
 
@@ -3306,6 +3355,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     { id: 'rogue-feat-4',     name: 'Feat', class: 'Rogue',     level: 4, type: 'feat' },
     { id: 'barbarian-feat-4', name: 'Feat', class: 'Barbarian', level: 4, type: 'feat' },
   ];
+  window.FEATURES_LIBRARY = FEATURES_LIBRARY;
 
   function getEligibleFeatures() {
     const cls     = String(state.charClass || '').trim();
@@ -5565,6 +5615,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     updateCsCalculations();
     renderFeatures();
     if (onChange) onChange();
+    if (window.flushCharDiff) window.flushCharDiff();
+    if (window.logCharRest) window.logCharRest('long');
   });
 
   document.getElementById('cs-short-rest-btn')?.addEventListener('click', () => {
@@ -5584,6 +5636,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     updateCsCalculations();
     renderFeatures();
     if (onChange) onChange();
+    if (window.flushCharDiff) window.flushCharDiff();
+    if (window.logCharRest) window.logCharRest('short');
   });
 
   function autoResizeTextarea(ta) {
@@ -5889,6 +5943,20 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       return;
     }
 
+    // Drag a "For Sale" listing onto the trash to delete it outright
+    if (_overTrash && isDmListing) {
+      const trashLib = getLibraryItem(slotData.name);
+      if (trashLib && trashLib.warnOnRemove) {
+        const v = slotData.variables || {};
+        const hasCoins = ['pp','gp','sp','cp'].some(k => v[k] && (v[k].value || 0) > 0);
+        if (hasCoins && !confirm(trashLib.warnOnRemove)) { render(); return; }
+      }
+      removeFromSource();
+      if (onSound) onSound('bin');
+      render();
+      return;
+    }
+
     // Sell / list for sale: dropped on shop tab button
     if (el && (el === _shopTabBtn || _shopTabBtn.contains(el)) && srcContainer) {
       // Block if container still has items
@@ -5930,6 +5998,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         if (slotData.containerId)
           state.containers = state.containers.filter(c => c.id !== slotData.containerId);
         removeFromSource();
+        if (onItemSell) onItemSell({ name: slotData.name, qty, valueCp: halfCp, detail: summarizeItemDetail(slotData), itemData: window.compactSlotData ? window.compactSlotData(slotData) : null });
         const coins = cpToCoins(halfCp);
         const purseLib = getLibraryItem('Coin Purse');
         const purseVars = JSON.parse(JSON.stringify(
@@ -6319,6 +6388,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     computeDisplayName(slotData) { return computeDisplayName(slotData); },
     getSlotTypeCostCp(slotData) { return getSlotTypeCostCp(slotData); },
     getSlotMaterialCostCp(slotData, isAmmo) { return getSlotMaterialCostCp(slotData, isAmmo); },
+    getSlotCoinUsesMultiplier(slotData) { return getSlotCoinUsesMultiplier(slotData); },
     toggleShopItem(slotData, key) {
       toggleInspectorFor(key, slotData, null, -1, -1);
     },
@@ -6340,6 +6410,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       startDrag(slotData, null, -1, -1, x, y, null, removeCallback || (() => {}));
       dragState._shopDrag = true;
       dragState._isDmListing = true;
+      // startDrag only shows the trash bin when dragging out of a real
+      // container (container !== null) — a listing has no container, so it
+      // needs to opt in explicitly to let the DM drop it there to delete it.
+      activateTrash();
     },
     addItem(slotData) {
       addItemLocal(slotData);
@@ -6517,6 +6591,12 @@ window.CharacterManager = ({ auth, database }) => {
   let currentCharId = null;
   let allChars     = {};   // id → { ownerUid, ownerName, state, createdAt, sortOrder }
   let suppressSave       = false;
+  // Baseline for the character-level history diff (HP/hit dice/exhaustion/feature
+  // charges). Reset (not diffed) whenever a state is loaded from outside the
+  // local user's own edits — see resetCharSnapshot().
+  let charSnapshot   = null;
+  let charSnapshotId = null;
+  let charDiffTimer  = null;
   let dirty              = false;   // true while local edits haven't been flushed to Firebase yet
   let localWriteInFlight = false;   // true briefly after a save to suppress our own Firebase echo
   let pendingNewChar     = null;    // char created locally but not yet confirmed by Firebase
@@ -6555,6 +6635,8 @@ window.CharacterManager = ({ auth, database }) => {
     onCrossCharDrop:     handleCrossCharDrop,
     onShopPurchase:      handleShopPurchase,
     onDmListingDrop:     handleDmListingDrop,
+    onItemSell:          handleItemSell,
+    onItemDestroy:       handleItemDestroy,
     isHiddenFromPlayer:  (itemName) => !isItemVisible(itemName, getItemSection(itemName)),
     onSound:             playSound,
     onUiChange:          saveUserUiBlob,
@@ -6600,6 +6682,7 @@ window.CharacterManager = ({ auth, database }) => {
 
   function openRules() {
     closeHamburgerMenu();
+    closeHistoryPanel(); // stay exclusive with the DM history panel
     charIdBeforeRules = currentCharId;
     deselectChar();
     setRulesMode(true);
@@ -6627,6 +6710,257 @@ window.CharacterManager = ({ auth, database }) => {
 
   rulesBackBtn.addEventListener('click', goBackFromRules);
 
+  // ── HISTORY PANEL (DM-only audit log — sells/destroys/moves + HP/hit dice/
+  // exhaustion/feature-charge changes). Mirrors the Rules page mechanics
+  // exactly (own mode class, own history-stack entry) so it stays exclusive
+  // with every other view without fighting over the back-button stack.
+  let historyOpen = false;
+  let historyRef  = null;
+  const historyBackBtn      = document.getElementById('history-back-btn');
+  const historyClearBtn     = document.getElementById('history-clear-btn');
+  const historyListEl       = document.getElementById('history-list');
+  const historyEmptyEl      = document.getElementById('history-empty');
+  const historyFilterCharEl = document.getElementById('history-filter-char');
+  const historyFilterTypeEl = document.getElementById('history-filter-type');
+  let historyEntriesCache   = [];
+
+  function setHistoryMode(on) {
+    historyOpen = on;
+    document.getElementById('app').classList.toggle('history-mode', on);
+    updateHamburgerMenu();
+  }
+
+  // ── RESTORE-FROM-HISTORY DRAG ─────────────────────────────────────────
+  // Sell/destroy entries carry the item's full compact state (itemData),
+  // so a DM can long-press-drag one of those rows onto a character tab to
+  // re-materialize that exact item (a manual undo/duplicate tool — the item
+  // was removed from play by the sell/destroy, so restoring it can't create
+  // a duplicate that's still in circulation the way a "move" row would).
+  let historyDragGhost = null;
+  let historyDragItem  = null; // { itemData, label } while a restore-drag is active
+
+  function startHistoryDrag(itemData, label, x, y) {
+    historyDragItem = { itemData, label };
+    historyDragGhost = document.createElement('div');
+    historyDragGhost.className = 'drag-ghost';
+    historyDragGhost.textContent = label;
+    document.body.appendChild(historyDragGhost);
+    document.body.classList.add('is-dragging');
+    moveHistoryGhost(x, y);
+    document.querySelectorAll('.char-tab').forEach(tab => tab.classList.add('drag-target'));
+  }
+
+  function moveHistoryGhost(x, y) {
+    if (!historyDragGhost) return;
+    historyDragGhost.style.left = `${x}px`;
+    historyDragGhost.style.top  = `${y}px`;
+  }
+
+  function endHistoryDrag(x, y) {
+    if (!historyDragItem) return;
+    const { itemData } = historyDragItem;
+    historyDragItem = null;
+    document.body.classList.remove('is-dragging');
+    if (historyDragGhost) { historyDragGhost.remove(); historyDragGhost = null; }
+    document.querySelectorAll('.char-tab').forEach(tab => tab.classList.remove('drag-target', 'tab-drag-over'));
+
+    const el  = document.elementFromPoint(x, y);
+    const tab = el && el.closest('.char-tab[data-char-id]');
+    if (!tab) return;
+    const resolved = window.resolveSlotData && window.resolveSlotData(JSON.parse(JSON.stringify(itemData)));
+    if (!resolved) return;
+    handleCrossCharDrop(resolved, tab.dataset.charId, null);
+    tab.classList.add('tab-received');
+    setTimeout(() => tab.classList.remove('tab-received'), 1200);
+  }
+
+  document.addEventListener('pointermove', e => {
+    if (historyDragItem) moveHistoryGhost(e.clientX, e.clientY);
+  });
+  document.addEventListener('pointerup', e => {
+    if (historyDragItem) endHistoryDrag(e.clientX, e.clientY);
+  });
+
+  // Long-press (matches the inventory's own drag threshold) so scrolling the
+  // history list with touch doesn't accidentally start a restore-drag.
+  function wireHistoryDrag(row, itemData, label) {
+    let downX, downY, timer, pointerId;
+    row.addEventListener('pointerdown', e => {
+      if (historyDragItem) return;
+      downX = e.clientX; downY = e.clientY; pointerId = e.pointerId;
+      timer = setTimeout(() => {
+        timer = null;
+        document.documentElement.setPointerCapture(pointerId);
+        startHistoryDrag(itemData, label, downX, downY);
+      }, 380);
+    });
+    row.addEventListener('pointermove', e => {
+      if (!timer) return;
+      if (Math.abs(e.clientX - downX) > 8 || Math.abs(e.clientY - downY) > 8) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    });
+    const cancelTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    row.addEventListener('pointerup', cancelTimer);
+    row.addEventListener('pointercancel', cancelTimer);
+  }
+
+  // Character/actor/item names are free-text the players control (custom
+  // item names, character names, Google display names) — escape before
+  // interpolating into innerHTML so this DM panel can't be used for stored XSS.
+  function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  function formatHistoryRow(entry) {
+    const time = entry.ts ? new Date(entry.ts).toLocaleString() : '';
+    const row = document.createElement('div');
+    row.className = 'history-row history-' + (entry.type || 'unknown');
+
+    const top = document.createElement('div');
+    top.className = 'history-row-top';
+    top.innerHTML = `<span>${escHtml(entry.type || 'event')}</span><span>${escHtml(time)}</span>`;
+    row.appendChild(top);
+
+    const body = document.createElement('div');
+    body.className = 'history-row-body';
+    const charLabel = `<span class="history-char">${escHtml(entry.charName || 'Unknown')}</span>`;
+    const actor = escHtml(entry.actorName || 'Unknown');
+    const itemName = escHtml(entry.itemName || '');
+
+    if (entry.type === 'sell') {
+      const gp = ((entry.valueCp || 0) / 100).toFixed(2).replace(/\.?0+$/, '');
+      body.innerHTML = `${actor} sold <strong>${entry.qty > 1 ? entry.qty + '× ' : ''}${itemName}</strong> from ${charLabel} for ${gp} gp`;
+    } else if (entry.type === 'destroy') {
+      body.innerHTML = `${actor} destroyed <strong>${entry.qty > 1 ? entry.qty + '× ' : ''}${itemName}</strong> from ${charLabel}`;
+    } else if (entry.type === 'move') {
+      body.innerHTML = `${actor} moved <strong>${entry.qty > 1 ? entry.qty + '× ' : ''}${itemName}</strong> from ${charLabel} to <span class="history-char">${escHtml(entry.toCharName || 'Unknown')}</span>`;
+    } else if (entry.type === 'buy') {
+      const gp = ((entry.valueCp || 0) / 100).toFixed(2).replace(/\.?0+$/, '');
+      const cost = entry.valueCp > 0 ? ` (${gp} gp)` : '';
+      body.innerHTML = `${actor} bought <strong>${entry.qty > 1 ? entry.qty + '× ' : ''}${itemName}</strong> from the shop for ${charLabel}${cost}`;
+    } else if (entry.type === 'list') {
+      body.innerHTML = `${actor} listed <strong>${entry.qty > 1 ? entry.qty + '× ' : ''}${itemName}</strong> from ${charLabel} for sale`;
+    } else if (entry.type === 'rest') {
+      body.innerHTML = `${actor} gave ${charLabel} a <strong>${entry.restType === 'long' ? 'Long Rest' : 'Short Rest'}</strong>`;
+    } else if (entry.type === 'character') {
+      const fmt = v => typeof v === 'boolean' ? (v ? 'on' : 'off') : (v ?? '—');
+      const parts = (entry.changes || []).map(c => c.kind === 'stat'
+        ? `${escHtml(c.label)}: ${escHtml(fmt(c.from))} → ${escHtml(fmt(c.to))}`
+        : escHtml(c.summary));
+      body.innerHTML = `${actor} changed ${charLabel} — ${parts.join(', ')}`;
+    } else {
+      body.textContent = JSON.stringify(entry);
+    }
+    row.appendChild(body);
+
+    if (entry.detail && ['sell', 'destroy', 'move', 'buy', 'list'].includes(entry.type)) {
+      const detail = document.createElement('div');
+      detail.className = 'history-row-detail';
+      detail.textContent = entry.detail;
+      row.appendChild(detail);
+    }
+
+    if (entry.itemData && (entry.type === 'sell' || entry.type === 'destroy')) {
+      row.classList.add('history-row-restorable');
+      row.title = 'Drag onto a character tab to restore this item';
+      const hint = document.createElement('div');
+      hint.className = 'history-row-restore-hint';
+      hint.innerHTML = '<i class="fa-solid fa-hand"></i> Drag to restore';
+      row.appendChild(hint);
+      wireHistoryDrag(row, entry.itemData, entry.itemName || 'Item');
+    }
+
+    return row;
+  }
+
+  // Rebuilds the character filter's options from every known character (not
+  // just ones with history so far), keeping the current selection if it's
+  // still a valid option.
+  function populateHistoryCharFilter() {
+    const prev = historyFilterCharEl.value;
+    historyFilterCharEl.innerHTML = '<option value="">All characters</option>';
+    Object.values(allChars)
+      .sort((a, b) => (a.state?.charName || '').localeCompare(b.state?.charName || ''))
+      .forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.state?.charName || 'Unnamed';
+        historyFilterCharEl.appendChild(opt);
+      });
+    if ([...historyFilterCharEl.options].some(o => o.value === prev)) historyFilterCharEl.value = prev;
+  }
+
+  const HISTORY_ITEM_TYPES      = ['sell', 'destroy', 'move', 'buy', 'list'];
+  const HISTORY_CHARACTER_TYPES = ['character', 'rest'];
+
+  function renderHistoryList() {
+    const charFilter = historyFilterCharEl.value;
+    const typeFilter  = historyFilterTypeEl.value;
+    const filtered = historyEntriesCache.filter(entry => {
+      if (typeFilter === 'item' && !HISTORY_ITEM_TYPES.includes(entry.type)) return false;
+      if (typeFilter === 'character' && !HISTORY_CHARACTER_TYPES.includes(entry.type)) return false;
+      if (charFilter && entry.charId !== charFilter && entry.toCharId !== charFilter) return false;
+      return true;
+    });
+    historyListEl.innerHTML = '';
+    historyEmptyEl.hidden = filtered.length > 0;
+    historyEmptyEl.textContent = historyEntriesCache.length
+      ? 'No entries match the current filters.'
+      : 'No activity logged yet.';
+    filtered.forEach(entry => historyListEl.appendChild(formatHistoryRow(entry)));
+  }
+
+  historyFilterCharEl.addEventListener('change', renderHistoryList);
+  historyFilterTypeEl.addEventListener('change', renderHistoryList);
+
+  function loadHistoryEntries() {
+    if (historyRef) historyRef.off('value');
+    historyRef = database.ref('/inventory_history').limitToLast(200);
+    historyRef.on('value', snap => {
+      const raw = snap.val() || {};
+      historyEntriesCache = Object.values(raw).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      renderHistoryList();
+    });
+  }
+
+  function openHistoryPanel() {
+    if (!window._isDM) return;
+    closeHamburgerMenu();
+    closeRules(); // stay exclusive with the Rules page
+    charIdBeforeRules = currentCharId;
+    deselectChar();
+    setHistoryMode(true);
+    history.pushState({ view: 'history' }, '');
+    populateHistoryCharFilter();
+    loadHistoryEntries();
+  }
+
+  // Same contract as closeRules(): safe to call unconditionally from any
+  // other navigation action; no-ops if History isn't open.
+  function closeHistoryPanel() {
+    if (!historyOpen) return;
+    setHistoryMode(false);
+    if (historyRef) { historyRef.off('value'); historyRef = null; }
+    if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
+  }
+
+  function goBackFromHistory() {
+    closeHistoryPanel();
+    restoreCharSelection();
+  }
+
+  historyBackBtn.addEventListener('click', goBackFromHistory);
+
+  historyClearBtn.addEventListener('click', () => {
+    if (!window._isDM) return;
+    if (!confirm('Clear the entire history log? This deletes every sale, destroy, move, and character-change entry for every character and cannot be undone.')) return;
+    database.ref('/inventory_history').remove();
+  });
+
   // ── HAMBURGER MENU (replaces the old char/inventory toggle button) ──────
   // Holds the low-frequency navigation actions: leaving to the map, opening
   // the rules page, and signing out. Character ↔ inventory switching is now
@@ -6637,6 +6971,7 @@ window.CharacterManager = ({ auth, database }) => {
   const menuCharacterBtn = document.getElementById('menu-character-btn');
   const menuInventoryBtn = document.getElementById('menu-inventory-btn');
   const menuRulesBtn    = document.getElementById('menu-rules-btn');
+  const menuHistoryBtn  = document.getElementById('menu-history-btn');
   const menuSignoutBtn  = document.getElementById('menu-signout-btn');
 
   function openHamburgerMenu()  { hamburgerMenu.hidden = false; }
@@ -6654,6 +6989,7 @@ window.CharacterManager = ({ auth, database }) => {
     menuCharacterBtn.disabled = inCharView && statsOpen;
     menuInventoryBtn.disabled = inCharView && !statsOpen;
     menuRulesBtn.disabled     = rulesOpen;
+    menuHistoryBtn.disabled   = historyOpen;
   }
 
   hamburgerBtn.addEventListener('click', e => {
@@ -6669,6 +7005,7 @@ window.CharacterManager = ({ auth, database }) => {
   function goToMap() {
     closeHamburgerMenu();
     closeRules(); // pops its history entry first, if it was open
+    closeHistoryPanel(); // ditto for the DM history panel
     if (shopOpen) { _shopFromHexmap = true; closeShop(); return; }
     // Only pop history for the map transition itself if we actually needed
     // one (i.e. we weren't already on the map — closeRules already popped
@@ -6689,6 +7026,7 @@ window.CharacterManager = ({ auth, database }) => {
   function goToCharView(showStats) {
     closeHamburgerMenu();
     closeRules(); // pops its history entry first, if it was open
+    closeHistoryPanel(); // ditto for the DM history panel
     if (shopOpen) {
       _shopFromHexmap = false;
       closeShop();
@@ -6709,6 +7047,7 @@ window.CharacterManager = ({ auth, database }) => {
   menuInventoryBtn.addEventListener('click', () => goToCharView(false));
 
   menuRulesBtn.addEventListener('click', openRules);
+  menuHistoryBtn.addEventListener('click', openHistoryPanel);
   menuSignoutBtn.addEventListener('click', () => {
     closeHamburgerMenu();
     auth.signOut().catch(() => {});
@@ -7462,7 +7801,15 @@ window.CharacterManager = ({ auth, database }) => {
 
       dmListings.forEach((listingData, listIdx) => {
         const listRow = document.createElement('div');
-        listRow.className = 'shop-item-row';
+        // Visibility/availability are keyed by item name, same as the main
+        // catalog — a listing of an item already in the catalog shares that
+        // item's toggle state rather than having its own per-instance one.
+        const listVisible = isItemVisible(listingData.name, '');
+        const listAvail   = isItemAvailable(listingData.name);
+        listRow.className = 'shop-item-row'
+          + (!listVisible && window._isDM ? ' shop-item-hidden' : '')
+          + (!listAvail ? ' shop-item-unavailable' : '');
+        if (!listVisible) listRow.dataset.playerHidden = 'true';
 
         const listNameSpan = document.createElement('span');
         listNameSpan.className = 'shop-item-name';
@@ -7472,31 +7819,51 @@ window.CharacterManager = ({ auth, database }) => {
         listNameSpan.textContent = _ls + _lm + inv.computeDisplayName(listingData);
         listRow.appendChild(listNameSpan);
 
-        const listTotalCp = (listingData.cost ? shopCostToCp(listingData.cost) : 0)
+        // hasUses:'coins' items (Waning Wands, Tonic of Potency, etc.) price
+        // per remaining charge — without this multiplier a listing always
+        // showed the flat per-charge cost regardless of how many charges
+        // the actual instance has left.
+        const listTotalCp = ((listingData.cost ? shopCostToCp(listingData.cost) : 0)
           + inv.getSlotTypeCostCp(listingData)
-          + inv.getSlotMaterialCostCp(listingData, listingData.category === 'ammunition');
+          + inv.getSlotMaterialCostCp(listingData, listingData.category === 'ammunition'))
+          * inv.getSlotCoinUsesMultiplier(listingData);
         const listCostEl = document.createElement('span');
         listCostEl.className = 'shop-item-cost';
         if (listTotalCp > 0) listCostEl.innerHTML = renderCostHtml(listTotalCp, '');
         listRow.appendChild(listCostEl);
 
         if (window._isDM) {
-          const listRemoveBtn = document.createElement('button');
-          listRemoveBtn.className = 'shop-item-vis-btn';
-          listRemoveBtn.innerHTML = '<i class="fas fa-xmark"></i>';
-          listRemoveBtn.title = 'Remove listing';
-          listRemoveBtn.addEventListener('pointerdown', e => e.stopPropagation());
-          listRemoveBtn.addEventListener('click', e => {
+          const listAvailBtn = document.createElement('button');
+          listAvailBtn.className = 'shop-item-avail-btn' + (!listAvail ? ' unavailable' : '');
+          listAvailBtn.innerHTML = listAvail ? '<i class="fas fa-check"></i>' : '<i class="fas fa-ban"></i>';
+          listAvailBtn.title = listAvail ? 'Mark as unavailable' : 'Mark as available';
+          listAvailBtn.addEventListener('pointerdown', e => e.stopPropagation());
+          listAvailBtn.addEventListener('click', e => {
             e.stopPropagation();
-            dmListings.splice(listIdx, 1);
-            saveDmListings();
+            shopAvailability[listingData.name] = !isItemAvailable(listingData.name);
+            saveShopAvailability();
             buildShop();
           });
-          listRow.appendChild(listRemoveBtn);
+          listRow.appendChild(listAvailBtn);
+
+          const listVisBtn = document.createElement('button');
+          listVisBtn.className = 'shop-item-vis-btn';
+          listVisBtn.innerHTML = listVisible ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+          listVisBtn.title = listVisible ? 'Hide from players' : 'Show to players';
+          listVisBtn.addEventListener('pointerdown', e => e.stopPropagation());
+          listVisBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            shopVisibility[listingData.name] = !isItemVisible(listingData.name, '');
+            saveShopVisibility();
+            buildShop();
+          });
+          listRow.appendChild(listVisBtn);
         }
 
         listRow.addEventListener('click', e => {
-          if (listRow._dragging || e.target.closest('.shop-item-vis-btn')) return;
+          if (listRow._dragging
+            || e.target.closest('.shop-item-vis-btn')
+            || e.target.closest('.shop-item-avail-btn')) return;
           inv.toggleShopItem(listingData, `dm-listing-${listIdx}`);
         });
 
@@ -7505,11 +7872,29 @@ window.CharacterManager = ({ auth, database }) => {
         listRow.addEventListener('pointerdown', e => {
           if (e.button !== 0) return;
           _lx = e.clientX; _ly = e.clientY; _lpid = e.pointerId; _ltrk = true;
+          if (!window._isDM && !isItemAvailable(listingData.name)) {
+            [listNameSpan, ...Array.from(listCostEl.children)].forEach(el => {
+              el.classList.remove('shop-item-flash');
+              void el.offsetWidth;
+              el.classList.add('shop-item-flash');
+              setTimeout(() => el.classList.remove('shop-item-flash'), 900);
+            });
+            return;
+          }
           _lt = setTimeout(() => {
             _lt = null;
             listRow._dragging = true;
             listRow.classList.add('shop-item-dragging');
             document.documentElement.setPointerCapture(_lpid);
+            // Same fully-calculated price shown in the "For Sale" row (base +
+            // type + material, scaled by remaining charges) — without this the
+            // deducted cost fell back to the item's flat catalog price instead.
+            listingData._shopCostCp = listTotalCp;
+            // Catalog items get this set in buildShopSlotData(); DM listings
+            // never did, so buying one fell through to the generic "moved
+            // from {whoever's currently open} to {buyer}" path instead of
+            // being recognized as a purchase.
+            listingData._shopItem = true;
             inv.startDmListingDrag(listingData, e.clientX, e.clientY, () => {
               dmListings.splice(listIdx, 1);
               saveDmListings();
@@ -7913,10 +8298,15 @@ window.CharacterManager = ({ auth, database }) => {
     const category = document.getElementById('shop-category').value;
     const scroll   = document.getElementById('shop-scroll');
     scroll.querySelectorAll('.shop-item-row').forEach(row => {
-      if (row.closest('.dm-listings-section')) return;
+      const visMatch = window._isDM || row.dataset.playerHidden !== 'true';
+      // "For Sale" listings aren't part of the searchable/categorized catalog,
+      // but they still need to respect the same hide-from-players toggle.
+      if (row.closest('.dm-listings-section')) {
+        row.hidden = !visMatch;
+        return;
+      }
       const nameMatch = !query    || row.querySelector('.shop-item-name').textContent.toLowerCase().includes(query);
       const catMatch  = !category || row.dataset.section === category;
-      const visMatch  = window._isDM || row.dataset.playerHidden !== 'true';
       row.hidden = !(nameMatch && catMatch && visMatch);
     });
     scroll.querySelectorAll('.shop-rarity-divider').forEach(divider => {
@@ -7956,6 +8346,7 @@ window.CharacterManager = ({ auth, database }) => {
 
   function openShop() {
     closeRules(); // pops its history entry first, if it was open
+    closeHistoryPanel(); // ditto for the DM history panel
     shopOpen = true;
     updateHamburgerMenu();
     setStatsEditing(false);
@@ -8096,6 +8487,8 @@ window.CharacterManager = ({ auth, database }) => {
     charAssignBtn.hidden = !isDM;
     charHideBtn.hidden   = !isDM;
     _hexClearBtn.hidden  = !isDM;
+    menuHistoryBtn.hidden = !isDM;
+    if (!isDM && historyOpen) closeHistoryPanel();
     window.hexSetDmStatus && window.hexSetDmStatus(isDM);
     roleBtn.textContent  = 'DM';
     roleBtn.title        = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
@@ -8186,9 +8579,13 @@ window.CharacterManager = ({ auth, database }) => {
         } else {
           // Nothing pending locally — apply whatever Firebase has (another user's edit)
           suppressSave = true;
+          flushCharDiff();
           try { inv.loadState(allChars[currentCharId].state, { charId: currentCharId, keepInspector: true }); } catch (e) { console.warn('loadState error:', e); }
           inv.applyLocalUi(userUiCache[currentCharId] || {});
           suppressSave = false;
+          // A remote edit, not a local one — reset the diff baseline instead of
+          // logging it, since we can't reliably attribute it to this user.
+          resetCharSnapshot(currentCharId, allChars[currentCharId].state);
         }
       }
 
@@ -8285,6 +8682,7 @@ window.CharacterManager = ({ auth, database }) => {
 
     return resolved;
   };
+  window.resolveSlotData = resolveSlotData;
 
   const compactSlotData = slotData => {
     if (!slotData || slotData.custom) return slotData;
@@ -8308,6 +8706,7 @@ window.CharacterManager = ({ auth, database }) => {
     }
     return compact;
   };
+  window.compactSlotData = compactSlotData;
 
   const resolveContainerSlots = containers => {
     for (const container of containers || [])
@@ -8375,9 +8774,11 @@ window.CharacterManager = ({ auth, database }) => {
     dirty = false;
     currentCharId = charId;
     suppressSave = true;
+    flushCharDiff();
     try { inv.loadState(allChars[charId].state, { keepInspector: shopOpen, charId }); } catch (e) { console.warn('loadState error:', e); }
     inv.applyLocalUi(userUiCache[charId] || {});
     suppressSave = false;
+    resetCharSnapshot(charId, allChars[charId].state);
 
     updateCharHideBtn();
     updateEditBtn();
@@ -8424,9 +8825,11 @@ window.CharacterManager = ({ auth, database }) => {
       if (pendingNewChar === charData) pendingNewChar = null;
     });
     suppressSave = true;
+    flushCharDiff();
     try { inv.loadState(blank, { charId: newId }); } catch (e) { console.warn('loadState error:', e); }
     inv.applyLocalUi(userUiCache[newId] || {});
     suppressSave = false;
+    resetCharSnapshot(newId, blank);
     renderTabs();
   }
 
@@ -8506,13 +8909,90 @@ window.CharacterManager = ({ auth, database }) => {
     return confirm(`This will spend coins from ${charName} (owned by ${ownerName}). Continue?`);
   }
 
+  // ── HISTORY LOG (DM-only audit trail) ────────────────────────────────────
+  function getActorName() {
+    if (!currentUser) return 'Unknown';
+    return currentUser.displayName || (currentUser.email || '').split('@')[0] || 'Unknown';
+  }
+
+  function logHistoryEvent(entry) {
+    database.ref('/inventory_history').push(Object.assign({
+      ts: firebase.database.ServerValue.TIMESTAMP,
+      actorName: getActorName(),
+      actorUid:  currentUser ? currentUser.uid : '',
+    }, entry));
+  }
+
+  function handleItemSell(info) {
+    if (!currentCharId) return;
+    logHistoryEvent({
+      type: 'sell',
+      charId: currentCharId,
+      charName: allChars[currentCharId]?.state?.charName || 'Unnamed',
+      itemName: info.name,
+      qty: info.qty,
+      valueCp: info.valueCp,
+      detail: info.detail || null,
+      itemData: info.itemData || null,
+    });
+  }
+
+  function handleItemDestroy(info) {
+    if (!currentCharId) return;
+    logHistoryEvent({
+      type: 'destroy',
+      charId: currentCharId,
+      charName: allChars[currentCharId]?.state?.charName || 'Unnamed',
+      itemName: info.name,
+      qty: info.qty,
+      detail: info.detail || null,
+      itemData: info.itemData || null,
+    });
+  }
+
   function handleDmListingDrop(slotData) {
     const compact = compactSlotData(slotData);
     const resolved = compact ? resolveSlotData(compact) : null;
     if (!resolved) return;
     dmListings.push(resolved);
     saveDmListings();
+    // currentCharId is reliable here (unlike handleCrossCharDrop) — nothing
+    // in this function writes to /inventory_characters, so there's no
+    // reentrant auto-select to race against. But it's only the right
+    // attribution when the item actually came from that character's
+    // inventory — catalog items, re-dragged listings, and rolled random
+    // items all carry _shopItem and never touched a character's inventory,
+    // so logging them as "listed from {whichever char is open}" would be
+    // just as misleading as the shop-purchase bug this mirrors.
+    if (currentCharId && !slotData._shopItem) {
+      logHistoryEvent({
+        type: 'list',
+        charId: currentCharId,
+        charName: allChars[currentCharId]?.state?.charName || 'Unnamed',
+        itemName: resolved.name,
+        qty: resolved.variables?.qty?.value || 1,
+        detail: (window.summarizeItemDetail && window.summarizeItemDetail(resolved)) || null,
+      });
+    }
     if (shopOpen) buildShop();
+  }
+
+  // Shop purchases (catalog items or DM "For Sale" listings) go into a
+  // character's inventory but don't come FROM another character — logging
+  // them as a "move" implied one player's item was handed to another, when
+  // really the DM/player just bought it from the store.
+  function logShopBuy(item, charId, charName) {
+    const lib = window.ITEM_LIBRARY.find(i => i.name === item.name);
+    const valueCp = item._shopCostCp != null ? item._shopCostCp : (lib && lib.cost ? shopCostToCp(lib.cost) : 0);
+    logHistoryEvent({
+      type: 'buy',
+      charId,
+      charName,
+      itemName: item.name,
+      qty: item.variables?.qty?.value || 1,
+      valueCp,
+      detail: (window.summarizeItemDetail && window.summarizeItemDetail(item)) || null,
+    });
   }
 
   function handleShopPurchase(slotData, skipWalletConfirm = false) {
@@ -8531,9 +9011,150 @@ window.CharacterManager = ({ auth, database }) => {
     if (shopOpen) updateShopWallet();
   }
 
+  // ── CHARACTER-LEVEL HISTORY DIFF ─────────────────────────────────────────
+  const CHAR_TRACKED_FIELDS = ['hp', 'hpMax', 'tempHp', 'exhaustion', 'hitDiceRemaining', 'hitDiceCount', 'hitDiceType', 'inspiration'];
+  const CHAR_FIELD_LABELS = {
+    hp: 'HP', hpMax: 'Max HP', tempHp: 'Temp HP', exhaustion: 'Exhaustion',
+    hitDiceRemaining: 'Hit Dice Remaining', hitDiceCount: 'Hit Dice Count', hitDiceType: 'Hit Dice Type',
+    inspiration: 'Inspiration',
+  };
+  // Mirrors how inv.getState() itself normalizes these fields (CS_FIELDS
+  // default to '' via `state[k] || ''`; exhaustion/inspiration default to
+  // their own falsy value). Snapshots must use the same defaults on both
+  // sides of the diff — otherwise a never-touched field read as `undefined`
+  // from a raw/blank state object would show up as "changed" the moment
+  // getState() normalizes it on the very next edit, even though nothing
+  // actually changed.
+  const CHAR_FIELD_DEFAULTS = {
+    hp: '', hpMax: '', tempHp: '', exhaustion: 0,
+    hitDiceRemaining: '', hitDiceCount: '', hitDiceType: '', inspiration: false,
+  };
+
+  function snapshotCharFields(state) {
+    const snap = {};
+    CHAR_TRACKED_FIELDS.forEach(k => {
+      const v = state ? state[k] : undefined;
+      snap[k] = v != null ? v : CHAR_FIELD_DEFAULTS[k];
+    });
+    snap.featureData = state && state.featureData ? JSON.parse(JSON.stringify(state.featureData)) : {};
+    const ds = state && state.deathSaves;
+    snap.deathSaves = ds && typeof ds === 'object'
+      ? { successes: ds.successes || 0, failures: ds.failures || 0 }
+      : { successes: 0, failures: 0 };
+    return snap;
+  }
+
+  // Call whenever a character's state is loaded from outside the local user's
+  // own edits (switch, create, remote echo) so the next real edit diffs
+  // against a fresh baseline instead of comparing across characters or
+  // misattributing someone else's change to this user.
+  function resetCharSnapshot(charId, state) {
+    charSnapshot   = snapshotCharFields(state);
+    charSnapshotId = charId;
+  }
+
+  function describeFeatureChange(id, prevData, nextData) {
+    const label = (window.FEATURES_LIBRARY || []).find(f => f.id === id)?.name || id;
+    const a = prevData || {}, b = nextData || {};
+    if (typeof a.current === 'number' || typeof b.current === 'number') {
+      return `${label}: ${a.current ?? 0} → ${b.current ?? 0}`;
+    }
+    if (typeof a.used === 'number' || typeof b.used === 'number') {
+      return `${label} used: ${a.used ?? 0} → ${b.used ?? 0}`;
+    }
+    if (typeof a.active === 'boolean' || typeof b.active === 'boolean') {
+      return `${label}: ${b.active ? 'activated' : 'deactivated'}`;
+    }
+    return `${label} changed`;
+  }
+
+  function diffCharFields(prev, next) {
+    const changes = [];
+    CHAR_TRACKED_FIELDS.forEach(k => {
+      const a = prev[k] ?? null, b = next[k] ?? null;
+      if (a !== b) changes.push({ kind: 'stat', field: k, label: CHAR_FIELD_LABELS[k] || k, from: a, to: b });
+    });
+
+    const prevFd = prev.featureData || {};
+    const nextFd = next.featureData || {};
+    const ids = new Set([...Object.keys(prevFd), ...Object.keys(nextFd)]);
+    ids.forEach(id => {
+      const a = prevFd[id], b = nextFd[id];
+      if (JSON.stringify(a || null) === JSON.stringify(b || null)) return;
+      changes.push({ kind: 'feature', featureId: id, summary: describeFeatureChange(id, a, b) });
+    });
+
+    const prevDs = prev.deathSaves || { successes: 0, failures: 0 };
+    const nextDs = next.deathSaves || { successes: 0, failures: 0 };
+    if (prevDs.successes !== nextDs.successes || prevDs.failures !== nextDs.failures) {
+      changes.push({
+        kind: 'feature',
+        featureId: 'deathSaves',
+        summary: `Death Saves: ${prevDs.successes}✓/${prevDs.failures}✗ → ${nextDs.successes}✓/${nextDs.failures}✗`,
+      });
+    }
+
+    return changes;
+  }
+
+  // Character-field edits (HP/temp-HP/hit dice in particular) fire onChange on
+  // every keystroke, not just on commit — logging on each one would flood the
+  // history with intermediate values ("12" -> "1" -> "18" while typing "18").
+  // Debounce the diff+log so a burst of edits to the same character collapses
+  // into a single entry once the user pauses; flushCharDiff() forces that
+  // pending entry out immediately when the user navigates away (switch/create/
+  // remote echo) so it isn't silently dropped.
+  function flushCharDiff() {
+    // No early return on "no timer armed" — a focused text field deliberately
+    // skips arming the timer (see handleInventoryChange) and relies entirely
+    // on its blur handler calling this directly, so this must still check
+    // for real pending changes even when charDiffTimer was never set.
+    clearTimeout(charDiffTimer);
+    charDiffTimer = null;
+    if (!charSnapshotId || !charSnapshot || !allChars[charSnapshotId]) return;
+    const nextSnapshot = snapshotCharFields(inv.getState());
+    const changes = diffCharFields(charSnapshot, nextSnapshot);
+    if (changes.length) {
+      logHistoryEvent({
+        type: 'character',
+        charId: charSnapshotId,
+        charName: allChars[charSnapshotId]?.state?.charName || 'Unnamed',
+        changes,
+      });
+    }
+    charSnapshot = nextSnapshot;
+  }
+  // Exposed so InventorySystem can force an immediate flush at natural commit
+  // points (blur, calculator confirm) instead of waiting out the debounce —
+  // see the CS_FIELDS blur listener and the calculator's commit() below.
+  window.flushCharDiff = flushCharDiff;
+
+  // A long/short rest touches HP, temp HP, death saves, hit dice, exhaustion,
+  // and several featureData entries all in one click — the generic character
+  // diff still logs each of those, but a DM scanning the log benefits from an
+  // explicit marker explaining why so many fields changed at once.
+  function logCharRest(restType) {
+    if (!currentCharId) return;
+    logHistoryEvent({
+      type: 'rest',
+      charId: currentCharId,
+      charName: allChars[currentCharId]?.state?.charName || 'Unnamed',
+      restType,
+    });
+  }
+  window.logCharRest = logCharRest;
+
   function handleInventoryChange() {
     if (suppressSave || !currentCharId) return;
     dirty = true;
+
+    if (charSnapshotId === currentCharId && charSnapshot) {
+      clearTimeout(charDiffTimer);
+      // Only arm the fallback timer while no tracked text field has focus —
+      // if one does, its blur handler is what flushes, however long the user
+      // takes (see the CS_FIELDS focus/blur wiring in InventorySystem).
+      if (!window.historyFieldFocused) charDiffTimer = setTimeout(flushCharDiff, 900);
+    }
     const tab = document.querySelector(`[data-char-id="${currentCharId}"]`);
     if (tab) {
       const nameEl = tab.querySelector('.char-tab-name');
@@ -8552,19 +9173,27 @@ window.CharacterManager = ({ auth, database }) => {
   function handleCrossCharDrop(item, targetCharId, linkedContainer) {
     if (!targetCharId || !allChars[targetCharId]) return;
 
+    // Captured once up front: the Firebase write further down can trigger
+    // subscribeToChars' own "nothing selected, auto-pick a character" logic
+    // re-entrantly (its listener fires off the local write before this
+    // function returns), which would reassign currentCharId out from under
+    // us. Always attribute the move using this snapshot, not a later re-read.
+    const sourceCharId = currentCharId;
+
     // Strip the shop marker before storing
     const cleanItem = Object.assign({}, item);
     delete cleanItem._shopItem;
 
     // Drop onto the currently-open character's own tab
-    if (targetCharId === currentCharId) {
+    if (targetCharId === sourceCharId) {
       inv.addItem(cleanItem);
       if (item._shopItem && !item._unresolved) {
         handleShopPurchase(cleanItem);
+        logShopBuy(item, sourceCharId, allChars[sourceCharId]?.state?.charName || 'Unnamed');
       } else {
         playSound('place');
       }
-      const tabEl = document.querySelector(`[data-char-id="${currentCharId}"]`);
+      const tabEl = document.querySelector(`[data-char-id="${sourceCharId}"]`);
       if (tabEl) {
         tabEl.classList.add('tab-received');
         setTimeout(() => tabEl.classList.remove('tab-received'), 1200);
@@ -8610,8 +9239,21 @@ window.CharacterManager = ({ auth, database }) => {
 
     if (item._shopItem && !item._unresolved) {
       handleShopPurchase(cleanItem, true);
+      logShopBuy(item, targetCharId, targetState.charName || 'Unnamed');
     } else {
       playSound('place');
+      if (sourceCharId) {
+        logHistoryEvent({
+          type: 'move',
+          charId: sourceCharId,
+          charName: allChars[sourceCharId]?.state?.charName || 'Unnamed',
+          toCharId: targetCharId,
+          toCharName: targetState.charName || 'Unnamed',
+          itemName: item.name,
+          qty: item.variables?.qty?.value || 1,
+          detail: (window.summarizeItemDetail && window.summarizeItemDetail(item)) || null,
+        });
+      }
     }
 
     const tabEl = document.querySelector(`[data-char-id="${targetCharId}"]`);
@@ -8670,6 +9312,7 @@ window.CharacterManager = ({ auth, database }) => {
 
         tab.addEventListener('click', () => {
           closeRules(); // pops its history entry first, if it was open
+    closeHistoryPanel(); // ditto for the DM history panel
           if (char.id === currentCharId) {
             if (shopOpen) {
               _shopFromHexmap = false;
@@ -8787,6 +9430,7 @@ window.CharacterManager = ({ auth, database }) => {
 
   window.invGoToHexmap = function() {
     closeRules(); // pops its history entry first, if it was open
+    closeHistoryPanel(); // ditto for the DM history panel
     inv.collapsePanelInstant();
     _hexmapMode = true;
     _applyViewMode();
@@ -8804,6 +9448,7 @@ window.CharacterManager = ({ auth, database }) => {
     try {
       if (window._navCalc.open) { window._navCalc.hide?.(); return; }
       if (rulesOpen) { goBackFromRules(); return; }
+      if (historyOpen) { goBackFromHistory(); return; }
       const v = e.state?.view;
       if (!v || v === 'hexmap') {
         if (shopOpen) {
