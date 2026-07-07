@@ -1670,7 +1670,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const matCost2 = getSlotMaterialCostCp(slotData, lib?.category === 'ammunition');
       const total2 = costBase2 > 0
         ? base2 * mult + typeCost2 + costBase2 + matCost2
-        : (base2 + typeCost2 + matCost2) * mult;
+        : base2 * mult + typeCost2 + matCost2;
       const parts2 = [];
       let rem2 = total2;
       const gp2 = Math.floor(rem2 / 100); rem2 %= 100;
@@ -1773,8 +1773,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
         notesEl.value = slotData.notes || '';
         notesEl.oninput = () => { slotData.notes = notesEl.value; };
       }
-    } else if (lib && lib.linkedSpell) {
-      const _spell = (window.SPELLS_XPHB || []).find(s => s.n === lib.linkedSpell);
+    } else if (lib && (lib.linkedSpell || (slotData.variables?.spell?.control === 'select' && slotData.variables.spell.value))) {
+      const _spellName = lib.linkedSpell || slotData.variables.spell.value;
+      const _spell = (window.SPELLS_XPHB || []).find(s => s.n === _spellName);
       descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
       if (_spell) {
         const _lvlNames = ['Cantrip','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
@@ -1824,7 +1825,7 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const baseCp = ccTotalCp > 0 ? ccTotalCp : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
       const totalCp = costBaseCp > 0
         ? baseCp * coinUsesMult + typeCostCp + costBaseCp + materialCostCp
-        : (baseCp + typeCostCp + materialCostCp) * coinUsesMult;
+        : baseCp * coinUsesMult + typeCostCp + materialCostCp;
       const parts = [];
       let rem = totalCp;
       const gp = Math.floor(rem / 100); rem %= 100;
@@ -1961,6 +1962,10 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const refreshShopRow = () => {
       const shopRow = document.querySelector(`.shop-item-row[data-item-name="${CSS.escape(slotData.name)}"]`);
       if (shopRow?._applyRowState) shopRow._applyRowState();
+      // DM listings are persisted instances (unlike catalog rows, which are
+      // rebuilt fresh each time) — without this, edits like decrementing
+      // charges only live in memory and revert on the next Firebase refresh.
+      if (slotData._isDmListing && window.saveDmListings) window.saveDmListings();
     };
 
     const updateAmmoUnresolved = () => {
@@ -5985,13 +5990,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       const qty = slotData.variables?.qty?.value || 1;
       const _matCp = getSlotMaterialCostCp(slotData, lib?.category === 'ammunition');
       const _costBaseCp = lib && lib.costBase ? parseCostCp(lib.costBase) : 0;
-      const _basePlusTp = (sc
+      const _typeCp = getSlotTypeCostCp(slotData);
+      const _baseCp = sc
         ? (sc.pp||0)*1000 + (sc.gp||0)*100 + (sc.sp||0)*10 + (sc.cp||0)
-        : (lib && lib.cost ? parseCostCp(lib.cost) : 0))
-        + getSlotTypeCostCp(slotData);
+        : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
       const unitCp = _costBaseCp > 0
-        ? _basePlusTp * getSlotCoinUsesMultiplier(slotData) + _costBaseCp + _matCp
-        : (_basePlusTp + _matCp) * getSlotCoinUsesMultiplier(slotData);
+        ? _baseCp * getSlotCoinUsesMultiplier(slotData) + _typeCp + _costBaseCp + _matCp
+        : _baseCp * getSlotCoinUsesMultiplier(slotData) + _typeCp + _matCp;
       const fullCp = unitCp * qty;
       const halfCp = fullCp > 0 ? (isTreasure ? fullCp : Math.floor(fullCp / 2)) : 0;
       if (halfCp > 0) {
@@ -7420,6 +7425,7 @@ window.CharacterManager = ({ auth, database }) => {
     const compact = dmListings.map(s => compactSlotData(s)).filter(Boolean);
     dmListingsRef.set(compact.length ? JSON.stringify(compact) : null);
   }
+  window.saveDmListings = saveDmListings;
 
   function subscribeToDmListings() {
     if (dmListingsRef) dmListingsRef.off('value');
@@ -7897,6 +7903,10 @@ window.CharacterManager = ({ auth, database }) => {
       }
 
       dmListings.forEach((listingData, listIdx) => {
+        // Marks this instance as a persisted DM listing (vs. a catalog/random
+        // row) so the inspector's variable-edit handlers know to save changes
+        // (e.g. remaining charges) back to /inventory_dm_listings.
+        listingData._isDmListing = true;
         const listRow = document.createElement('div');
         // Visibility/availability are keyed by item name, same as the main
         // catalog — a listing of an item already in the catalog shares that
@@ -7919,11 +7929,16 @@ window.CharacterManager = ({ auth, database }) => {
         // hasUses:'coins' items (Waning Wands, Tonic of Potency, etc.) price
         // per remaining charge — without this multiplier a listing always
         // showed the flat per-charge cost regardless of how many charges
-        // the actual instance has left.
-        const listTotalCp = ((listingData.cost ? shopCostToCp(listingData.cost) : 0)
-          + inv.getSlotTypeCostCp(listingData)
-          + inv.getSlotMaterialCostCp(listingData, listingData.category === 'ammunition'))
-          * inv.getSlotCoinUsesMultiplier(listingData);
+        // the actual instance has left. Only the base cost scales with
+        // charges; type/material surcharges are one-time, not per-use.
+        const _listBaseCp = listingData.cost ? shopCostToCp(listingData.cost) : 0;
+        const _listTypeCp = inv.getSlotTypeCostCp(listingData);
+        const _listMatCp = inv.getSlotMaterialCostCp(listingData, listingData.category === 'ammunition');
+        const _listCostBaseCp = listingData.costBase ? shopCostToCp(listingData.costBase) : 0;
+        const _listMult = inv.getSlotCoinUsesMultiplier(listingData);
+        const listTotalCp = _listCostBaseCp > 0
+          ? _listBaseCp * _listMult + _listTypeCp + _listCostBaseCp + _listMatCp
+          : _listBaseCp * _listMult + _listTypeCp + _listMatCp;
         const listCostEl = document.createElement('span');
         listCostEl.className = 'shop-item-cost';
         if (listTotalCp > 0) listCostEl.innerHTML = renderCostHtml(listTotalCp, '');
@@ -8139,7 +8154,7 @@ window.CharacterManager = ({ auth, database }) => {
           const charges = Math.max(0, cv.uses?.value ?? cv.count?.value ?? 1);
           base = costBaseCp > 0
             ? baseCostCp * charges + typeCostCp + costBaseCp + materialExtra
-            : (baseCostCp + typeCostCp + materialExtra) * charges;
+            : baseCostCp * charges + typeCostCp + materialExtra;
         } else {
           base = baseCostCp + typeCostCp + materialExtra + costBaseCp;
         }
@@ -8865,6 +8880,15 @@ window.CharacterManager = ({ auth, database }) => {
     // function (called from Map/Rules/History nav and same-tab re-clicks)
     // was missed the first time since it doesn't go through switchToChar.
     flushCharDiff();
+    // Invalidate the baseline now that there's no character selected to own
+    // it. Without this, a flush triggered late (e.g. a text field's blur
+    // event firing after this function returns — happens on some devices
+    // when tapping the tab dismisses a keyboard asynchronously) would still
+    // pass flushCharDiff()'s guard, using the stale pre-deselect baseline
+    // against the now-blanked live state and logging a bogus "everything
+    // reverted to blank" entry for a character that was never touched.
+    charSnapshotId = null;
+    charSnapshot = null;
     currentCharId = null;
     suppressSave = true;
     try { inv.loadState(blankState(), { charId: null }); } catch(e) {}
@@ -9285,6 +9309,35 @@ window.CharacterManager = ({ auth, database }) => {
     return `${label} changed`;
   }
 
+  // Treats a value as "not really there" — 0/false/''/null/undefined or an
+  // empty array/object. Feature data gets lazily stubbed the first time a
+  // feature is rendered (e.g. `if (!data.slots) data.slots = [];`), and that
+  // stubbing can land after one snapshot but before the next even though
+  // nothing the DM did actually changed — comparing raw JSON.stringify output
+  // treated "never existed" vs. "exists but still empty" as a real edit.
+  function isEmptyish(v) {
+    if (v == null || v === false || v === 0 || v === '') return true;
+    if (Array.isArray(v)) return v.length === 0;
+    if (typeof v === 'object') return Object.keys(v).length === 0;
+    return false;
+  }
+
+  function featureDataEqual(a, b) {
+    const ao = a || {}, bo = b || {};
+    const keys = new Set([...Object.keys(ao), ...Object.keys(bo)]);
+    for (const k of keys) {
+      const av = ao[k], bv = bo[k];
+      if (av === bv) continue;
+      if (av && bv && typeof av === 'object' && typeof bv === 'object') {
+        if (!featureDataEqual(av, bv)) return false;
+        continue;
+      }
+      if (isEmptyish(av) && isEmptyish(bv)) continue;
+      return false;
+    }
+    return true;
+  }
+
   function diffCharFields(prev, next) {
     const changes = [];
     CHAR_TRACKED_FIELDS.forEach(k => {
@@ -9297,7 +9350,7 @@ window.CharacterManager = ({ auth, database }) => {
     const ids = new Set([...Object.keys(prevFd), ...Object.keys(nextFd)]);
     ids.forEach(id => {
       const a = prevFd[id], b = nextFd[id];
-      if (JSON.stringify(a || null) === JSON.stringify(b || null)) return;
+      if (featureDataEqual(a, b)) return;
       changes.push({ kind: 'feature', featureId: id, summary: describeFeatureChange(id, a, b) });
     });
 
