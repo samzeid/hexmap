@@ -194,6 +194,30 @@ body {
   margin-bottom: 4px;
 }
 
+.history-row-top-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.history-row-del {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(232,232,240,0.35);
+  font-size: 12px;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.history-row-del:hover  { color: rgba(224, 116, 116, 1); background: rgba(224, 116, 116, 0.12); }
+.history-row-del:active { background: rgba(224, 116, 116, 0.18); }
+
 .history-row-body {
   color: rgba(232,232,240,0.9);
 }

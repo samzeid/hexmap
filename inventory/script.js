@@ -6563,6 +6563,30 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       syncFeatures();
       renderFeatures();
       populateArmorDatalist();
+      // state.containers was just replaced wholesale above. Every control in
+      // an open item inspector (coin +/-, qty, uses, silvered/material,
+      // notes, custom name/description) closes directly over the *old* slot
+      // object from when the panel was opened — attacks/features get torn
+      // down and rebuilt fresh every loadState() (see calls just above), but
+      // the inspector is deliberately kept open (opts.keepInspector) across a
+      // remote sync, so its bindings would otherwise go stale: further edits
+      // would mutate a detached copy that render() never looks at, silently
+      // discarding them. Re-open the panel against the freshly loaded object
+      // at the same position so it keeps editing the live data; if that item
+      // no longer exists there (moved/removed by whoever's edit this was),
+      // there's nothing valid left to keep showing.
+      if (opts && opts.keepInspector && inspectorItemKey && !inspectorItemKey.startsWith('shop-')
+          && !detailPanelEl.classList.contains('detail-collapsed')) {
+        const lastH = inspectorItemKey.lastIndexOf('-');
+        const prevH = inspectorItemKey.lastIndexOf('-', lastH - 1);
+        const cid = inspectorItemKey.substring(0, prevH);
+        const ir  = parseInt(inspectorItemKey.substring(prevH + 1, lastH));
+        const ic  = parseInt(inspectorItemKey.substring(lastH + 1));
+        const cnt = state.containers.find(c => c.id === cid);
+        const sd  = cnt && cnt.slots[ir] && cnt.slots[ir][ic];
+        if (sd) showInspector(sd, cnt, ir, ic);
+        else    hideInspector(true);
+      }
       render();
     },
     // Per-viewer fold/order prefs for the character just loaded via
@@ -6604,6 +6628,13 @@ window.CharacterManager = ({ auth, database }) => {
   let charDiffTimer  = null;
   let dirty              = false;   // true while local edits haven't been flushed to Firebase yet
   let localWriteInFlight = false;   // true briefly after a save to suppress our own Firebase echo
+  // Raw (pre-parse) state JSON last known to be in sync for each character —
+  // lets the /inventory_characters listener tell "someone else's edit fired
+  // this snapshot" apart from "this snapshot happens to include our own char,
+  // unchanged" so it doesn't reload (and orphan an open inspector's slot
+  // reference) on every other player's write, only on ones that actually
+  // touched the currently-selected character.
+  let lastSyncedStateJson = {};
   let pendingNewChar     = null;    // char created locally but not yet confirmed by Firebase
   const pendingDeletes   = new Set(); // char IDs removed locally but not yet confirmed by Firebase
   let inv                = null;
@@ -6845,7 +6876,26 @@ window.CharacterManager = ({ auth, database }) => {
 
     const top = document.createElement('div');
     top.className = 'history-row-top';
-    top.innerHTML = `<span>${escHtml(entry.type || 'event')}</span><span>${escHtml(time)}</span>`;
+    top.innerHTML = `<span>${escHtml(entry.type || 'event')}</span>`;
+    const right = document.createElement('span');
+    right.className = 'history-row-top-right';
+    const timeEl = document.createElement('span');
+    timeEl.textContent = time;
+    right.appendChild(timeEl);
+    if (entry._key) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'history-row-del';
+      delBtn.title = 'Delete this log entry';
+      delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      delBtn.addEventListener('pointerdown', e => e.stopPropagation());
+      delBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!confirm('Delete this log entry? This cannot be undone.')) return;
+        database.ref(`/inventory_history/${entry._key}`).remove();
+      });
+      right.appendChild(delBtn);
+    }
+    top.appendChild(right);
     row.appendChild(top);
 
     const body = document.createElement('div');
@@ -6945,7 +6995,11 @@ window.CharacterManager = ({ auth, database }) => {
     historyRef = database.ref('/inventory_history').limitToLast(200);
     historyRef.on('value', snap => {
       const raw = snap.val() || {};
-      historyEntriesCache = Object.values(raw).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      // _key (the Firebase push id) is what the per-row delete button targets —
+      // keep it off the entry's own persisted shape, it's read-side only.
+      historyEntriesCache = Object.entries(raw)
+        .map(([key, entry]) => Object.assign({ _key: key }, entry))
+        .sort((a, b) => (b.ts || 0) - (a.ts || 0));
       renderHistoryList();
     });
   }
@@ -8678,6 +8732,17 @@ window.CharacterManager = ({ auth, database }) => {
           createdAt:         data.createdAt || 0,
           sortOrder:         data.sortOrder ?? data.createdAt ?? 0,
         };
+        // Keep a baseline raw-state for every character we're *not* currently
+        // looking at, so that switching to one later (switchToChar) starts
+        // from an accurate "last known synced" value instead of leaving it
+        // undefined — an undefined baseline made the very first snapshot
+        // after switching (e.g. triggered by a completely different player's
+        // edit) look like a change, forcing a spurious loadState() that
+        // orphans whatever inspector panel is already open on the newly
+        // selected character. currentCharId's own baseline is maintained
+        // below (and by saveChar()) instead, since it's guarded by dirty/
+        // localWriteInFlight and must not be clobbered with an in-flight value.
+        if (id !== currentCharId) lastSyncedStateJson[id] = data.state;
       });
 
       // Re-inject any locally-created char still awaiting Firebase confirmation
@@ -8690,16 +8755,27 @@ window.CharacterManager = ({ auth, database }) => {
           // Local edits in flight — keep them, don't let the Firebase echo overwrite them
           if (liveState) allChars[currentCharId].state = liveState;
         } else {
-          // Nothing pending locally — apply whatever Firebase has (another user's edit)
-          suppressSave = true;
-          flushCharDiff();
-          try { inv.loadState(allChars[currentCharId].state, { charId: currentCharId, keepInspector: true }); } catch (e) { console.warn('loadState error:', e); }
-          inv.applyLocalUi(userUiCache[currentCharId] || {});
-          suppressSave = false;
-          // A remote edit, not a local one — reset the diff baseline instead of
-          // logging it, since we can't reliably attribute it to this user.
-          // Post-render state, same reasoning as switchToChar() below.
-          resetCharSnapshot(currentCharId, inv.getState());
+          // This 'value' snapshot covers the whole /inventory_characters tree, so
+          // it fires here even when a *different* player's character is the one
+          // that actually changed. Only reload ours if its raw state actually
+          // differs from what we last synced — otherwise this is a no-op reload
+          // that would still call loadState() and orphan the slotData reference
+          // held by any inspector panel the local player currently has open
+          // (e.g. mid-edit on their own gold), silently dropping that edit.
+          const rawCharStr = raw[currentCharId] && raw[currentCharId].state;
+          if (rawCharStr !== lastSyncedStateJson[currentCharId]) {
+            // Actually changed (another user's edit) — apply it
+            suppressSave = true;
+            flushCharDiff();
+            try { inv.loadState(allChars[currentCharId].state, { charId: currentCharId, keepInspector: true }); } catch (e) { console.warn('loadState error:', e); }
+            inv.applyLocalUi(userUiCache[currentCharId] || {});
+            suppressSave = false;
+            // A remote edit, not a local one — reset the diff baseline instead of
+            // logging it, since we can't reliably attribute it to this user.
+            // Post-render state, same reasoning as switchToChar() below.
+            resetCharSnapshot(currentCharId, inv.getState());
+            lastSyncedStateJson[currentCharId] = rawCharStr;
+          }
         }
       }
 
@@ -9054,6 +9130,10 @@ window.CharacterManager = ({ auth, database }) => {
     if (!saveState.charName) saveState.charName = 'Unnamed';
     compactContainerSlots(saveState.containers);
     const saveStateJson = JSON.stringify(saveState);
+    // Recorded before the write resolves: once Firebase echoes this exact
+    // JSON back to us (or to anyone else) via the /inventory_characters
+    // listener, it's recognizable as "already applied," not a fresh remote edit.
+    lastSyncedStateJson[charId] = saveStateJson;
     database.ref(`/inventory_characters/${charId}`).update({
       state: saveStateJson,
     }).then(() => {
