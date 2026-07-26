@@ -7411,8 +7411,18 @@ window.CharacterManager = ({ auth, database }) => {
       : !DEFAULT_HIDDEN_SECTIONS.has(section);
   }
 
-  function saveShopVisibility() {
-    if (shopVisRef) shopVisRef.set(encodeVisObj(shopVisibility));
+  // Writes only the given item name(s) via update() (a Firebase multi-path
+  // merge at this ref, touching just those children) instead of set()-ing
+  // the whole map — two DMs toggling different items around the same time
+  // would otherwise have one toggle silently overwritten by the other's
+  // full-map snapshot. Defaults to the full local map only as a fallback
+  // for callers that don't know exactly which keys changed.
+  function saveShopVisibility(names) {
+    if (!shopVisRef) return;
+    const keys = names && names.length ? names : Object.keys(shopVisibility);
+    const updates = {};
+    keys.forEach(name => { updates[encodeFirebaseKey(name)] = shopVisibility[name]; });
+    shopVisRef.update(updates);
   }
 
   function subscribeToShopVisibility() {
@@ -7457,8 +7467,13 @@ window.CharacterManager = ({ auth, database }) => {
       : true;
   }
 
-  function saveShopAvailability() {
-    if (shopAvailRef) shopAvailRef.set(encodeVisObj(shopAvailability));
+  // Same reasoning as saveShopVisibility() above.
+  function saveShopAvailability(names) {
+    if (!shopAvailRef) return;
+    const keys = names && names.length ? names : Object.keys(shopAvailability);
+    const updates = {};
+    keys.forEach(name => { updates[encodeFirebaseKey(name)] = shopAvailability[name]; });
+    shopAvailRef.update(updates);
   }
 
   function subscribeToShopAvailability() {
@@ -7474,21 +7489,63 @@ window.CharacterManager = ({ auth, database }) => {
   let dmListingsRef = null;
   let dmListingsCollapsed = localStorage.getItem('dmListingsCollapsed') === 'true';
 
+  // Re-saves every listing currently known locally via update() — a
+  // multi-path merge at /inventory_dm_listings that only touches the keys
+  // it's given. Two DMs adding/editing *different* listings around the same
+  // time therefore both survive: neither client's snapshot mentions the
+  // other's key, so neither write can erase it. (This used to set() the
+  // whole list as one JSON blob, so whichever save landed last silently
+  // discarded any listing the other client had just added.) Removal is
+  // deliberately NOT handled here — silence must never mean delete under
+  // this model, so removing a listing calls dmListingsRef.child(key).remove()
+  // directly at its own call site instead.
   function saveDmListings() {
     if (!dmListingsRef) return;
-    const compact = dmListings.map(s => compactSlotData(s)).filter(Boolean);
-    dmListingsRef.set(compact.length ? JSON.stringify(compact) : null);
+    const updates = {};
+    dmListings.forEach(item => {
+      if (!item._dmKey) return;
+      const compact = compactSlotData(item);
+      if (compact) updates[item._dmKey] = compact;
+    });
+    if (Object.keys(updates).length) dmListingsRef.update(updates);
   }
   window.saveDmListings = saveDmListings;
+
+  // One-time upgrade from the old single-JSON-string format to one Firebase
+  // child per listing (keyed by Firebase push id), so future adds/edits/
+  // removes can target just their own listing instead of the whole list.
+  // Transaction-guarded: if multiple clients see the legacy string at once,
+  // only the winning attempt actually converts it (and generates the new
+  // keys) — every retry sees the already-migrated object and no-ops,
+  // instead of each client minting its own duplicate set of keys.
+  function migrateDmListingsFormat() {
+    database.ref('/inventory_dm_listings').transaction(current => {
+      if (typeof current !== 'string') return current; // already migrated (or empty)
+      let arr;
+      try { arr = JSON.parse(current) || []; } catch { arr = []; }
+      if (!Array.isArray(arr) || !arr.length) return null;
+      const obj = {};
+      arr.forEach(item => { obj[database.ref('/inventory_dm_listings').push().key] = item; });
+      return obj;
+    });
+  }
 
   function subscribeToDmListings() {
     if (dmListingsRef) dmListingsRef.off('value');
     dmListingsRef = database.ref('/inventory_dm_listings');
     dmListingsRef.on('value', snap => {
-      try {
-        const raw = JSON.parse(snap.val() || '[]');
-        dmListings = raw.map(r => resolveSlotData(r)).filter(Boolean);
-      } catch { dmListings = []; }
+      const raw = snap.val();
+      if (typeof raw === 'string') {
+        migrateDmListingsFormat(); // triggers this same listener again once converted
+        return;
+      }
+      dmListings = Object.entries(raw || {})
+        .map(([key, item]) => {
+          const resolved = resolveSlotData(item);
+          if (resolved) resolved._dmKey = key;
+          return resolved;
+        })
+        .filter(Boolean);
       if (shopOpen) buildShop();
     });
   }
@@ -7787,7 +7844,7 @@ window.CharacterManager = ({ auth, database }) => {
         availBtn.addEventListener('click', e => {
           e.stopPropagation();
           shopAvailability[item.name] = !isItemAvailable(item.name);
-          saveShopAvailability();
+          saveShopAvailability([item.name]);
           buildShop();
         });
         row.appendChild(availBtn);
@@ -7805,7 +7862,7 @@ window.CharacterManager = ({ auth, database }) => {
         visBtn.addEventListener('click', e => {
           e.stopPropagation();
           shopVisibility[item.name] = !isItemVisible(item.name, itemSection);
-          saveShopVisibility();
+          saveShopVisibility([item.name]);
           buildShop();
         });
         row.appendChild(visBtn);
@@ -8007,7 +8064,7 @@ window.CharacterManager = ({ auth, database }) => {
           listAvailBtn.addEventListener('click', e => {
             e.stopPropagation();
             shopAvailability[listingData.name] = !isItemAvailable(listingData.name);
-            saveShopAvailability();
+            saveShopAvailability([listingData.name]);
             buildShop();
           });
           listRow.appendChild(listAvailBtn);
@@ -8020,7 +8077,7 @@ window.CharacterManager = ({ auth, database }) => {
           listVisBtn.addEventListener('click', e => {
             e.stopPropagation();
             shopVisibility[listingData.name] = !isItemVisible(listingData.name, '');
-            saveShopVisibility();
+            saveShopVisibility([listingData.name]);
             buildShop();
           });
           listRow.appendChild(listVisBtn);
@@ -8030,7 +8087,7 @@ window.CharacterManager = ({ auth, database }) => {
           if (listRow._dragging
             || e.target.closest('.shop-item-vis-btn')
             || e.target.closest('.shop-item-avail-btn')) return;
-          inv.toggleShopItem(listingData, `dm-listing-${listIdx}`);
+          inv.toggleShopItem(listingData, `dm-listing-${listingData._dmKey || listIdx}`);
         });
 
         listRow.style.touchAction = 'none';
@@ -8063,7 +8120,9 @@ window.CharacterManager = ({ auth, database }) => {
             listingData._shopItem = true;
             inv.startDmListingDrag(listingData, e.clientX, e.clientY, () => {
               dmListings.splice(listIdx, 1);
-              saveDmListings();
+              // Explicit remove() for this one key — saveDmListings() deliberately
+              // never deletes (see its comment), so removal has to say so directly.
+              if (listingData._dmKey && dmListingsRef) dmListingsRef.child(listingData._dmKey).remove();
             });
             const _lclean = () => {
               listRow._dragging = false;
@@ -8280,7 +8339,7 @@ window.CharacterManager = ({ auth, database }) => {
         availBtn.addEventListener('click', e => {
           e.stopPropagation();
           shopAvailability[row.dataset.itemName] = !isItemAvailable(row.dataset.itemName);
-          saveShopAvailability();
+          saveShopAvailability([row.dataset.itemName]);
           buildShop();
         });
         row.appendChild(availBtn);
@@ -8293,7 +8352,7 @@ window.CharacterManager = ({ auth, database }) => {
         visBtn.addEventListener('click', e => {
           e.stopPropagation();
           shopVisibility[row.dataset.itemName] = !isItemVisible(row.dataset.itemName, row.dataset.section);
-          saveShopVisibility();
+          saveShopVisibility([row.dataset.itemName]);
           buildShop();
         });
         row.appendChild(visBtn);
@@ -8419,7 +8478,7 @@ window.CharacterManager = ({ auth, database }) => {
           )];
           const nowAllHidden = itemRows.every(r => r.dataset.playerHidden === 'true');
           itemRows.forEach(r => { shopVisibility[r.dataset.itemName] = nowAllHidden; });
-          saveShopVisibility();
+          saveShopVisibility(itemRows.map(r => r.dataset.itemName));
           buildShop();
         });
       });
@@ -8765,16 +8824,7 @@ window.CharacterManager = ({ auth, database }) => {
           const rawCharStr = raw[currentCharId] && raw[currentCharId].state;
           if (rawCharStr !== lastSyncedStateJson[currentCharId]) {
             // Actually changed (another user's edit) — apply it
-            suppressSave = true;
-            flushCharDiff();
-            try { inv.loadState(allChars[currentCharId].state, { charId: currentCharId, keepInspector: true }); } catch (e) { console.warn('loadState error:', e); }
-            inv.applyLocalUi(userUiCache[currentCharId] || {});
-            suppressSave = false;
-            // A remote edit, not a local one — reset the diff baseline instead of
-            // logging it, since we can't reliably attribute it to this user.
-            // Post-render state, same reasoning as switchToChar() below.
-            resetCharSnapshot(currentCharId, inv.getState());
-            lastSyncedStateJson[currentCharId] = rawCharStr;
+            applyRemoteCharState(currentCharId, rawCharStr, allChars[currentCharId].state);
           }
         }
       }
@@ -8925,6 +8975,188 @@ window.CharacterManager = ({ auth, database }) => {
 
   function blankState() {
     return { charName: '', carryCapacity: '', containers: defaultContainers() };
+  }
+
+  // Applies a raw state JSON string we now know is authoritative for charId
+  // (someone else's edit, or the merged outcome of our own — see saveChar())
+  // to the live UI if that character is currently open, and records it as
+  // the synced baseline either way. Shared by the /inventory_characters
+  // listener and saveChar()'s post-write reconciliation so both "apply a
+  // remote change" paths stay in sync with each other.
+  function applyRemoteCharState(charId, rawJson, parsedState) {
+    if (allChars[charId]) allChars[charId].state = parsedState;
+    lastSyncedStateJson[charId] = rawJson;
+    if (charId !== currentCharId) return;
+    suppressSave = true;
+    flushCharDiff();
+    try { inv.loadState(parsedState, { charId, keepInspector: true }); } catch (e) { console.warn('loadState error:', e); }
+    inv.applyLocalUi(userUiCache[charId] || {});
+    suppressSave = false;
+    // A remote edit, not a local one — reset the diff baseline instead of
+    // logging it, since we can't reliably attribute it to this user.
+    // Post-render state, same reasoning as switchToChar() below.
+    resetCharSnapshot(charId, inv.getState());
+  }
+
+  function safeParseJson(str) {
+    if (typeof str !== 'string') return null;
+    try { return JSON.parse(str); } catch { return null; }
+  }
+
+  const jsonEq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  // Generic 3-way merge for an array of objects (or plain values) that have
+  // a stable identity — notes/attacks by their .id, activeFeatures/
+  // hiddenFeatures by the id string itself (idFn = x => x, in which case
+  // this degenerates to ordinary set union/difference). `server` is what's
+  // actually on Firebase right now, `baseline` is what we last knew to be
+  // true, `mine` is what we're about to save.
+  //   - present in mine but not baseline  -> we added it, keep ours
+  //   - present in baseline but not mine  -> we deleted it, stays deleted
+  //     (even if server still has an edit to it — an explicit removal is
+  //     treated as decisive rather than risking resurrecting something the
+  //     other side may have just removed too)
+  //   - present in both, changed from baseline -> keep ours
+  //   - present in both, unchanged -> keep server's (may hold someone
+  //     else's edit we never touched), or drop it if server no longer
+  //     has it (someone else deleted it and we didn't touch it either)
+  //   - present only in server -> a brand new entry from someone else
+  function mergeById(serverArr, baselineArr, mineArr, idFn) {
+    const toMap = arr => {
+      const map = new Map();
+      (arr || []).forEach(item => map.set(idFn(item), item));
+      return map;
+    };
+    const s = toMap(serverArr), b = toMap(baselineArr), m = toMap(mineArr);
+    const order = [
+      ...(serverArr || []).map(idFn),
+      ...(mineArr || []).map(idFn).filter(id => !s.has(id)),
+    ];
+    const seen = new Set();
+    const result = [];
+    order.forEach(id => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const inS = s.has(id), inB = b.has(id), inM = m.has(id);
+      if (inM && !inB) { result.push(m.get(id)); return; }
+      if (!inM && inB) { return; }
+      if (inM && inB) {
+        if (!jsonEq(m.get(id), b.get(id))) { result.push(m.get(id)); return; }
+        if (inS) result.push(s.get(id));
+        return;
+      }
+      if (inS) result.push(s.get(id));
+    });
+    return result;
+  }
+
+  // Same 3-way logic as mergeById, one level deeper: for a single container
+  // that exists on both sides, merge its non-grid fields (rows, name, ...)
+  // the usual way, then merge the slot grid itself by exact [row][col]
+  // position. growContainer()/shrinkContainer() only ever push a new empty
+  // row at the end or pop an already-empty trailing row — they never
+  // reindex an existing occupied slot — so position is a stable identity
+  // here, including across concurrent grid growth on both sides (the grid
+  // is sized to the tallest of the three copies; a row one side trimmed as
+  // "empty" that the other side placed something into just re-expands to
+  // hold it instead of losing the item).
+  function mergeSlotGrid(serverSlots, baselineSlots, mineSlots) {
+    const rows = Math.max((serverSlots || []).length, (baselineSlots || []).length, (mineSlots || []).length);
+    const grid = [];
+    for (let r = 0; r < rows; r++) {
+      const sRow = (serverSlots || [])[r] || [];
+      const bRow = (baselineSlots || [])[r] || [];
+      const mRow = (mineSlots   || [])[r] || [];
+      const cols = Math.max(sRow.length, bRow.length, mRow.length, 2);
+      const row = [];
+      for (let c = 0; c < cols; c++) {
+        const sv = sRow[c] ?? null, bv = bRow[c] ?? null, mv = mRow[c] ?? null;
+        row.push(jsonEq(mv, bv) ? sv : mv);
+      }
+      grid.push(row);
+    }
+    return grid;
+  }
+
+  function mergeOneContainer(server, baseline, mine) {
+    const out = Object.assign({}, server);
+    Object.keys(mine).forEach(k => {
+      if (k === 'slots') return;
+      if (!jsonEq(mine[k], baseline[k]) || !(k in out)) out[k] = mine[k];
+    });
+    out.slots = mergeSlotGrid(server.slots, baseline.slots, mine.slots);
+    return out;
+  }
+
+  function mergeContainerList(serverArr, baselineArr, mineArr) {
+    const toMap = arr => { const map = new Map(); (arr || []).forEach(c => map.set(c.id, c)); return map; };
+    const s = toMap(serverArr), b = toMap(baselineArr), m = toMap(mineArr);
+    const order = [
+      ...(serverArr || []).map(c => c.id),
+      ...(mineArr || []).map(c => c.id).filter(id => !s.has(id)),
+    ];
+    const seen = new Set();
+    const result = [];
+    order.forEach(id => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const inS = s.has(id), inB = b.has(id), inM = m.has(id);
+      if (inM && !inB) { result.push(m.get(id)); return; }
+      if (!inM && inB) { return; }
+      if (inM && inB) {
+        if (inS) result.push(mergeOneContainer(s.get(id), b.get(id), m.get(id)));
+        return;
+      }
+      if (inS) result.push(s.get(id));
+    });
+    return result;
+  }
+
+  // Keys that hold a collection of independently-editable entries (items in
+  // a grid, class features, notes, attack rows, active/hidden feature ids)
+  // get merged entry-by-entry instead of as one all-or-nothing blob, so two
+  // edits to *different* entries in the same collection both survive.
+  // Everything else on the character (HP, name, every individual stat
+  // field, ...) is already its own top-level key and needs no special case.
+  const CHAR_COLLECTION_MERGERS = {
+    containers:      (s, b, m) => mergeContainerList(s, b, m),
+    featureData:      (s, b, m) => mergeById(
+      Object.entries(s || {}).map(([id, v]) => ({ id, v })),
+      Object.entries(b || {}).map(([id, v]) => ({ id, v })),
+      Object.entries(m || {}).map(([id, v]) => ({ id, v })),
+      x => x.id
+    ).reduce((acc, x) => { acc[x.id] = x.v; return acc; }, {}),
+    notes:            (s, b, m) => mergeById(s, b, m, x => x.id),
+    attacks:          (s, b, m) => mergeById(s, b, m, x => x.id),
+    activeFeatures:   (s, b, m) => mergeById(s, b, m, x => x),
+    hiddenFeatures:   (s, b, m) => mergeById(s, b, m, x => x),
+  };
+
+  // Top-level-field merge for a character's compact state, used by saveChar()
+  // so two edits to the *same* character from different sources (two tabs,
+  // a DM adjusting stats while the player manages inventory, phone + laptop)
+  // don't clobber each other outright the way a blind overwrite would.
+  // `server` is the freshest value actually on Firebase right now, `baseline`
+  // is what we last knew to be true, `mine` is what we're trying to save.
+  // For each top-level key: if it's one of CHAR_COLLECTION_MERGERS, merge it
+  // entry-by-entry (see above). Otherwise, if our copy differs from baseline,
+  // we touched it — keep ours; if not, keep the server's (which may hold
+  // someone else's change we never touched at all). Two edits to the exact
+  // same non-collection field (or the exact same entry within a collection)
+  // still resolve last-write-wins.
+  function mergeCharTopLevel(server, baseline, mine) {
+    const out = Object.assign({}, server || {});
+    const b = baseline || {};
+    const m = mine || {};
+    Object.keys(m).forEach(k => {
+      if (CHAR_COLLECTION_MERGERS[k]) {
+        out[k] = CHAR_COLLECTION_MERGERS[k](server ? server[k] : undefined, b[k], m[k]);
+        return;
+      }
+      const touchedByMe = !jsonEq(m[k], b[k]);
+      if (touchedByMe || !(k in out)) out[k] = m[k];
+    });
+    return out;
   }
 
   function defaultContainers() {
@@ -9130,14 +9362,32 @@ window.CharacterManager = ({ auth, database }) => {
     if (!saveState.charName) saveState.charName = 'Unnamed';
     compactContainerSlots(saveState.containers);
     const saveStateJson = JSON.stringify(saveState);
-    // Recorded before the write resolves: once Firebase echoes this exact
-    // JSON back to us (or to anyone else) via the /inventory_characters
-    // listener, it's recognizable as "already applied," not a fresh remote edit.
-    lastSyncedStateJson[charId] = saveStateJson;
-    database.ref(`/inventory_characters/${charId}`).update({
-      state: saveStateJson,
-    }).then(() => {
+
+    // A transaction (not a blind update()) so a concurrent edit to a
+    // *different* top-level field of this same character — a DM adjusting
+    // HP while we manage inventory, the same character open on two devices
+    // — survives instead of being silently discarded by whichever save's
+    // round-trip happens to land last. mergeCharTopLevel() only merges at
+    // the top level; two edits to the same field still resolve last-write-
+    // wins, same as before.
+    const baseline = safeParseJson(lastSyncedStateJson[charId]);
+    database.ref(`/inventory_characters/${charId}/state`).transaction(currentRaw => {
+      const serverState = safeParseJson(currentRaw);
+      return JSON.stringify(mergeCharTopLevel(serverState, baseline, saveState));
+    }, (error, committed, snapshot) => {
       setTimeout(() => { localWriteInFlight = false; }, 200);
+      if (error || !committed) return;
+      const finalJson = snapshot.val();
+      if (typeof finalJson !== 'string') return;
+      if (finalJson === saveStateJson) {
+        // Clean write, nothing merged in — our live UI already matches.
+        lastSyncedStateJson[charId] = finalJson;
+      } else {
+        // The transaction pulled in a field we hadn't touched — apply the
+        // merged result the same way any other remote edit gets applied, so
+        // our own UI catches up to the full picture instead of just our part.
+        applyRemoteCharState(charId, finalJson, parseState(finalJson));
+      }
     });
     scheduleBackupCheck(charId, saveStateJson);
   }
@@ -9275,8 +9525,10 @@ window.CharacterManager = ({ auth, database }) => {
     const compact = compactSlotData(slotData);
     const resolved = compact ? resolveSlotData(compact) : null;
     if (!resolved) return;
+    const key = dmListingsRef ? dmListingsRef.push().key : null;
+    resolved._dmKey = key;
     dmListings.push(resolved);
-    saveDmListings();
+    if (key && compact) dmListingsRef.update({ [key]: compact });
     // currentCharId is reliable here (unlike handleCrossCharDrop) — nothing
     // in this function writes to /inventory_characters, so there's no
     // reentrant auto-select to race against. But it's only the right
@@ -9554,63 +9806,73 @@ window.CharacterManager = ({ auth, database }) => {
     // For shop items dropping onto another character's tab, confirm wallet spend first
     if (item._shopItem && !item._unresolved && !confirmSpendingOtherWallet()) return;
 
-    const targetState = JSON.parse(JSON.stringify(allChars[targetCharId].state));
-    const equipped    = targetState.containers.find(c => c.id === 'equipped');
-    if (!equipped) return;
+    // Placement is decided *inside* the transaction, recomputed from the
+    // actual current server value on every attempt (including Firebase's
+    // automatic retries) — never from a locally cached snapshot of the
+    // target character. It also always appends a brand-new row rather than
+    // reusing an existing empty-looking slot. Reusing "the first empty
+    // slot" would still race: that slot is a position the receiving
+    // player's own client could independently be filling at that exact
+    // moment (e.g. rearranging their own grid), and since their own save
+    // would see it as "I deliberately changed this slot" and win it
+    // outright, one side's item would silently vanish. A freshly created
+    // row can't collide with anything — it doesn't exist until this
+    // transaction creates it, so nothing else could have been targeting it.
+    database.ref(`/inventory_characters/${targetCharId}/state`).transaction(currentRaw => {
+      const serverState = safeParseJson(currentRaw) || blankState();
+      const targetState = JSON.parse(JSON.stringify(serverState));
+      if (!targetState.containers || !targetState.containers.length) targetState.containers = defaultContainers();
+      const equipped = targetState.containers.find(c => c.id === 'equipped');
+      if (!equipped) return undefined; // abort — 'equipped' is a permanent container, shouldn't happen
 
-    let finalR = 0, finalC = 0, placed = false;
-    for (let r = 0; r < equipped.slots.length; r++) {
-      if (!equipped.slots[r][0]) {
-        equipped.slots[r][0] = cleanItem; finalR = r; finalC = 0; placed = true; break;
+      const itemForThisAttempt = JSON.parse(JSON.stringify(cleanItem));
+      equipped.slots.push([itemForThisAttempt, null]);
+      equipped.rows = equipped.slots.length;
+      const finalR = equipped.slots.length - 1, finalC = 0;
+
+      // Transfer the linked container and its contents to the target character
+      if (linkedContainer) {
+        const newId = `linked-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+        const linkedCopy = JSON.parse(JSON.stringify(linkedContainer));
+        linkedCopy.id = newId;
+        linkedCopy.linkedTo = { containerId: 'equipped', r: finalR, c: finalC };
+        itemForThisAttempt.containerId = newId;
+        targetState.containers.push(linkedCopy);
       }
-      if (!equipped.slots[r][1]) {
-        equipped.slots[r][1] = cleanItem; finalR = r; finalC = 1; placed = true; break;
+
+      compactContainerSlots(targetState.containers);
+      return JSON.stringify(targetState);
+    }, (error, committed, snapshot) => {
+      if (error || !committed) return;
+      const finalJson = snapshot.val();
+      if (typeof finalJson !== 'string') return;
+      applyRemoteCharState(targetCharId, finalJson, parseState(finalJson));
+
+      if (item._shopItem && !item._unresolved) {
+        handleShopPurchase(cleanItem, true);
+        logShopBuy(item, targetCharId, allChars[targetCharId]?.state?.charName || 'Unnamed');
+      } else {
+        playSound('place');
+        if (sourceCharId) {
+          logHistoryEvent({
+            type: 'move',
+            charId: sourceCharId,
+            charName: allChars[sourceCharId]?.state?.charName || 'Unnamed',
+            toCharId: targetCharId,
+            toCharName: allChars[targetCharId]?.state?.charName || 'Unnamed',
+            itemName: item.name,
+            qty: item.variables?.qty?.value || 1,
+            detail: (window.summarizeItemDetail && window.summarizeItemDetail(item)) || null,
+          });
+        }
       }
-    }
-    if (!placed) {
-      equipped.slots.push([cleanItem, null]);
-      equipped.rows++;
-      finalR = equipped.slots.length - 1; finalC = 0;
-    }
 
-    // Transfer the linked container and its contents to the target character
-    if (linkedContainer) {
-      const newId = `linked-${Date.now()}`;
-      linkedContainer.id      = newId;
-      linkedContainer.linkedTo = { containerId: 'equipped', r: finalR, c: finalC };
-      cleanItem.containerId = newId;
-      targetState.containers.push(linkedContainer);
-    }
-
-    allChars[targetCharId].state = targetState;
-    database.ref(`/inventory_characters/${targetCharId}`).update({
-      state: JSON.stringify(targetState),
+      const tabEl = document.querySelector(`[data-char-id="${targetCharId}"]`);
+      if (tabEl) {
+        tabEl.classList.add('tab-received');
+        setTimeout(() => tabEl.classList.remove('tab-received'), 1200);
+      }
     });
-
-    if (item._shopItem && !item._unresolved) {
-      handleShopPurchase(cleanItem, true);
-      logShopBuy(item, targetCharId, targetState.charName || 'Unnamed');
-    } else {
-      playSound('place');
-      if (sourceCharId) {
-        logHistoryEvent({
-          type: 'move',
-          charId: sourceCharId,
-          charName: allChars[sourceCharId]?.state?.charName || 'Unnamed',
-          toCharId: targetCharId,
-          toCharName: targetState.charName || 'Unnamed',
-          itemName: item.name,
-          qty: item.variables?.qty?.value || 1,
-          detail: (window.summarizeItemDetail && window.summarizeItemDetail(item)) || null,
-        });
-      }
-    }
-
-    const tabEl = document.querySelector(`[data-char-id="${targetCharId}"]`);
-    if (tabEl) {
-      tabEl.classList.add('tab-received');
-      setTimeout(() => tabEl.classList.remove('tab-received'), 1200);
-    }
   }
 
   // ── TABS ────────────────────────────────────────────────────────────────
