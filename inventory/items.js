@@ -9,6 +9,11 @@
 //   dmOnly        (optional) true → hidden from players' autocomplete
 //   noCarry       (optional) true → doesn't count toward carry capacity
 //   containerRows (optional) number → item acts as a container with this many rows
+//   containerCapacity (optional) number → fill-weight cap shown as "used/cap" on the
+//                 container header, in the same units as itemFillCost (1.0 per
+//                 stock item, 0.25 per packable). Defaults to containerRows * 2
+//                 (2 slots per row) if omitted — set this explicitly whenever
+//                 that default doesn't match the container's real-world size.
 //   variables     (optional) { key: { value, control, min, max } } → tracked counters
 
 window.Bulk = {
@@ -244,7 +249,7 @@ window.ITEM_LIBRARY = [
   { id: 65, name: "Grappling Hook",      bulk: Bulk.PACKABLE, cost: "2 gp",  description: `As a Utilize action, throw up to 50 feet to catch on a railing, ledge, or similar (DC Dexterity (Acrobatics) check). Attach a rope to climb.` },
   { id: 66, name: "Crowbar",             bulk: Bulk.PACKABLE,    cost: "2 gp",  description: `Using a Crowbar gives you Advantage on Strength checks where its leverage can be applied.` },
   { id: 67, name: "Lantern, Hooded",     bulk: Bulk.PACKABLE,    cost: "5 gp",  description: `Burns oil as fuel. Casts Bright Light in a 30-foot radius and Dim Light for an additional 30 feet. Bonus action to lower the hood (Dim Light in a 5-foot radius) or raise it again.` },
-  { id: 68, name: "Pouch",               bulk: Bulk.PACKABLE, cost: "5 sp",  description: `A small belt pouch.`, noCarry: true, containerRows: 2 },
+  { id: 68, name: "Pouch",               bulk: Bulk.STOCK,    cost: "5 sp",  description: `A small belt pouch.`, noCarry: true, containerRows: 2, containerCapacity: 1 },
   { id: 69, name: "Satchel",             bulk: Bulk.STOCK,    cost: "2 gp",  description: `Holds gear. Does not count toward carry capacity.`, noCarry: true, containerRows: 1 },
   { id: 70, name: "Backpack",            bulk: Bulk.STOCK,    cost: "5 gp",  description: `Holds up to 30 pounds within 1 cubic foot. Does not count toward carry capacity.`, noCarry: true, containerRows: 4 },
   { id: 71, name: "Saddlebag",           bulk: Bulk.STOCK,    cost: "5 gp",  description: `Attaches to a mount. Holds gear and does not count toward your carry capacity.`, noCarry: true, containerRows: 2 },

@@ -636,6 +636,13 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     const maxRows = slotData.isContainer
       ? (slotData.containerRows || 2)
       : (lib && lib.containerRows) || 2;
+    // Explicit override for containers whose real-world size doesn't match
+    // the default "maxRows * 2" fill-capacity formula (a Pouch has room for
+    // several small slots so items have somewhere to sit, but can't
+    // actually hold much weight — see containerCapacity in items.js).
+    const fillCapacity = slotData.isContainer
+      ? slotData.containerCapacity
+      : (lib && lib.containerCapacity);
     const linked = {
       id: `linked-${Date.now()}`,
       name: slotData.name,
@@ -643,7 +650,8 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       maxRows,
       collapsed: false,
       slots: [[null, null]],
-      linkedTo: { containerId: srcContainerId, r, c }
+      linkedTo: { containerId: srcContainerId, r, c },
+      ...(fillCapacity != null ? { fillCapacity } : {}),
     };
     slotData.containerId = linked.id;
     state.containers.push(linked);
@@ -761,6 +769,9 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
   }
 
   function containerFillCapacity(container) {
+    const libCap = getLibraryItem(container.name)?.containerCapacity;
+    if (libCap != null) return libCap;
+    if (container.fillCapacity != null) return container.fillCapacity;
     if (!container.maxRows) return Infinity;
     return container.maxRows * 2;
   }
@@ -1023,7 +1034,14 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
     let _capHtml = '';
     if (container.linkedTo && container.maxRows) {
       const _fillUsed = containerFillUsed(container);
-      const _fillCap  = container.maxRows * 2;
+      // Re-derived from the item library on every render (not just read from
+      // whatever was stamped onto the container when it was first placed) so
+      // a capacity fix in items.js applies to containers created before the
+      // fix too, without needing a data migration.
+      const _libCap = getLibraryItem(container.name)?.containerCapacity;
+      const _fillCap = _libCap != null ? _libCap
+        : container.fillCapacity != null ? container.fillCapacity
+        : container.maxRows * 2;
       const _over = _fillUsed > _fillCap + 0.001;
       _capHtml = `<span class="container-capacity${_over ? ' container-capacity-over' : ''}">${parseFloat(_fillUsed.toFixed(2))}/${_fillCap}</span>`;
     } else if (container.id === 'strapped') {
@@ -1341,22 +1359,17 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
 
       let downX, downY, downPointerId;
 
-      wrap.addEventListener('pointerdown', e => {
-        if (dragState || e.target.tagName === 'BUTTON') return;
-        downX = e.clientX; downY = e.clientY; downPointerId = e.pointerId;
-        manualScrolling = false;
-        longPressTimer = setTimeout(() => {
-          longPressTimer = null;
-          manualScrolling = false;
-          document.documentElement.setPointerCapture(downPointerId);
-          const sr = wrap.getBoundingClientRect();
-          startDrag(slotData, container, r, c, downX, downY,
-            { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 },
-            () => { container.slots[r][c] = null; });
-        }, 380);
-      });
-
-      wrap.addEventListener('pointermove', e => {
+      // Bound to `document`, not `wrap`, and explicitly detached once the
+      // gesture ends. A scroll-drag routinely carries the pointer off the
+      // slot it started on (that's the whole point of dragging to scroll) —
+      // listeners scoped to the slot itself stop receiving events the
+      // moment that happens, so pointerup/pointercancel would silently
+      // never fire, leaving manualScrolling stuck true. Since that flag is
+      // shared across every slot, the very next touch anywhere in the grid
+      // would then read it as "still scrolling" instead of starting its own
+      // long-press timer — the grid gets stuck in scroll mode until
+      // something else happens to reset it.
+      const onGridScrollMove = e => {
         if (manualScrolling) {
           document.getElementById('inv-scroll').scrollTop += manualScrollLastY - e.clientY;
           manualScrollLastY = e.clientY;
@@ -1369,14 +1382,36 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
           manualScrolling  = true;
           manualScrollLastY = e.clientY;
         }
-      });
-
-      const cancelLong = () => {
+      };
+      const detachGridScrollTracking = () => {
+        document.removeEventListener('pointermove', onGridScrollMove);
+        document.removeEventListener('pointerup', onGridScrollUp);
+        document.removeEventListener('pointercancel', onGridScrollUp);
+      };
+      const onGridScrollUp = () => {
         if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
         manualScrolling = false;
+        detachGridScrollTracking();
       };
-      wrap.addEventListener('pointerup',     cancelLong);
-      wrap.addEventListener('pointercancel', cancelLong);
+
+      wrap.addEventListener('pointerdown', e => {
+        if (dragState || e.target.tagName === 'BUTTON') return;
+        downX = e.clientX; downY = e.clientY; downPointerId = e.pointerId;
+        manualScrolling = false;
+        document.addEventListener('pointermove', onGridScrollMove);
+        document.addEventListener('pointerup', onGridScrollUp);
+        document.addEventListener('pointercancel', onGridScrollUp);
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          manualScrolling = false;
+          detachGridScrollTracking(); // real drag confirmed — startDrag() has its own document-level tracking
+          document.documentElement.setPointerCapture(downPointerId);
+          const sr = wrap.getBoundingClientRect();
+          startDrag(slotData, container, r, c, downX, downY,
+            { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 },
+            () => { container.slots[r][c] = null; });
+        }, 380);
+      });
     }
 
     return wrap;
@@ -8375,13 +8410,44 @@ window.CharacterManager = ({ auth, database }) => {
       });
 
       row.style.touchAction = 'none';
-      let lpTimer = null, lpX, lpY, lpPointerId, lpScrolling = false, lpLastY = 0, lpTracking = false;
+      let lpTimer = null, lpX, lpY, lpPointerId, lpScrolling = false, lpLastY = 0;
       const shopScrollEl = document.getElementById('shop-scroll');
+
+      // Bound to `document`, not `row`, and explicitly detached once the
+      // gesture ends — see the identical fix (and full reasoning) on the
+      // main inventory grid's slot drag/scroll handling above.
+      const onShopScrollMove = e => {
+        if (lpScrolling) {
+          shopScrollEl.scrollTop += lpLastY - e.clientY;
+          lpLastY = e.clientY;
+          return;
+        }
+        if ((e.clientX - lpX) ** 2 + (e.clientY - lpY) ** 2 > 64) {
+          if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+          lpScrolling = true;
+          lpLastY = e.clientY;
+        }
+      };
+      const detachShopScrollTracking = () => {
+        document.removeEventListener('pointermove', onShopScrollMove);
+        document.removeEventListener('pointerup', onShopScrollUp);
+        document.removeEventListener('pointercancel', onShopScrollUp);
+      };
+      const onShopScrollUp = () => {
+        if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+        lpScrolling = false;
+        row._shopDragging = false;
+        row.classList.remove('shop-item-dragging');
+        detachShopScrollTracking();
+      };
 
       row.addEventListener('pointerdown', e => {
         if (e.button !== 0) return;
         lpX = e.clientX; lpY = e.clientY; lpPointerId = e.pointerId;
-        lpScrolling = false; lpTracking = true;
+        lpScrolling = false;
+        document.addEventListener('pointermove', onShopScrollMove);
+        document.addEventListener('pointerup', onShopScrollUp);
+        document.addEventListener('pointercancel', onShopScrollUp);
         const blocked = !window._isDM && !isItemAvailable(item.name);
         const flashText = () => {
           [nameSpan, ...Array.from(costSpan.children)].forEach(el => {
@@ -8393,11 +8459,12 @@ window.CharacterManager = ({ auth, database }) => {
         };
         if (blocked) {
           flashText();
-          return;
+          return; // scroll tracking stays attached; onShopScrollUp detaches it on release
         }
         lpTimer = setTimeout(() => {
           lpTimer = null;
           lpScrolling = false;
+          detachShopScrollTracking(); // real drag confirmed — startShopDrag() has its own document-level cleanup below
           if (!window._isDM && row.classList.contains('shop-item-unaffordable')) {
             flashText();
             return;
@@ -8438,27 +8505,6 @@ window.CharacterManager = ({ auth, database }) => {
           document.addEventListener('pointercancel', cleanup);
         }, 380);
       });
-      row.addEventListener('pointermove', e => {
-        if (lpScrolling) {
-          shopScrollEl.scrollTop += lpLastY - e.clientY;
-          lpLastY = e.clientY;
-          return;
-        }
-        if (!lpTracking) return;
-        if ((e.clientX - lpX) ** 2 + (e.clientY - lpY) ** 2 > 64) {
-          if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
-          lpScrolling = true;
-          lpLastY = e.clientY;
-        }
-      });
-      const cancelLP = () => {
-        if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
-        lpScrolling = false; lpTracking = false;
-        row._shopDragging = false;
-        row.classList.remove('shop-item-dragging');
-      };
-      row.addEventListener('pointerup',     cancelLP);
-      row.addEventListener('pointercancel', cancelLP);
 
       scroll.appendChild(row);
     });
