@@ -20,15 +20,31 @@ const args = process.argv.slice(2);
 const unitOnly = args.includes('--unit-only');
 const integrationOnly = args.includes('--integration-only');
 
-function runNodeScript(scriptPath, label) {
+// If a browser gets wedged mid-test (a detached-frame crash, or a CDP
+// command that never resolves) the test's own try/finally can itself hang
+// forever trying to gracefully close an unresponsive browser — the process
+// never exits, and without this timeout the whole suite would sit there
+// indefinitely with no indication anything was wrong. `detached: true` +
+// killing the negated PID kills the whole process group, including any
+// Chrome processes the test spawned, not just the Node script itself.
+const TEST_TIMEOUT_MS = 3 * 60 * 1000; // comfortably above the slowest legitimate test (~110s)
+
+function runNodeScript(scriptPath, label, timeoutMs = TEST_TIMEOUT_MS) {
   return new Promise(resolve => {
     const start = Date.now();
-    const child = spawn(process.execPath, [scriptPath], { cwd: __dirname, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, [scriptPath], { cwd: __dirname, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     let output = '';
+    let timedOut = false;
     child.stdout.on('data', d => { output += d; });
     child.stderr.on('data', d => { output += d; });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      output += `\n[run-all] TIMED OUT after ${timeoutMs}ms — force-killing process group (pid ${child.pid})\n`;
+      try { process.kill(-child.pid, 'SIGKILL'); } catch (e) { /* already gone */ }
+    }, timeoutMs);
     child.on('close', code => {
-      resolve({ label, code, output, ms: Date.now() - start });
+      clearTimeout(timer);
+      resolve({ label, code: timedOut ? 1 : code, output, ms: Date.now() - start });
     });
   });
 }

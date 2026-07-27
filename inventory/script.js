@@ -8636,6 +8636,24 @@ window.CharacterManager = ({ auth, database }) => {
     // null, and that can be reached here without ever passing through the
     // branch above.
     restoreCharSelection();
+    // Purchases (and anything else that happens while the shop is open) are
+    // always charged to whichever character is currently selected — correct
+    // for buying for yourself, and also correct for the drag-onto-another-
+    // tab "buy as a gift" flow (that deducts from the giver, the character
+    // selected *before* the drop, not the receiver). The one gap was
+    // arriving here with a non-owned character still selected from earlier
+    // navigation (e.g. browsing another player's sheet), which would
+    // silently spend from their wallet instead. Force your own character
+    // here so that can't happen — for everyone, DMs included: a DM's
+    // purchase should come from a character *they* own the same as a
+    // player's, not from whichever player's sheet they last happened to
+    // have open. Only switches if the currently selected character isn't
+    // already one you own, so owning more than one character doesn't cause
+    // an unnecessary switch away from whichever of your own you were on.
+    if (currentUser && allChars[currentCharId]?.ownerUid !== currentUser.uid) {
+      const myChar = Object.values(allChars).find(c => c.ownerUid === currentUser.uid);
+      if (myChar) switchToChar(myChar.id, false);
+    }
     inv.closeInspector();
     document.getElementById('shop-search').value = '';
     document.getElementById('shop-category').value = '';
@@ -9988,6 +10006,28 @@ window.CharacterManager = ({ auth, database }) => {
               window.hexOnGoToHexmap && window.hexOnGoToHexmap();
               if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
             }
+          } else if (shopOpen && allChars[char.id]?.ownerUid !== currentUser?.uid) {
+            // Selecting a different character while the shop is open used to
+            // just swap which character's wallet subsequent shop actions
+            // applied to, while silently staying in the shop — the same
+            // "wrong wallet" risk openShop()'s auto-select closes for the
+            // initial-open case. Clicking a tab for a character you don't
+            // own now leaves the shop for that character's inventory
+            // instead, same as clicking your own already-active tab while
+            // the shop is open already does just above — for everyone,
+            // DMs included (a DM's shop purchase should come from a
+            // character they own, not whichever player's sheet they were
+            // last viewing). Switching to another character you *do* own
+            // (if you have more than one) falls through to the plain
+            // switchToChar below instead, and stays in the shop.
+            _shopFromHexmap = false;
+            closeShop(true);
+            if (_hexmapMode) {
+              _hexmapMode = false;
+              _applyViewMode();
+              window.hexOnGoToInventory && window.hexOnGoToInventory();
+            }
+            switchToChar(char.id, false);
           } else {
             if (!shopOpen) inv.collapsePanelInstant();
             if (_hexmapMode) {
