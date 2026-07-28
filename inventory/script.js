@@ -7132,12 +7132,29 @@ window.CharacterManager = ({ auth, database }) => {
   function formatBackupRow(key, entry) {
     const row = document.createElement('div');
     row.className = 'backup-row';
+    row.classList.toggle('backup-row-starred', !!entry.starred);
 
     const label = document.createElement('div');
     const timeStr = entry.ts ? new Date(entry.ts).toLocaleString() : 'Unknown time';
     label.innerHTML = `<span class="backup-row-time">${escHtml(timeStr)}</span>`
       + `<span class="backup-row-relative">${escHtml(formatRelativeTime(entry.ts))}</span>`;
     row.appendChild(label);
+
+    const actions = document.createElement('div');
+    actions.className = 'backup-row-actions';
+
+    // Starring exempts a snapshot from trimOldBackups' retention-count
+    // pruning entirely (see that function) — the only way a backup is ever
+    // removed, so starring is what "protect this one" means here.
+    const starBtn = document.createElement('button');
+    starBtn.className = 'backup-star-btn';
+    starBtn.classList.toggle('active', !!entry.starred);
+    starBtn.title = entry.starred ? 'Starred — protected from automatic cleanup' : 'Star to protect from automatic cleanup';
+    starBtn.innerHTML = `<i class="fa-${entry.starred ? 'solid' : 'regular'} fa-star"></i>`;
+    starBtn.addEventListener('click', () => {
+      if (backupsRef) backupsRef.child(key).child('starred').set(!entry.starred ? true : null);
+    });
+    actions.appendChild(starBtn);
 
     const restoreBtn = document.createElement('button');
     restoreBtn.className = 'backup-restore-btn';
@@ -7146,8 +7163,9 @@ window.CharacterManager = ({ auth, database }) => {
       if (!confirm(`Restore this snapshot from ${timeStr} as a brand-new character? The original character is left untouched.`)) return;
       restoreBackupAsNewChar(entry.state, entry.ts);
     });
-    row.appendChild(restoreBtn);
+    actions.appendChild(restoreBtn);
 
+    row.appendChild(actions);
     return row;
   }
 
@@ -7165,6 +7183,10 @@ window.CharacterManager = ({ auth, database }) => {
       const entries = [];
       snap.forEach(child => { entries.push([child.key, child.val()]); }); // oldest-first
       entries.reverse(); // newest-first for display
+      // Starred entries surface to the top (still newest-first among
+      // themselves) — that's the "highlight which are important" half of
+      // starring; trimOldBackups is the "protect from deletion" half.
+      entries.sort((a, b) => (b[1].starred ? 1 : 0) - (a[1].starred ? 1 : 0));
       backupsListEl.innerHTML = '';
       backupsEmptyEl.hidden = entries.length > 0;
       entries.forEach(([key, entry]) => backupsListEl.appendChild(formatBackupRow(key, entry)));
@@ -9551,8 +9573,10 @@ window.CharacterManager = ({ auth, database }) => {
   function trimOldBackups(charId) {
     const ref = database.ref(`/inventory_backups/${charId}`);
     ref.once('value').then(snap => {
-      const keys = [];
-      snap.forEach(child => { keys.push(child.key); }); // oldest-first, per Firebase's key ordering
+      const keys = []; // unstarred only, oldest-first — starred snapshots are
+      // never a deletion candidate, at any age or count, which is the whole
+      // point of starring one.
+      snap.forEach(child => { if (!child.val()?.starred) keys.push(child.key); });
       if (keys.length <= BACKUP_RETENTION_COUNT) return;
       const updates = {};
       keys.slice(0, keys.length - BACKUP_RETENTION_COUNT).forEach(k => { updates[k] = null; });

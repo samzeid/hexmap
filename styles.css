@@ -342,6 +342,35 @@ body {
 .backup-row-time { color: rgba(232,232,240,0.9); }
 .backup-row-relative { color: rgba(232,232,240,0.5); font-size: 12px; margin-left: 6px; }
 
+.backup-row-starred {
+  border-color: rgba(255,196,64,0.35);
+  background: rgba(255,196,64,0.06);
+}
+
+.backup-row-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.backup-star-btn {
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(232,232,240,0.7);
+  font-size: 13px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.backup-star-btn:hover { background: rgba(255,255,255,0.1); }
+.backup-star-btn.active { color: #ffc440; border-color: rgba(255,196,64,0.4); background: rgba(255,196,64,0.1); }
+
 .backup-restore-btn {
   flex-shrink: 0;
   background: rgba(255,255,255,0.06);

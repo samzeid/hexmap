@@ -54,9 +54,13 @@ async function main() {
 
   if (!integrationOnly) {
     console.log('=== unit tests ===');
-    const r = await runNodeScript(join(__dirname, 'unit', 'merge.test.mjs'), 'unit/merge.test.mjs');
-    process.stdout.write(r.output);
-    results.push(r);
+    const unitDir = join(__dirname, 'unit');
+    const unitFiles = readdirSync(unitDir).filter(f => f.endsWith('.test.mjs')).sort();
+    for (const file of unitFiles) {
+      const r = await runNodeScript(join(unitDir, file), `unit/${file}`);
+      process.stdout.write(r.output);
+      results.push(r);
+    }
   }
 
   if (!unitOnly) {

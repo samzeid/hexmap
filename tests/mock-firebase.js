@@ -67,13 +67,14 @@
   // path -> Set<callback>, for 'value' listeners
   const listeners = {};
 
-  function makeSnapshot(val) {
+  function makeSnapshot(val, key) {
     return {
+      key: key !== undefined ? key : null,
       val: () => val,
       exists: () => val !== null && val !== undefined,
       forEach: fn => {
         if (val && typeof val === 'object') {
-          Object.keys(val).sort().forEach(k => fn(makeSnapshot(val[k])));
+          Object.keys(val).sort().forEach(k => fn(makeSnapshot(val[k], k)));
         }
       },
     };
