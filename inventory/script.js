@@ -8102,9 +8102,6 @@ window.CharacterManager = ({ auth, database }) => {
         // item's toggle state rather than having its own per-instance one.
         const listVisible = isItemVisible(listingData.name, '');
         const listAvail   = isItemAvailable(listingData.name);
-        listRow.className = 'shop-item-row'
-          + (!listVisible && window._isDM ? ' shop-item-hidden' : '')
-          + (!listAvail ? ' shop-item-unavailable' : '');
         if (!listVisible) listRow.dataset.playerHidden = 'true';
 
         const listNameSpan = document.createElement('span');
@@ -8132,6 +8129,23 @@ window.CharacterManager = ({ auth, database }) => {
         listCostEl.className = 'shop-item-cost';
         if (listTotalCp > 0) listCostEl.innerHTML = renderCostHtml(listTotalCp, '');
         listRow.appendChild(listCostEl);
+
+        // Same affordability gating the general catalog already has (see
+        // applyRowState()/updateShopAffordability() below) — a "For Sale"
+        // listing is still a purchase, and used to have no affordability
+        // check of its own at all: buying one with insufficient funds (or
+        // with no coin-purse item in your inventory to deduct from) always
+        // silently succeeded for free. dataset.costCp lets the shared
+        // updateShopAffordability() sweep keep this in sync after later
+        // wallet changes too, exactly like a catalog row.
+        const listCoins  = getCharCoins(inv.getState());
+        const listWallet = listCoins.pp * 1000 + listCoins.gp * 100 + listCoins.sp * 10 + listCoins.cp;
+        const listCantAfford = !window._isDM && listTotalCp > 0 && listTotalCp > listWallet;
+        listRow.dataset.costCp = listTotalCp;
+        listRow.className = 'shop-item-row'
+          + (!listVisible && window._isDM ? ' shop-item-hidden' : '')
+          + (!listAvail ? ' shop-item-unavailable' : '')
+          + (listCantAfford ? ' shop-item-unaffordable' : '');
 
         if (window._isDM) {
           const listAvailBtn = document.createElement('button');
@@ -8173,17 +8187,25 @@ window.CharacterManager = ({ auth, database }) => {
         listRow.addEventListener('pointerdown', e => {
           if (e.button !== 0) return;
           _lx = e.clientX; _ly = e.clientY; _lpid = e.pointerId; _ltrk = true;
-          if (!window._isDM && !isItemAvailable(listingData.name)) {
-            [listNameSpan, ...Array.from(listCostEl.children)].forEach(el => {
-              el.classList.remove('shop-item-flash');
-              void el.offsetWidth;
-              el.classList.add('shop-item-flash');
-              setTimeout(() => el.classList.remove('shop-item-flash'), 900);
-            });
-            return;
-          }
+          // Unlike the general catalog, a "For Sale" listing is never
+          // blocked by the availability toggle — it's keyed by item name
+          // and shared with that item's catalog entry (see the comment
+          // above), but a DM listing is a specific, individually-placed
+          // item meant to be bought; the shared unavailable flag still
+          // shows visually here, it just shouldn't stop the purchase.
           _lt = setTimeout(() => {
             _lt = null;
+            // Affordability, unlike availability, DOES block a purchase —
+            // same rule as the general catalog (see cantAfford there).
+            if (!window._isDM && listRow.classList.contains('shop-item-unaffordable')) {
+              [listNameSpan, ...Array.from(listCostEl.children)].forEach(el => {
+                el.classList.remove('shop-item-flash');
+                void el.offsetWidth;
+                el.classList.add('shop-item-flash');
+                setTimeout(() => el.classList.remove('shop-item-flash'), 900);
+              });
+              return;
+            }
             listRow._dragging = true;
             listRow.classList.add('shop-item-dragging');
             document.documentElement.setPointerCapture(_lpid);
