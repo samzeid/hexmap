@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const scriptPath = join(__dirname, '..', '..', 'inventory', 'script.js');
 
-const START_MARKER = 'const jsonEq = (a, b) => JSON.stringify(a) === JSON.stringify(b);';
+const START_MARKER = 'function canonicalJson(value) {';
 const END_MARKER = 'function defaultContainers() {';
 
 export function extractMergeFunctions() {
@@ -32,10 +32,10 @@ export function extractMergeFunctions() {
   const factory = new Function(`
     'use strict';
     ${block}
-    return { jsonEq, mergeById, mergeSlotGrid, mergeOneContainer, mergeContainerList, CHAR_COLLECTION_MERGERS, mergeCharTopLevel };
+    return { canonicalJson, jsonEq, mergeById, mergeSlotGrid, mergeOneContainer, mergeContainerList, CHAR_COLLECTION_MERGERS, mergeCharTopLevel };
   `);
   const fns = factory();
-  for (const name of ['jsonEq', 'mergeById', 'mergeSlotGrid', 'mergeOneContainer', 'mergeContainerList', 'CHAR_COLLECTION_MERGERS', 'mergeCharTopLevel']) {
+  for (const name of ['canonicalJson', 'jsonEq', 'mergeById', 'mergeSlotGrid', 'mergeOneContainer', 'mergeContainerList', 'CHAR_COLLECTION_MERGERS', 'mergeCharTopLevel']) {
     if (typeof fns[name] === 'undefined') {
       throw new Error(`extractMergeFunctions: expected "${name}" in the extracted block but it wasn't defined. The merge functions were likely renamed — update this extractor.`);
     }

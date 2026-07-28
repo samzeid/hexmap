@@ -1,4 +1,14 @@
+// Prefixes used for inspector keys that do NOT reference a real slot in
+// state.containers — toggleShopItem/showShopItem (both in InventorySystem
+// below) open with container: null for all of these, so loadState()'s
+// container-slot re-targeting logic (see keepInspector handling) must
+// treat them as "not a container slot" rather than trying to parse them as
+// one. Keep this in sync with every prefix those two functions are called
+// with (grep for "inv.toggleShopItem(" / "inv.showShopItem(").
+window.INSPECTOR_KEY_NON_SLOT_PREFIXES = ['shop-', 'rand-', 'dm-listing-'];
+
 window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, onDmListingDrop, onItemSell, onItemDestroy, isHiddenFromPlayer, onSound, onUiChange }) => {
+  const INSPECTOR_KEY_NON_SLOT_PREFIXES = window.INSPECTOR_KEY_NON_SLOT_PREFIXES;
 
   // ── STATE ──────────────────────────────────────────────────────────────
   function createDefaultContainers() {
@@ -6610,7 +6620,18 @@ window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPur
       // at the same position so it keeps editing the live data; if that item
       // no longer exists there (moved/removed by whoever's edit this was),
       // there's nothing valid left to keep showing.
-      if (opts && opts.keepInspector && inspectorItemKey && !inspectorItemKey.startsWith('shop-')
+      //
+      // Only applies to keys that actually reference a real container slot
+      // (containerId-r-c). Every "shop-style" inspector — regular catalog
+      // items, DM-randomizer results, DM listings — opens with container:
+      // null via toggleShopItem/showShopItem and has no slot to re-locate,
+      // so it must be excluded here too or this code tries to parse its key
+      // as containerId-r-c, fails to find a match, and — wrongly reading
+      // that failure as "the item was removed" — closes the panel the
+      // instant it opens. INSPECTOR_KEY_NON_SLOT_PREFIXES lists every
+      // prefix those two functions are called with; add any new one there.
+      if (opts && opts.keepInspector && inspectorItemKey
+          && !INSPECTOR_KEY_NON_SLOT_PREFIXES.some(p => inspectorItemKey.startsWith(p))
           && !detailPanelEl.classList.contains('detail-collapsed')) {
         const lastH = inspectorItemKey.lastIndexOf('-');
         const prevH = inspectorItemKey.lastIndexOf('-', lastH - 1);
@@ -9067,7 +9088,26 @@ window.CharacterManager = ({ auth, database }) => {
     try { return JSON.parse(str); } catch { return null; }
   }
 
-  const jsonEq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  // Recursively sorts object keys before stringifying, so two values that
+  // are structurally identical compare equal even if their key order
+  // differs — which routinely happens here: `mine` comes from a fresh
+  // JSON.parse(JSON.stringify(state)), `baseline`/`server` come from
+  // parsing a JSON string that was itself built by a *different* merge
+  // pass (Object.assign({}, server) followed by overwriting specific
+  // keys, which reorders them). A plain JSON.stringify comparison would
+  // call that "changed" on reordering alone — which matters a lot more
+  // than cosmetics here: every jsonEq() call below decides "did I touch
+  // this, or should the merge keep the server's copy," so a false
+  // "changed" reads as "keep mine," silently discarding whatever someone
+  // else concurrently changed in that same field/slot/entry.
+  function canonicalJson(value) {
+    if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
+    if (value && typeof value === 'object') {
+      return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + canonicalJson(value[k])).join(',') + '}';
+    }
+    return JSON.stringify(value);
+  }
+  const jsonEq = (a, b) => canonicalJson(a) === canonicalJson(b);
 
   // Generic 3-way merge for an array of objects (or plain values) that have
   // a stable identity — notes/attacks by their .id, activeFeatures/
@@ -9443,7 +9483,15 @@ window.CharacterManager = ({ auth, database }) => {
       if (error || !committed) return;
       const finalJson = snapshot.val();
       if (typeof finalJson !== 'string') return;
-      if (finalJson === saveStateJson) {
+      // Canonical (key-order-independent) comparison, not a raw string ===
+      // — mergeCharTopLevel() rebuilds the object via Object.assign() plus
+      // per-key overwrites, which reorders keys relative to saveStateJson's
+      // own order even when nothing was actually merged in. A raw string
+      // mismatch here used to misread "identical content, different key
+      // order" as "a field was merged in," triggering a full reload/re-
+      // render (with an open inspector re-targeted, or force-closed if it
+      // wasn't recognized as a container slot) after every single save.
+      if (jsonEq(safeParseJson(finalJson), saveState)) {
         // Clean write, nothing merged in — our live UI already matches.
         lastSyncedStateJson[charId] = finalJson;
       } else {
