@@ -9950,15 +9950,23 @@ window.CharacterManager = ({ auth, database }) => {
     // Placement is decided *inside* the transaction, recomputed from the
     // actual current server value on every attempt (including Firebase's
     // automatic retries) — never from a locally cached snapshot of the
-    // target character. It also always appends a brand-new row rather than
-    // reusing an existing empty-looking slot. Reusing "the first empty
-    // slot" would still race: that slot is a position the receiving
-    // player's own client could independently be filling at that exact
-    // moment (e.g. rearranging their own grid), and since their own save
-    // would see it as "I deliberately changed this slot" and win it
-    // outright, one side's item would silently vanish. A freshly created
-    // row can't collide with anything — it doesn't exist until this
-    // transaction creates it, so nothing else could have been targeting it.
+    // target character. It fills the first empty slot (row-major order),
+    // only appending a brand-new row if the grid is completely full.
+    //
+    // This does carry one narrow, accepted risk: if the receiving player is
+    // independently dragging their own item into that exact same empty slot
+    // at nearly the same instant, their own save's per-slot "did I touch
+    // this, mine wins" merge logic won't know the server also touched it,
+    // and one of the two items could be silently lost. Always appending a
+    // new row (the previous approach) avoided that specific race, but its
+    // real-world cost turned out to be worse: unconditional appends left
+    // permanently stranded empty rows behind every time (mergeSlotGrid can
+    // only safely grow/shrink from the true end of the grid, never reclaim
+    // gaps in the middle — see mergeSlotGrid's own comment), so gifts kept
+    // landing further and further down a grid that looked broken. That
+    // happens on every single gift; the same-slot race requires two people
+    // targeting the identical empty slot within the same save window, which
+    // is rare and, if it ever happens, obvious and easy to redo.
     database.ref(`/inventory_characters/${targetCharId}/state`).transaction(currentRaw => {
       const serverState = safeParseJson(currentRaw) || blankState();
       const targetState = JSON.parse(JSON.stringify(serverState));
@@ -9976,9 +9984,20 @@ window.CharacterManager = ({ auth, database }) => {
       if (!equipped) return undefined; // abort — 'equipped' is a permanent container, shouldn't happen
 
       const itemForThisAttempt = JSON.parse(JSON.stringify(cleanItem));
-      equipped.slots.push([itemForThisAttempt, null]);
-      equipped.rows = equipped.slots.length;
-      const finalR = equipped.slots.length - 1, finalC = 0;
+      let finalR = -1, finalC = -1;
+      for (let r = 0; r < equipped.slots.length && finalR === -1; r++) {
+        for (let c = 0; c < equipped.slots[r].length; c++) {
+          if (equipped.slots[r][c] === null) { finalR = r; finalC = c; break; }
+        }
+      }
+      if (finalR === -1) {
+        // Completely full — nowhere to put it but a new row.
+        equipped.slots.push([null, null]);
+        equipped.rows = equipped.slots.length;
+        finalR = equipped.slots.length - 1;
+        finalC = 0;
+      }
+      equipped.slots[finalR][finalC] = itemForThisAttempt;
 
       // Transfer the linked container and its contents to the target character
       if (linkedContainer) {

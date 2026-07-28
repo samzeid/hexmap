@@ -1,14 +1,20 @@
-// Bug: handleCrossCharDrop used to pick "the first empty slot" from a
-// locally cached snapshot of the target character, taken before the write
-// even started. If the receiving player was simultaneously moving one of
-// their own items into that exact same slot, the two writes collided —
-// whichever landed last won the slot outright, and the other item silently
-// vanished (not a merge case: both sides explicitly targeted the identical
-// position). Fixed by deciding placement *inside* the transaction, freshly
-// against the true current server value on every attempt, and always
-// appending a brand-new row rather than reusing an existing empty-looking
-// slot — a row that doesn't exist yet can't be something anyone else's
-// concurrent edit was independently targeting.
+// handleCrossCharDrop fills the first empty slot in the target's Equipped
+// grid (decided *inside* the transaction, freshly against the true current
+// server value on every attempt — never a locally cached snapshot), only
+// appending a brand-new row when the grid is completely full. It used to
+// unconditionally append a new row instead, specifically to avoid the risk
+// this test now documents: two DIFFERENT empty slots, targeted by two
+// different concurrent edits, must both survive (that's still guaranteed —
+// this is the case this test asserts on). If, instead, a gift and the
+// receiving player's own edit target the exact SAME empty slot within the
+// same save window, one of them can be lost — see
+// 17-cross-char-drop-same-slot-collision.test.mjs, which documents that as
+// a known, accepted trade-off rather than a regression: unconditional
+// append avoided that one narrow race, but its real-world cost was worse —
+// every single gift left a permanently stranded empty row behind (grid
+// merge logic can only safely grow/shrink from the true end, never reclaim
+// a gap in the middle), so gifts kept landing further down a grid that
+// looked broken. See tests/README.md.
 //
 // This exercises the REAL placement logic (extracted live from
 // handleCrossCharDrop, see extract-cross-char-drop.mjs) under realistic
@@ -37,24 +43,26 @@ function fbTransaction(updateFn, onComplete, delayMs) {
 }
 
 async function run() {
+  // Two empty slots available, so the gift (first-empty-slot) and the
+  // player's own explicit move land in DIFFERENT positions — no collision.
   const initialState = {
     charName: 'Player', hp: '20',
-    containers: [{ id: 'equipped', name: 'Equipped', rows: 1, slots: [[null, null]] }],
+    containers: [{ id: 'equipped', name: 'Equipped', rows: 2, slots: [[null, null], [null, null]] }],
   };
   store = JSON.stringify(initialState);
   const baseline = JSON.parse(JSON.stringify(initialState)); // player's last-synced baseline
 
-  // Player's own move: drags their existing item into what THEY see as the
-  // first empty slot (0,0) — a deliberate, explicit edit to that position,
-  // via the same merge path saveChar() uses.
+  // Player's own move: drags their existing item into the SECOND row —
+  // deliberately not the slot the gift will land in.
   const playerMine = JSON.parse(JSON.stringify(initialState));
-  playerMine.containers[0].slots[0][0] = { name: 'PlayersOwnItem' };
+  playerMine.containers[0].slots[1][0] = { name: 'PlayersOwnItem' };
   function playerMoveTransactionUpdate(currentRaw) {
     const serverState = JSON.parse(currentRaw || 'null');
     return JSON.stringify(mergeCharTopLevel(serverState, baseline, playerMine));
   }
 
-  // DM's give, using the REAL extracted placement logic.
+  // DM's give, using the REAL extracted placement logic — lands in the
+  // first empty slot, (0,0).
   const cleanItem = { name: 'GiftedItem' };
   function dmGiveTransactionUpdate(currentRaw) {
     return placementFn(cleanItem, null, currentRaw);
@@ -63,7 +71,7 @@ async function run() {
   await new Promise(resolve => {
     // DM's write scheduled to land first, player's shortly after — the
     // realistic "gift lands, then the player's own concurrent save catches
-    // up" ordering that used to lose the gift.
+    // up" ordering.
     fbTransaction(dmGiveTransactionUpdate, () => {}, 100);
     fbTransaction(playerMoveTransactionUpdate, () => {}, 150);
     setTimeout(resolve, 400);
@@ -79,7 +87,7 @@ async function run() {
   console.log('player\'s own moved item present:', hasPlayerItem);
 
   report(hasGift && hasPlayerItem,
-    "DM's gift and the player's own concurrent move both landed, in different slots",
-    'one of the two items was lost');
+    "DM's gift and the player's own concurrent move to a DIFFERENT slot both landed",
+    'one of the two items was lost even though they targeted different slots');
 }
 run();
