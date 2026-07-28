@@ -9011,6 +9011,11 @@ window.CharacterManager = ({ auth, database }) => {
 
   const compactSlotData = slotData => {
     if (!slotData || slotData.custom) return slotData;
+    // Already compact (wire form: has _ref, no .variables to read overrides
+    // from) — compacting it again would find nothing in .variables and
+    // silently drop any existing _vars/_varLocked. Mirrors resolveSlotData's
+    // own early-return for already-resolved input.
+    if (slotData._ref != null && !slotData.variables) return slotData;
     const lib = (window.ITEM_LIBRARY || []).find(i =>
       slotData._ref != null ? i.id === slotData._ref : i.name === slotData.name
     );
@@ -9934,6 +9939,15 @@ window.CharacterManager = ({ auth, database }) => {
       const serverState = safeParseJson(currentRaw) || blankState();
       const targetState = JSON.parse(JSON.stringify(serverState));
       if (!targetState.containers || !targetState.containers.length) targetState.containers = defaultContainers();
+      // currentRaw comes straight off Firebase, so every pre-existing slot is
+      // still in compact wire form (_ref/_vars). compactSlotData() below only
+      // knows how to read overrides off the fully-resolved form (.variables)
+      // — fed compact input it finds nothing to copy and silently drops
+      // _vars/_varLocked (dropdown picks, uses/charges, coin-purse amounts)
+      // for every OTHER item in this character's inventory, not just the one
+      // being gifted. Resolve everything to full form first so the final
+      // compactContainerSlots() pass below has consistent, safe input.
+      resolveContainerSlots(targetState.containers);
       const equipped = targetState.containers.find(c => c.id === 'equipped');
       if (!equipped) return undefined; // abort — 'equipped' is a permanent container, shouldn't happen
 

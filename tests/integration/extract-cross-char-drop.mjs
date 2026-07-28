@@ -36,6 +36,8 @@ const TRANSACTION_MARKER = '/inventory_characters/${targetCharId}/state`).transa
 const SAFE_PARSE_MARKER = 'function safeParseJson(str) {';
 const BLANK_STATE_MARKER = 'function blankState() {';
 const DEFAULT_CONTAINERS_MARKER = 'function defaultContainers() {';
+const RESOLVE_SLOT_MARKER = 'const resolveSlotData = raw => {';
+const RESOLVE_CONTAINER_MARKER = 'const resolveContainerSlots = containers => {';
 
 export function extractPlacementFn() {
   const src = readFileSync(scriptPath, 'utf8');
@@ -43,6 +45,8 @@ export function extractPlacementFn() {
   const safeParseJsonBody = extractBraceBody(src, SAFE_PARSE_MARKER);
   const blankStateBody = extractBraceBody(src, BLANK_STATE_MARKER);
   const defaultContainersBody = extractBraceBody(src, DEFAULT_CONTAINERS_MARKER);
+  const resolveSlotBody = extractBraceBody(src, RESOLVE_SLOT_MARKER);
+  const resolveContainerBody = extractBraceBody(src, RESOLVE_CONTAINER_MARKER);
 
   // compactContainerSlots is intentionally NOT extracted — it depends on
   // window.ITEM_LIBRARY (a large external data table) to resolve real
@@ -51,12 +55,22 @@ export function extractPlacementFn() {
   // (no _ref, no library match) it's a documented no-op in the real
   // implementation, so a no-op stub here is faithful, not a simplification
   // of the logic under test.
+  // resolveSlotData/resolveContainerSlots ARE extracted for real (not
+  // stubbed): the transaction now calls resolveContainerSlots on the
+  // server-read state before placing the gift, and a stub here would hide
+  // a real regression in that call the same way compactContainerSlots
+  // being real would hide one in placement. resolveSlotData's own
+  // window.ITEM_LIBRARY lookup is only reached for non-custom items with
+  // a _ref, which none of this test's fixtures use, so it's safe to run
+  // unstubbed here.
   const factory = new Function('cleanItem', 'linkedContainer', 'currentRaw', `
     'use strict';
     function safeParseJson(str) { ${safeParseJsonBody} }
     function blankState() { ${blankStateBody} }
     function defaultContainers() { ${defaultContainersBody} }
     function compactContainerSlots() {}
+    const resolveSlotData = raw => { ${resolveSlotBody} };
+    const resolveContainerSlots = containers => { ${resolveContainerBody} };
     return (function() { ${transactionBody} })();
   `);
   return factory;
