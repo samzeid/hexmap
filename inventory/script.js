@@ -6684,6 +6684,8 @@ window.CharacterManager = ({ auth, database }) => {
   let charDiffTimer  = null;
   let dirty              = false;   // true while local edits haven't been flushed to Firebase yet
   let localWriteInFlight = false;   // true briefly after a save to suppress our own Firebase echo
+  let saveDebounceTimer  = null;    // pending non-immediate saveChar() call, see saveChar()
+  const SAVE_DEBOUNCE_MS = 500;
   // Raw (pre-parse) state JSON last known to be in sync for each character —
   // lets the /inventory_characters listener tell "someone else's edit fired
   // this snapshot" apart from "this snapshot happens to include our own char,
@@ -9507,6 +9509,35 @@ window.CharacterManager = ({ auth, database }) => {
 
   function saveChar(charId, immediate) {
     if (!currentUser || !charId) return;
+    // Non-immediate calls (every ordinary edit — handleInventoryChange()'s
+    // onChange, fired at the end of every render()) used to write straight
+    // to Firebase with no debounce at all. Typing a multi-digit number
+    // fires one render()/onChange()/saveChar() per keystroke, so typing
+    // "250" kicked off three independent, overlapping transactions. Once
+    // enough of them overlapped, an earlier one's completion could flip
+    // localWriteInFlight back to false while a later one was still
+    // legitimately in flight, letting the live-sync listener treat an
+    // incoming echo (possibly reflecting an EARLIER keystroke, not the
+    // latest one) as a real remote change — reloading the inspector,
+    // destroying and rebuilding the very input being typed into (losing
+    // focus) with a momentarily-stale value (the flicker). Debouncing
+    // coalesces a burst of edits into one trailing save; `dirty` is set
+    // immediately regardless, so the existing "don't apply an echo while
+    // we have unsaved local edits" protection covers the whole debounce
+    // window, not just the write itself. Every call site that genuinely
+    // needs a guaranteed synchronous flush (switching/leaving a character)
+    // already explicitly passes immediate=true and is unaffected.
+    if (!immediate) {
+      dirty = true;
+      clearTimeout(saveDebounceTimer);
+      saveDebounceTimer = setTimeout(() => {
+        saveDebounceTimer = null;
+        saveChar(charId, true);
+      }, SAVE_DEBOUNCE_MS);
+      return;
+    }
+    clearTimeout(saveDebounceTimer);
+    saveDebounceTimer = null;
     dirty = false;
     localWriteInFlight = true;
     const state = inv.getState();
@@ -9542,6 +9573,16 @@ window.CharacterManager = ({ auth, database }) => {
       // wasn't recognized as a container slot) after every single save.
       if (jsonEq(safeParseJson(finalJson), saveState)) {
         // Clean write, nothing merged in — our live UI already matches.
+        lastSyncedStateJson[charId] = finalJson;
+      } else if (dirty || localWriteInFlight) {
+        // The transaction pulled in a field we hadn't touched, but a NEWER
+        // local edit is already pending (or another save is mid-flight) by
+        // the time this particular save's round-trip completed — now more
+        // likely with debounced saves than the old per-keystroke ones,
+        // since the round-trip window is wider. Applying this now-stale
+        // merge result here would clobber that newer edit. Just record the
+        // baseline; the next save's own round-trip will merge in whatever
+        // this one pulled in, the same way any concurrent remote edit does.
         lastSyncedStateJson[charId] = finalJson;
       } else {
         // The transaction pulled in a field we hadn't touched — apply the
