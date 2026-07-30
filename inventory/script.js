@@ -7400,9 +7400,14 @@ window.CharacterManager = ({ auth, database }) => {
   // Replaces the old tap-to-toggle button. Swipe left: sheet → inventory.
   // Swipe right: inventory → sheet. Disabled entirely while any drag (item,
   // feature reorder, container reorder, note reorder) is in progress.
+  // Not DM-exempt: a DM sees hidden characters in the tab bar (that
+  // exemption lives in the tab-list filters, keyed on CHAR_HIDDEN_STATES),
+  // but inventory-only/hidden-inventory-only hides the character SHEET for
+  // everyone, DM included — the DM just gets to reach the inventory-only
+  // character at all via the tab bar, the same as any other visible one.
   function canOpenStats() {
-    if (window._isDM || !currentCharId) return true;
-    return (allChars[currentCharId]?.charVisibility || 'visible') !== 'inventory-only';
+    if (!currentCharId) return true;
+    return !CHAR_SHEET_HIDDEN_STATES.has(allChars[currentCharId]?.charVisibility || 'visible');
   }
 
   (function () {
@@ -8802,13 +8807,33 @@ window.CharacterManager = ({ auth, database }) => {
 
   const charHideBtn = document.getElementById('char-hide-btn');
 
-  const VISIBILITY_CYCLE = ['visible', 'inventory-only', 'hidden'];
-  const VISIBILITY_ICON  = { 'visible': 'fa-eye', 'inventory-only': 'fa-eye-low-vision', 'hidden': 'fa-eye-slash' };
-  const VISIBILITY_TITLE = {
-    'visible':        'Fully visible — click to hide character sheet',
-    'inventory-only': 'Inventory only — character sheet hidden from players — click to hide entirely',
-    'hidden':         'Hidden entirely — click to make visible',
+  // hidden-inventory-only combines 'hidden' (not listed in the tab bar at
+  // all) with 'inventory-only' (character sheet closed if a player already
+  // has it open) — a DM convenience so both don't need setting separately.
+  // It reuses inventory-only's icon (same concept: sheet hidden) but in red,
+  // matching how 'hidden' already uses red on this button to signal
+  // "nothing is visible to players" (see char-hide-fully below).
+  const VISIBILITY_CYCLE = ['visible', 'inventory-only', 'hidden', 'hidden-inventory-only'];
+  const VISIBILITY_ICON  = {
+    'visible':               'fa-eye',
+    'inventory-only':        'fa-eye-low-vision',
+    'hidden':                'fa-eye-slash',
+    'hidden-inventory-only': 'fa-eye-low-vision',
   };
+  const VISIBILITY_TITLE = {
+    'visible':               'Fully visible — click to hide character sheet',
+    'inventory-only':        'Inventory only — character sheet hidden from players — click to hide entirely',
+    'hidden':                'Hidden entirely — click to also hide the character sheet',
+    'hidden-inventory-only': 'Hidden entirely, character sheet also hidden — click to make fully visible',
+  };
+  // States that keep a character out of the tab bar entirely for players —
+  // used everywhere a "should this character be selectable by a player at
+  // all" check is needed, so hidden-inventory-only doesn't need adding
+  // separately at each call site.
+  const CHAR_HIDDEN_STATES = new Set(['hidden', 'hidden-inventory-only']);
+  // States that hide the character sheet from players (inventory stays
+  // reachable) — used by canOpenStats() and enforceCharVisibility().
+  const CHAR_SHEET_HIDDEN_STATES = new Set(['inventory-only', 'hidden-inventory-only']);
 
   charHideBtn.addEventListener('click', () => {
     if (!currentCharId || !allChars[currentCharId]) return;
@@ -8826,14 +8851,15 @@ window.CharacterManager = ({ auth, database }) => {
     const vis = (currentCharId && allChars[currentCharId]?.charVisibility) || 'visible';
     charHideBtn.innerHTML = `<i class="fas ${VISIBILITY_ICON[vis]}"></i>`;
     charHideBtn.classList.toggle('char-hide-active', vis === 'inventory-only');
-    charHideBtn.classList.toggle('char-hide-fully',  vis === 'hidden');
+    charHideBtn.classList.toggle('char-hide-fully',  vis === 'hidden' || vis === 'hidden-inventory-only');
     charHideBtn.title = VISIBILITY_TITLE[vis];
   }
 
+  // Not DM-exempt — see canOpenStats() above for why.
   function enforceCharVisibility() {
-    if (window._isDM || !currentCharId) return;
+    if (!currentCharId) return;
     const vis = allChars[currentCharId]?.charVisibility || 'visible';
-    if (vis === 'inventory-only' && statsOpen) closeStats();
+    if (CHAR_SHEET_HIDDEN_STATES.has(vis) && statsOpen) closeStats();
   }
 
   function applyRole(role) {
@@ -9325,7 +9351,7 @@ window.CharacterManager = ({ auth, database }) => {
   function ensureCharSelected() {
     if (currentCharId && allChars[currentCharId]) return;
     const chars = Object.values(allChars)
-      .filter(c => window._isDM || (c.charVisibility || 'visible') !== 'hidden')
+      .filter(c => window._isDM || !CHAR_HIDDEN_STATES.has(c.charVisibility || 'visible'))
       .sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt));
     const target = chars.find(c => c.ownerUid === currentUser?.uid) || chars[0];
     if (target) switchToChar(target.id, true);
@@ -10114,7 +10140,7 @@ window.CharacterManager = ({ auth, database }) => {
 
     Object.values(allChars)
       .sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt))
-      .filter(char => window._isDM || (char.charVisibility || 'visible') !== 'hidden')
+      .filter(char => window._isDM || !CHAR_HIDDEN_STATES.has(char.charVisibility || 'visible'))
       .forEach(char => {
         const isOwn = char.ownerUid === currentUser?.uid;
         const vis   = char.charVisibility || 'visible';
@@ -10131,6 +10157,18 @@ window.CharacterManager = ({ auth, database }) => {
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'char-tab-name';
+        // DM-only — a dimmed 'tab-hidden' background alone didn't tell a DM
+        // WHICH non-visible state a character was in (inventory-only,
+        // hidden, or both look identical) without selecting it and reading
+        // the separate hide-button's icon. This shows it directly per tab,
+        // inline with the name.
+        if (window._isDM && vis !== 'visible') {
+          const visIcon = document.createElement('i');
+          visIcon.className = `fas ${VISIBILITY_ICON[vis]} char-tab-vis-icon`
+            + (CHAR_HIDDEN_STATES.has(vis) ? ' char-tab-vis-icon-red' : '');
+          visIcon.title = VISIBILITY_TITLE[vis];
+          nameSpan.appendChild(visIcon);
+        }
         nameSpan.appendChild(document.createTextNode(char.state.charName || 'Unnamed'));
         infoDiv.appendChild(nameSpan);
 
