@@ -12,36 +12,358 @@ const app = firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const database = app.database();
 
-// Firebase reference for updating "selectedHexes" set.
-const selectedHexesRef = database.ref("selectedHexes");
-
-authenticateFromUrl();
+const hexPingRef     = database.ref('hexPing');
+const hexSelectedRef = database.ref('hexSelected');
+const hexFocusRef    = database.ref('hexFocus');
+const hexFlagsRef    = database.ref('hexFlags');
+const hexHiddenRef   = database.ref('hexHidden');
+const hexDescRef     = database.ref('hexDescriptions');
+const pingSound      = new Audio('sounds/ping.ogg');
 
 // Get elements
 const image = new Image();
-image.src = "https://lh3.googleusercontent.com/d/1fySy_aXhOZHiJGMw6B2xon_8nMiVeyK6?authuser=0";
+image.src = "map.webp";
 const canvas = document.getElementById("canvas");
 const canvasContext = canvas.getContext("2d");
-const zoomCanvas = document.getElementById("zoomPreview");
-const zoomCanvasContext = zoomCanvas.getContext("2d");
 
-const info = document.getElementById("info");
-const infoText = document.getElementById("infoText");
+const detailPanel    = document.getElementById('detail-panel');
+detailPanel.addEventListener('transitionend', e => {
+    if (e.propertyName === 'height') detailPanel.style.height = '';
+});
+const hexInspSect    = document.getElementById('hex-insp-section');
+const hexInspName    = document.getElementById('hex-insp-name');
+const hexInspNameIn  = document.getElementById('hex-insp-name-input');
+const hexEditBtn     = document.getElementById('hex-edit-btn');
+const hexInspRegion  = document.getElementById('hex-insp-region');
+const hexInspCoords  = document.getElementById('hex-insp-coords');
+const hexInspDesc     = document.getElementById('hex-insp-desc');
+const hexInspDescEdit = document.getElementById('hex-insp-desc-edit');
+const hexInspNotes    = document.getElementById('hex-insp-notes');
+
+let _hexEditMode    = false;
+let _hexHasLocation = false;
+let _hexJsonDesc    = '';
+let _hexPanelKey    = null;
+
+function sendToFrame(msg) {
+    window.postMessage(msg, '*');
+}
+
+function refreshDetailPanel() {
+    if (hexInspSect.hidden)
+        detailPanel.classList.add('detail-collapsed');
+}
+
+function showHexInfo(name, coords, desc, hasLocation, regionName, hexKey, isGreyed) {
+    const _panelOpen = !detailPanel.classList.contains('detail-collapsed');
+    const _prevH = _panelOpen ? detailPanel.offsetHeight : 0;
+    if (hexKey !== _hexPanelKey) {
+        // New hex — reset everything
+        _hexEditMode    = false;
+        _hexPanelKey    = hexKey;
+        _hexHasLocation = hasLocation;
+        _hexJsonDesc    = desc;
+
+        hexInspCoords.textContent = coords;
+        hexInspRegion.textContent = regionName || '';
+        hexInspRegion.hidden      = !regionName;
+
+        if (hasLocation) {
+            hexInspName.textContent = name;
+            hexInspDesc.textContent = desc;
+        } else {
+            hexInspName.textContent = '';
+            hexInspDesc.textContent = '';
+        }
+    }
+
+    // Apply greyed state on every draw (changes without hex key changing)
+    hexInspSect.classList.toggle('hex-location-hidden', !!isGreyed);
+    _applyHexEditMode();
+    hexInspSect.hidden = false;
+    detailPanel.classList.remove('no-transition', 'detail-collapsed');
+    if (_prevH) {
+        detailPanel.style.height = _prevH + 'px';
+        requestAnimationFrame(() => { detailPanel.style.height = detailPanel.scrollHeight + 'px'; });
+    }
+}
+
+function _applyHexEditMode() {
+    hexEditBtn.hidden = !isDMView || _hexHasLocation;
+    hexEditBtn.classList.toggle('active', _hexEditMode);
+    hexInspNameIn.hidden   = !_hexEditMode || _hexHasLocation;
+    hexInspDescEdit.hidden = !_hexEditMode;
+    hexInspNotes.hidden    = false;
+    if (_hexEditMode) {
+        hexInspName.hidden = true;
+        hexInspDesc.hidden = true;
+    } else {
+        hexInspName.hidden = _hexHasLocation ? false : !hexInspName.textContent;
+        hexInspDesc.hidden = !_hexJsonDesc && !hexInspDesc.textContent;
+        _autoResizeNotes();
+    }
+}
+
+hexEditBtn.addEventListener('click', () => {
+    _hexEditMode = !_hexEditMode;
+    _applyHexEditMode();
+    if (_hexEditMode) {
+        _autoResizeNotes();
+        hexInspNameIn.focus();
+    }
+});
+
+function hideHexInfo() {
+    _hexEditMode = false;
+    _hexPanelKey = null;
+    hexInspSect.hidden     = true;
+    hexInspRegion.hidden   = true;
+    hexInspDescEdit.hidden = true;
+    attachHexDesc(null);
+    document.getElementById('hex-flag-row').innerHTML = '';
+    refreshDetailPanel();
+}
+
+const hexFlagRow = document.getElementById('hex-flag-row');
+
+function updateFlagRow(col, row) {
+    const key = `${col}_${row}`;
+    const current = hexFlags.get(key) || null;
+    const states = [null, ...DRAW_COLORS];
+    hexFlagRow.innerHTML = '';
+
+    const btn = document.createElement('button');
+    btn.title = 'Toggle flag';
+    btn.innerHTML = '<i class="fas fa-flag"></i>';
+    if (current) {
+        btn.className = 'hex-flag-btn hex-flag-color-btn active';
+        btn.style.setProperty('--fc', current);
+    } else {
+        btn.className = 'hex-flag-btn hex-flag-off-btn';
+    }
+    btn.addEventListener('click', () => {
+        const next = states[(states.indexOf(current) + 1) % states.length];
+        if (next) { hexFlags.set(key, next); hexFlagsRef.child(key).set(next); }
+        else       { hexFlags.delete(key);   hexFlagsRef.child(key).remove(); }
+        drawGridLatestActive();
+    });
+    hexFlagRow.appendChild(btn);
+
+    if (isDMView) {
+        const hidden = hexHiddenCache.has(key);
+        const eyeBtn = document.createElement('button');
+        eyeBtn.className = 'hex-flag-btn hex-vis-btn' + (hidden ? ' active' : '');
+        eyeBtn.title = hidden ? 'Hidden from players — click to show' : 'Visible to players — click to hide';
+        eyeBtn.innerHTML = `<i class="fas fa-eye${hidden ? '-slash' : ''}"></i>`;
+        eyeBtn.addEventListener('click', () => {
+            if (hidden) hexHiddenRef.child(key).remove();
+            else        hexHiddenRef.child(key).set(true);
+        });
+        hexFlagRow.appendChild(eyeBtn);
+    }
+}
+
+function drawFlag(x, y, color, alpha = 1) {
+    const size = Math.round(hexSize * 0.55);
+    canvasContext.save();
+    canvasContext.globalAlpha = alpha;
+    canvasContext.font = `900 ${size}px "Font Awesome 6 Free"`;
+    canvasContext.fillStyle = color;
+    canvasContext.textAlign = 'center';
+    canvasContext.textBaseline = 'middle';
+    canvasContext.fillText('\uf024', x, y);
+    canvasContext.restore();
+}
+
+function setLocalFocus(col, row) {
+    _focusHex = { col, row };
+    latestInspectorHex = { col, row };
+    drawGrid({ col, row });
+}
+
+function clearLocalFocus() {
+    _focusHex = null;
+    latestInspectorHex = null;
+    hideHexInfo();
+    attachHexNotes(null);
+    attachHexCustomName(null);
+    drawGridLatestActive();
+}
+
+document.getElementById('hex-insp-toggle').addEventListener('click', () => {
+    clearLocalFocus();
+    hexFocusRef.remove();
+});
 
 
-const scaleUpBtn = document.getElementById('scaleUpBtn');
-const scaleDownBtn = document.getElementById('scaleDownBtn');
-const resetPositionBtn = document.getElementById('resetPositionBtn');
+new ResizeObserver(() => {
+    setPan(panX, panY);
+    drawGridLatestActive();
+}).observe(canvas);
 
-const togglePanBtn = document.getElementById('togglePanBtn');
-const toggleSelectBtn = document.getElementById('toggleSelectBtn');
-const toggleEraseBtn = document.getElementById('toggleEraseBtn');
-const clearBtn = document.getElementById('clearBtn');
 
-const toggleFactionBtn = document.getElementById('toggleFactionBtn');
-const toggleEnvironmentBtn = document.getElementById('toggleEnvironmentBtn');
+let _hexNotesRef = null;
+let _hexNotesKey = null;
+let _hexNotesSaveTimer = null;
 
-const selectedHexes = new Set();
+let _hexCustomNameRef = null;
+let _hexCustomNameKey = null;
+let _hexCustomNameSaveTimer = null;
+
+const hexNotesCache       = new Map(); // col_row → true
+const hexCustomNamesCache = new Map(); // col_row → true
+const hexDescCache        = new Map(); // col_row → true
+const hexHiddenCache      = new Map(); // col_row → true (hidden from players)
+const hexFlags            = new Map(); // col_row → color string
+let   isDMView            = false;
+
+database.ref('/hexNotes').on('value', snap => {
+    hexNotesCache.clear();
+    const val = snap.val();
+    if (val) Object.keys(val).forEach(k => hexNotesCache.set(k, true));
+    drawGridLatestActive();
+});
+
+database.ref('/hexCustomNames').on('value', snap => {
+    hexCustomNamesCache.clear();
+    const val = snap.val();
+    if (val) Object.keys(val).forEach(k => hexCustomNamesCache.set(k, true));
+    drawGridLatestActive();
+});
+
+database.ref('/hexDescriptions').on('value', snap => {
+    hexDescCache.clear();
+    const val = snap.val();
+    if (val) Object.keys(val).forEach(k => hexDescCache.set(k, true));
+    drawGridLatestActive();
+});
+
+hexFlagsRef.on('value', snap => {
+    hexFlags.clear();
+    const val = snap.val();
+    if (val) Object.entries(val).forEach(([k, c]) => hexFlags.set(k, c));
+    drawGridLatestActive();
+});
+
+hexHiddenRef.on('value', snap => {
+    hexHiddenCache.clear();
+    const val = snap.val();
+    if (val) Object.keys(val).forEach(k => hexHiddenCache.set(k, true));
+    _hexPanelKey = null;
+    _hexCustomNameKey = null;
+    _hexDescKey = null;
+    drawGridLatestActive();
+});
+
+function attachHexNotes(key) {
+    if (_hexNotesKey === key) return;
+    if (_hexNotesRef) { _hexNotesRef.off('value', _onHexNote); _hexNotesRef = null; }
+    _hexNotesKey = key;
+    hexInspNotes.value = '';
+    if (!key) return;
+    _hexNotesRef = database.ref(`/hexNotes/${key}`);
+    _hexNotesRef.on('value', _onHexNote);
+}
+
+function _autoResizeNotes() {
+    hexInspNotes.style.height = '0';
+    hexInspNotes.style.height = hexInspNotes.scrollHeight + 'px';
+}
+
+function _onHexNote(snap) {
+    if (document.activeElement !== hexInspNotes) {
+        hexInspNotes.value = snap.val() || '';
+        _autoResizeNotes();
+    }
+}
+
+function attachHexCustomName(key) {
+    if (_hexCustomNameKey === key) return;
+    if (_hexCustomNameRef) { _hexCustomNameRef.off('value', _onHexCustomName); _hexCustomNameRef = null; }
+    _hexCustomNameKey = key;
+    hexInspNameIn.value = '';
+    if (!key) return;
+    _hexCustomNameRef = database.ref(`/hexCustomNames/${key}`);
+    _hexCustomNameRef.on('value', _onHexCustomName);
+}
+
+function _onHexCustomName(snap) {
+    const val = snap.val() || '';
+    if (document.activeElement !== hexInspNameIn) hexInspNameIn.value = val;
+    if (!_hexEditMode && !_hexHasLocation) {
+        hexInspName.textContent = val;
+        hexInspName.hidden = !val;
+    }
+}
+
+hexInspNotes.addEventListener('input', () => {
+    _autoResizeNotes();
+    clearTimeout(_hexNotesSaveTimer);
+    _hexNotesSaveTimer = setTimeout(() => {
+        if (!_hexNotesKey) return;
+        const val = hexInspNotes.value;
+        if (val) database.ref(`/hexNotes/${_hexNotesKey}`).set(val);
+        else     database.ref(`/hexNotes/${_hexNotesKey}`).remove();
+    }, 600);
+});
+
+hexInspNameIn.addEventListener('input', () => {
+    clearTimeout(_hexCustomNameSaveTimer);
+    _hexCustomNameSaveTimer = setTimeout(() => {
+        if (!_hexCustomNameKey) return;
+        const val = hexInspNameIn.value;
+        if (val) database.ref(`/hexCustomNames/${_hexCustomNameKey}`).set(val);
+        else     database.ref(`/hexCustomNames/${_hexCustomNameKey}`).remove();
+    }, 600);
+});
+
+let _hexDescKey = null, _hexDescFireRef = null, _hexDescSaveTimer = null;
+
+function attachHexDesc(key) {
+    if (_hexDescKey === key) return;
+    if (_hexDescFireRef) { _hexDescFireRef.off('value', _onHexDesc); _hexDescFireRef = null; }
+    _hexDescKey = key;
+    hexInspDescEdit.value = '';
+    if (!key) return;
+    _hexDescFireRef = hexDescRef.child(key);
+    _hexDescFireRef.on('value', _onHexDesc);
+}
+
+function _onHexDesc(snap) {
+    const val = snap.val() || '';
+    if (document.activeElement !== hexInspDescEdit) hexInspDescEdit.value = val;
+    if (_hexEditMode) {
+        hexInspDesc.hidden = true;
+    } else {
+        hexInspDesc.textContent = val;
+        hexInspDesc.hidden = !val;
+    }
+}
+
+hexInspDescEdit.addEventListener('input', () => {
+    clearTimeout(_hexDescSaveTimer);
+    _hexDescSaveTimer = setTimeout(() => {
+        if (!_hexDescKey) return;
+        const val = hexInspDescEdit.value;
+        if (val) hexDescRef.child(_hexDescKey).set(val);
+        else     hexDescRef.child(_hexDescKey).remove();
+    }, 600);
+});
+
+const selectedHexes = new Map(); // key → color string
+
+const DRAW_COLORS = ['#E6194B', '#00C5FF', '#FFDC26'];
+const DRAW_HATCH  = {
+    '#E6194B': 'vertical',
+    '#00C5FF': 'horizontal',
+    '#FFDC26': 'diagonal',
+};
+
+
+let activeDrawColor = DRAW_COLORS[0];
+
+const mapWidth = 1600;
+const mapHeight = 1200;
 
 const hexSize = 13.525;
 const hexWidth = 27.275;
@@ -55,16 +377,19 @@ let offsetX = -11;
 let offsetY = 1;
 
 let lastHex = null;
+let latestInspectorHex = null;
 
 //let isShowRegionOn = false;
 let showRegion = null;
 
 let isDragging = false;
 let isPanning = false;
+let hasDragged = false;
 let startDragX = 0;
 let startDragY = 0;
 let startPanX = 0;
 let startPanY = 0;
+const DRAG_THRESHOLD = 6;
 
 let startRow = 0;
 let startCol = 0;
@@ -79,55 +404,19 @@ let zoom = 1;
 let panX = 0;
 let panY = 0;
 
-let currentInfoScale = 1;
-const minInfoScale = 0.5;
-const maxInfoScale = 2;
-
 const hexData = new Map();
-
-function resetInfoPanelSize() {
-    currentInfoScale = 1;
-    const screenW = window.innerWidth;
-    const screenH = window.innerHeight;
-
-    // Use a fraction of the smaller dimension to maintain consistent scale
-    const base = Math.min(screenW, screenH);
-
-    const width = base * 0.2;
-    const height = width * 2;
-
-    info.style.width = `${Math.round(width)}px`;
-    info.style.height = `${Math.round(height)}px`;
-
-    //info.style.left = "10px";
-    //info.style.top = "10px";
-    const rect = info.getBoundingClientRect();
-
-    const newLeft = window.innerWidth - width - 100;   // mimics right:10px
-    const newTop = window.innerHeight - height - 100;  // mimics bottom:10px
-
-    info.style.left = `${newLeft}px`;
-    info.style.top = `${newTop}px`;
-    
-    applyScale();
-}
-
-
-window.addEventListener("resize", resetInfoPanelSize);
-window.addEventListener("orientationchange", resetInfoPanelSize);
-window.addEventListener("load", resetInfoPanelSize);
 
 image.onload = () => {
     // Calculate minimum zoom to fit image to canvas
-    const zoomX = canvas.width / image.naturalWidth;
-    const zoomY = canvas.height / image.naturalHeight;
+    const zoomX = canvas.width / mapWidth;
+    const zoomY = canvas.height / mapHeight;
     minZoom = Math.max(zoomX, zoomY);
     maxZoom = minZoom * maxZoomScale;
 
     // Set initial zoom and reset pan
     zoom = minZoom;
-    panX = 0;//(canvas.width - image.naturalWidth * zoom) / 2;
-    panY = 0;//(canvas.height - image.naturalHeight * zoom) / 2;
+    panX = 0;//(canvas.width - mapWidth * zoom) / 2;
+    panY = 0;//(canvas.height - mapHeight * zoom) / 2;
 
     drawGridLatestActive();
 };
@@ -195,39 +484,142 @@ function drawHex(x, y, options = {}) {
     const {
         strokeColor = "rgba(0,0,0,0.0)",
         fillColor = null,
+        hatchType = null,
+        hatchColor = null,
         lineWidth = 1,
         opacity = 1,
     } = options;
 
-    canvasContext.save();
-    canvasContext.globalAlpha = opacity;
-    canvasContext.beginPath();
-    for (let i = 0; i < 6; i++) {
-        const angle = Math.PI / 3 * i;
-        const px = x + hexSize * Math.cos(angle);
-        const py = y + hexSize * Math.sin(angle);
-        if (i === 0) canvasContext.moveTo(px, py);
-        else canvasContext.lineTo(px, py);
+    function buildPath() {
+        canvasContext.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = Math.PI / 3 * i;
+            const px = x + hexSize * Math.cos(angle);
+            const py = y + hexSize * Math.sin(angle);
+            if (i === 0) canvasContext.moveTo(px, py);
+            else canvasContext.lineTo(px, py);
+        }
+        canvasContext.closePath();
     }
 
-    canvasContext.closePath();
+    canvasContext.save();
+    canvasContext.globalAlpha = opacity;
+    buildPath();
 
     if (fillColor) {
         canvasContext.fillStyle = fillColor;
         canvasContext.fill();
     }
+
+    if (hatchType && hatchColor) {
+        canvasContext.save();
+        buildPath();
+        canvasContext.clip();
+        canvasContext.strokeStyle = hatchColor;
+        canvasContext.lineWidth = 1.5;
+        canvasContext.globalAlpha = opacity * 0.6;
+        const sp = 5, r = hexSize + 2;
+        canvasContext.beginPath();
+        if (hatchType === 'vertical') {
+            for (let dx = -r; dx <= r + sp; dx += sp) {
+                canvasContext.moveTo(x + dx, y - r);
+                canvasContext.lineTo(x + dx, y + r);
+            }
+        } else if (hatchType === 'horizontal') {
+            for (let dy = -r; dy <= r + sp; dy += sp) {
+                canvasContext.moveTo(x - r, y + dy);
+                canvasContext.lineTo(x + r, y + dy);
+            }
+        } else {
+            for (let d = -2 * r; d <= 2 * r + sp; d += sp) {
+                canvasContext.moveTo(x - r, y - r + d);
+                canvasContext.lineTo(x + r, y + r + d);
+            }
+        }
+        canvasContext.stroke();
+        canvasContext.restore();
+    }
+
+    buildPath();
     canvasContext.strokeStyle = strokeColor;
     canvasContext.lineWidth = lineWidth;
     canvasContext.stroke();
     canvasContext.restore();
 }
 
-function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+const canvasContainer = canvas.parentElement;
+const appEl = document.getElementById('app');
 
-    const zoomX = canvas.width / image.naturalWidth;
-    const zoomY = canvas.height / image.naturalHeight;
+let _kbTimer = null;
+let _kbSavedZoom = 1, _kbSavedPanX = 0, _kbSavedPanY = 0;
+function fitContainer() {
+    const vv = window.visualViewport;
+    const h = vv ? vv.height : window.innerHeight;
+    const offsetTop = vv ? vv.offsetTop : 0;
+    if (!document.body.classList.contains('kb-animating')) {
+        _kbSavedZoom = zoom; _kbSavedPanX = panX; _kbSavedPanY = panY;
+    }
+    document.body.classList.add('kb-animating');
+    clearTimeout(_kbTimer);
+    _kbTimer = setTimeout(() => {
+        document.body.classList.remove('kb-animating');
+        const w = canvasContainer.clientWidth;
+        const cH = canvasContainer.clientHeight;
+        if (w && cH && (w !== canvas.width || cH !== canvas.height)) {
+            canvas.width  = w;
+            canvas.height = cH;
+            const zoomX = w  / mapWidth;
+            const zoomY = cH / mapHeight;
+            minZoom = Math.max(zoomX, zoomY);
+            maxZoom = minZoom * maxZoomScale;
+            zoom = clamp(_kbSavedZoom, minZoom, maxZoom);
+            panX = _kbSavedPanX;
+            panY = _kbSavedPanY;
+            drawGridLatestActive();
+        }
+    }, 300);
+    appEl.style.height    = h + 'px';
+    appEl.style.transform = offsetTop ? `translateY(${offsetTop}px)` : '';
+    // Immediately sync the drawing buffer to the new CSS display size to prevent
+    // the browser from CSS-stretching the old buffer during the debounce window.
+    requestAnimationFrame(() => {
+        const w = canvasContainer.clientWidth;
+        const cH = canvasContainer.clientHeight;
+        if (w && cH && (w !== canvas.width || cH !== canvas.height)) {
+            const growing = w > canvas.width || cH > canvas.height;
+            canvas.width  = w;
+            canvas.height = cH;
+            if (growing) {
+                // Canvas got larger (desktop resize / keyboard close): recalc zoom bounds
+                // and re-clamp pan so the image always covers the full canvas.
+                const zoomX = w / mapWidth;
+                const zoomY = cH / mapHeight;
+                minZoom = Math.max(zoomX, zoomY);
+                maxZoom = minZoom * maxZoomScale;
+                zoom = clamp(zoom, minZoom, maxZoom);
+                setPan(panX, panY);
+            }
+            drawGridLatestActive();
+        }
+    });
+}
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', fitContainer);
+    window.visualViewport.addEventListener('scroll', fitContainer);
+}
+window.addEventListener('resize', fitContainer);
+fitContainer();
+
+function resizeCanvas() {
+    const w = canvasContainer.clientWidth;
+    const h = canvasContainer.clientHeight;
+    if (!w || !h) return;
+
+    canvas.width  = w;
+    canvas.height = h;
+
+    const zoomX = w / mapWidth;
+    const zoomY = h / mapHeight;
     minZoom = Math.max(zoomX, zoomY);
     maxZoom = minZoom * maxZoomScale;
 
@@ -237,18 +629,34 @@ function resizeCanvas() {
     drawGridLatestActive();
 }
 
-window.addEventListener('resize', resizeCanvas);
+// Ping/flash state — declared here so drawGrid can reference them safely
+let _pingTimer  = null;
+let _pingFired  = false;
+let _flashHex   = null;
+let _flashStart = null;
+let _panAnimId  = null;
+let _focusHex   = null;
+const PING_HOLD_MS      = 600;
+const PING_DURATION     = 2500;
+const PING_RING_COUNT   = 3;
+const PING_RING_LIFE    = 1200;
+const PING_RING_STAGGER = 600;
+const PING_PANEL_OFFSET = 80;
+let _lastSeenPingTime = Date.now();
+
+new ResizeObserver(() => { if (!document.body.classList.contains('kb-animating')) resizeCanvas(); }).observe(canvasContainer);
 resizeCanvas();
 
 // Draw the entire hex grid, optionally highlighting a hovered hex
 function drawGrid(hoveredHex = null) {
+    if (!mapWidth) return;
     canvasContext.setTransform(1, 0, 0, 1, 0, 0);
     canvasContext.clearRect(0, 0, canvas.width, canvas.height);
     canvasContext.setTransform(zoom, 0, 0, zoom, panX, panY);
-    canvasContext.drawImage(image, 0, 0, image.naturalWidth, image.naturalHeight);
+    canvasContext.drawImage(image, 0, 0, mapWidth, mapHeight);
 
-    const cols = Math.ceil(image.width / hexHorizSpacing);
-    const rows = Math.ceil(image.height / hexHeight);
+    const cols = Math.ceil(mapWidth / hexHorizSpacing);
+    const rows = Math.ceil(mapHeight / hexHeight);
 
     for (let col = 0; col < cols; col++) {
         for (let row = 0; row < rows; row++) {
@@ -256,8 +664,9 @@ function drawGrid(hoveredHex = null) {
             const y = row * hexVertSpacing + (col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
 
             const key = `${col},${row}`;
-            const isHovered = hoveredHex && hoveredHex.col === col && hoveredHex.row === row;
-            const isSelected = selectedHexes.has(key);
+            const isHovered   = hoveredHex && hoveredHex.col === col && hoveredHex.row === row;
+            const isFocused   = _focusHex  && _focusHex.col  === col && _focusHex.row  === row;
+            const selColor    = selectedHexes.get(key);
 
             const hexInfo = hexData.get(key);
 
@@ -278,98 +687,157 @@ function drawGrid(hoveredHex = null) {
                 });
             }
 
-            // Draw hovered hex.
-            if (isHovered) {
+            // Draw selected colour first so focus/hover overlays blend on top.
+            if (selColor) {
                 drawHex(x, y, {
-                    strokeColor: "rgba(255,255,255,1)",
-                    fillColor: "rgba(255,255,255,0.3)",
+                    strokeColor: selColor,
+                    hatchType:  DRAW_HATCH[selColor],
+                    hatchColor: selColor,
                     lineWidth: 2,
                     opacity: 1
                 });
-            } else if (isSelected) {
-                // Draw selected hexes.
+            }
+            if (isHovered || isFocused) {
                 drawHex(x, y, {
-                    strokeColor: "yellow",
-                    fillColor: "rgba(255,255,0,0.3)",
+                    strokeColor: "rgba(255,255,255,0.85)",
+                    fillColor: "rgba(255,255,255,0.08)",
                     lineWidth: 2,
                     opacity: 1
                 });
-            } 
+            }
+
+            // Flag marker
+            const _flagKey   = `${col}_${row}`;
+            const _flagColor = hexFlags.get(_flagKey);
+            const _isHidden  = hexHiddenCache.has(_flagKey);
+            const _hasData   = hexNotesCache.has(_flagKey) || hexCustomNamesCache.has(_flagKey) || hexDescCache.has(_flagKey);
+            const _dimAlpha  = (_isHidden && isDMView) ? 0.55 : 1;
+            if (_flagColor && (isDMView || !_isHidden)) {
+                drawFlag(x, y, _flagColor, _dimAlpha);
+            } else if (_hasData && (isDMView || !_isHidden)) {
+                drawFlag(x, y, '#ffffff', _dimAlpha);
+            }
+            if (_isHidden && isDMView) {
+                const _iconSize = Math.round(hexSize * 0.55);
+                canvasContext.save();
+                canvasContext.font = `900 ${_iconSize}px "Font Awesome 6 Free"`;
+                canvasContext.fillStyle = 'rgba(255,60,60,0.9)';
+                canvasContext.textAlign = 'center';
+                canvasContext.textBaseline = 'middle';
+                canvasContext.fillText('\uf070', x, y - hexSize * 0.62);
+                canvasContext.restore();
+            }
         }
     }
 
-    // Display the infoText preview panel details for the hovered text.
-    if (hoveredHex) {
+    // Irregular hand-drawn edge — black fill whose top follows overlapping sine waves.
+    // Clamped to [0, imgW] so the sides of the map stay clean.
+    {
+        const imgH = mapHeight;
+        const imgW = mapWidth;
+
+        canvasContext.setTransform(zoom, 0, 0, zoom, panX, panY);
+        canvasContext.fillStyle = 'black';
+        canvasContext.beginPath();
+        canvasContext.moveTo(0, imgH + 300);
+
+        // Shift baseline up by total amplitude so the wave always cuts into the map
+        // and never dips below the natural edge (where it would be invisible on black).
+        const A = 4 + 2 + 1 + 0.4; // sum of amplitudes
+        for (let wx = 0; wx <= imgW; wx += 2) {
+            const ey = (imgH - A)
+                + Math.sin(wx / 84)       * 4
+                + Math.sin(wx / 31 + 1.7) * 2
+                + Math.sin(wx / 13 + 3.1) * 1
+                + Math.sin(wx /  5 + 0.8) * 0.4;
+            canvasContext.lineTo(wx, ey);
+        }
+
+        canvasContext.lineTo(imgW, imgH + 300);
+        canvasContext.closePath();
+        canvasContext.fill();
+    }
+    canvasContext.setTransform(zoom, 0, 0, zoom, panX, panY);
+
+    // Circular ping pulse rings
+    if (_flashHex && _flashStart !== null) {
+        const elapsed = performance.now() - _flashStart;
+        const cx = _flashHex.col * hexHorizSpacing + hexSize + offsetX;
+        const cy = _flashHex.row * hexVertSpacing + (_flashHex.col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
+        const flashAlpha = Math.max(0, 1 - elapsed / (PING_RING_LIFE * 0.6));
+        if (flashAlpha > 0) {
+            drawHex(cx, cy, {
+                strokeColor: `rgba(255,255,255,${flashAlpha})`,
+                fillColor:   `rgba(255,255,255,${flashAlpha * 0.12})`,
+                lineWidth: 2,
+                opacity: 1,
+            });
+        }
+        for (let i = 0; i < PING_RING_COUNT; i++) {
+            const ringElapsed = elapsed - i * PING_RING_STAGGER;
+            if (ringElapsed <= 0 || ringElapsed >= PING_RING_LIFE) continue;
+            const t = ringElapsed / PING_RING_LIFE;
+            const radius = hexSize * (0.4 + t * 4.5);
+            const alpha  = (1 - t) * 0.9;
+            canvasContext.save();
+            canvasContext.beginPath();
+            canvasContext.arc(cx, cy, radius, 0, Math.PI * 2);
+            canvasContext.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+            canvasContext.lineWidth = 3;
+            canvasContext.stroke();
+            canvasContext.restore();
+        }
+    }
+
+    // Show hex description in inspector panel (only while in hexmap mode).
+    if (hoveredHex && appEl.classList.contains('hexmap-mode')) {
         const key = `${hoveredHex.col},${hoveredHex.row}`;
         const hexInfo = hexData.get(key);
+        const notesKey = `${hoveredHex.col}_${hoveredHex.row}`;
 
-        let text = `Hex: col=${hoveredHex.col}, row=${hoveredHex.row}`;
-
+        let name = '', desc = '', hasLocation = false, regionName = '';
         if (hexInfo) {
             const { politicalRegion, environmentalRegion, location } = hexInfo;
-            let region = politicalRegion;
-
-            region = region == null ? environmentalRegion : region;
-
-            if (region && location) {
-                text = `${text}<br><br><i>Region: ${region.name}</i><br><b>${location.name}</b><br><i>${location.description}</i>`;
-            } else if (location) {
-                text = `${text}<br><br><b>${location.name}</b><br><i>${location.description}</i>`;
-            } else if (region) {
-                text = `${text}<br><br><i>Region: ${region.name}</i><br><i>${region.description}</i>`;
+            const region = politicalRegion ?? environmentalRegion;
+            if (region && region.name) regionName = region.name;
+            if (location && location.name) {
+                name = location.name;
+                desc = location.description || '';
+                hasLocation = true;
             }
         }
 
-        infoText.innerHTML = text;
-
-        const x = hoveredHex.col * hexHorizSpacing + hexSize + offsetX;
-        const y = hoveredHex.row * hexVertSpacing + (hoveredHex.col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
-        drawZoomedHex(x, y);
+        const isHidden = hexHiddenCache.has(notesKey);
+        // DM always sees content (greyed when hidden); players see nothing when hidden
+        const canSeeLocation = isDMView || !isHidden;
+        showHexInfo(
+            canSeeLocation ? name : '',
+            `${hoveredHex.col}, ${hoveredHex.row}`,
+            canSeeLocation ? desc : '',
+            canSeeLocation ? hasLocation : false,
+            canSeeLocation ? regionName : '',
+            notesKey,
+            isDMView && isHidden  // greyed: DM sees but dimmed
+        );
+        // Notes and custom fields are DM-only or hidden from players on hidden locations
+        attachHexNotes(isDMView ? notesKey : null);
+        attachHexCustomName(canSeeLocation && !hasLocation ? notesKey : null);
+        attachHexDesc(canSeeLocation && !hasLocation ? notesKey : null);
+        updateFlagRow(hoveredHex.col, hoveredHex.row);
     } else {
-        zoomCanvasContext.clearRect(0, 0, zoomCanvas.width, zoomCanvas.height);
-        infoText.textContent = "";
+        hideHexInfo();
+        attachHexNotes(null);
+        attachHexCustomName(null);
+        attachHexDesc(null);
     }
-}
 
-function drawZoomedHex(centerX, centerY) {
-    const zoomSize = 100;
-    const scale = 2;
-
-    zoomCanvasContext.clearRect(0, 0, zoomCanvas.width, zoomCanvas.height);
-
-    const srcX = centerX - zoomSize / scale;
-    const srcY = centerY - zoomSize / scale;
-    const srcSize = zoomCanvas.width / scale;
-
-    zoomCanvasContext.imageSmoothingEnabled = false;
-    zoomCanvasContext.drawImage(
-        image,
-        srcX,
-        srcY,
-        srcSize,
-        srcSize,
-        0,
-        0,
-        zoomCanvas.width,
-        zoomCanvas.height
-    );
-
-    zoomCanvasContext.beginPath();
-    for (let i = 0; i < 6; i++) {
-        const angle = Math.PI / 3 * i;
-        const px = zoomCanvas.width / 2 + (hexSize * scale) * Math.cos(angle);
-        const py = zoomCanvas.height / 2 + (hexSize * scale) * Math.sin(angle);
-        if (i === 0) zoomCanvasContext.moveTo(px, py);
-        else zoomCanvasContext.lineTo(px, py);
-    }
-    zoomCanvasContext.closePath();
-    zoomCanvasContext.strokeStyle = "rgba(255,255,255,0.3)";
-    zoomCanvasContext.lineWidth = 4;
-    zoomCanvasContext.stroke();
 }
 
 // Calculate which hex coordinates a given (x,y) on the canvas corresponds to
 function getHexAtPosition(screenX, screenY) {
+    // Reject clicks in the black padding area below the map image
+    if (screenY > panY + mapHeight * zoom) return { col: -1, row: -1 };
+
     // Convert screen coords to world coords (account for pan/zoom)
     const x = (screenX - panX) / zoom;
     const y = (screenY - panY) / zoom;
@@ -382,7 +850,7 @@ function getHexAtPosition(screenX, screenY) {
 }
 
 function copySelectedHexesToClipboard() {
-    const hexStrings = Array.from(selectedHexes).map(key => `"${key}"`);
+    const hexStrings = Array.from(selectedHexes.keys()).map(key => `"${key}"`);
     const clipboardText = hexStrings.join(", ");
     navigator.clipboard.writeText(clipboardText)
     .then(() => {
@@ -422,23 +890,10 @@ canvas.addEventListener("mousedown", (event) => {
 
     startDragX = event.clientX;
     startDragY = event.clientY;
-
+    hasDragged = false;
     if (col >= 0 && row >= 0) {
-        if (activeTool == 'select') {
-            isSelecting = true;
-            setHexSelected(key, true);
-            drawGrid({ col, row });
-            lastHex = key;
-            return;
-        } else if(activeTool=='erase') {
-            isSelecting = false;
-            setHexSelected(key, false);
-            drawGrid({ col, row });
-            lastHex = key;
-            return;
-        }
-        drawGrid({ col, row });
         lastHex = key;
+        startPingTimer(col, row);
     }
 
     isPanning = true;
@@ -452,44 +907,13 @@ canvas.addEventListener("mousemove", (event) => {
     if (isPanning) {
         const dx = (event.clientX - startDragX);
         const dy = (event.clientY - startDragY);
+        if (Math.hypot(dx, dy) > DRAG_THRESHOLD) { hasDragged = true; cancelPingTimer(); }
 
-        setPan(startPanX + dx, startPanY + dy)
-        
-        drawGrid({ col: startCol, row: startRow });
+        setPan(startPanX + dx, startPanY + dy);
+        drawGridLatestActive();
         return;
     }
 
-    
-    // Select the hovered hex.
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left - offsetX;
-    const y = event.clientY - rect.top - offsetY;
-
-    const hoveredHex = getHexAtPosition(x, y);
-
-    // Make sure the hovered hex is within grid bounds
-    if (hoveredHex && hoveredHex.col >= 0 && hoveredHex.row >= 0) {
-        drawGrid(hoveredHex);
-    } else {
-        drawGridLatestActive();
-    }
-    
-    // Handle selection.
-    if (!isDragging) return;
-
-    const { col, row } = getHexAtPosition(x, y);
-    const key = `${col},${row}`;
-
-    if (col >= 0 && row >= 0 && key !== lastHex) {
-        if (isSelecting) {
-            setHexSelected(key, true);
-        } else {
-            setHexSelected(key,false);
-        }
-        lastHex = key;
-    }
-
-    event.preventDefault();
 });
 
 canvas.addEventListener("wheel", (e) => {
@@ -518,11 +942,29 @@ canvas.addEventListener("wheel", (e) => {
     drawGridLatestActive();
 }, { passive: false });
 
-canvas.addEventListener("mouseup", () => {
+canvas.addEventListener("mouseup", (event) => {
+    cancelPingTimer();
+    if (!hasDragged && !_pingFired && startCol >= 0 && startRow >= 0) {
+        if (activeTool === 'select') {
+            const _sk = `${startCol},${startRow}`;
+            if (eraseMode) {
+                setHexSelected(_sk, false);
+            } else {
+                setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
+            }
+        } else {
+            if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
+                clearLocalFocus();
+            } else {
+                setLocalFocus(startCol, startRow);
+            }
+        }
+    }
     isPanning = false;
     isDragging = false;
+    hasDragged = false;
+    _pingFired = false;
     lastHex = null;
-
     event.preventDefault();
 });
 
@@ -535,95 +977,154 @@ canvas.addEventListener("mouseleave", () => {
     event.preventDefault();
 });
 
-function setHexSelected(key, value) {
-    selectedHexesRef.update({
-        [key]: value ? Date.now() : null
-    })
-    .then(() => {
-        console.log(`Hex ${key} selected.`);
-    })
-    .catch((error) => {
-        console.error(`Error setting hex ${key}:`, error);
-    });
+function revealHexInfo(col, row) {
+    latestInspectorHex = { col, row };
+    drawGrid({ col, row });
 }
 
-function clearHexSelected(){
-    selectedHexesRef.remove()
-    .then(() => {
-        console.log("All selected hexes removed from the database.");
-    })
-    .catch((error) => {
-        console.error("Error removing all selected hexes:", error);
-    });
+function setHexSelected(key, color) {
+    if (color) hexSelectedRef.child(key).set(color);
+    else hexSelectedRef.child(key).remove();
 }
 
-// listener for when selections change.
-selectedHexesRef.on("value", (snapshot) => {
-    let lastHex = null;
+function clearHexSelected() {
+    hexSelectedRef.remove();
+}
 
-    const hexesData = snapshot.val(); // Get the data snapshot
-    selectedHexes.clear();
+// ── PING ──────────────────────────────────────────────────────────────────
+function startPingTimer(col, row) {
+    cancelPingTimer();
+    _pingFired = false;
+    _pingTimer = setTimeout(() => {
+        _pingTimer = null;
+        _pingFired = true;
+        const t = Date.now();
+        _lastSeenPingTime = t;
+        pingSound.currentTime = 0;
+        pingSound.play().catch(() => {});
+        centerOnHex(col, row);
+        flashHex(col, row);
+        hexPingRef.set({ col, row, t });
+        hexFocusRef.set({ col, row });
+    }, PING_HOLD_MS);
+}
 
-    if (hexesData) {
-        const hexEntries = Object.entries(hexesData)
-            .filter(([_, timestamp]) => typeof timestamp === "number" && !isNaN(timestamp))
-            .sort((a, b) => b[1] - a[1]); // Most recent first
+function cancelPingTimer() {
+    if (_pingTimer) { clearTimeout(_pingTimer); _pingTimer = null; }
+}
 
-        for (const [hexId] of hexEntries) {
-            selectedHexes.add(hexId);
-        }
-
-        if (hexEntries.length > 0) {
-            lastHex = hexEntries[0][0]; // key = "col,row"
-        }
-    }
-
-    if (lastHex) {
-        const [col, row] = lastHex.split(',').map(Number);
-        latestActiveHexCol = col;
-        latestActiveHexRow = row;
-        drawGrid({ col, row }); // Draw with highlight
-    } else {
-        latestActiveHexCol = null;
-        latestActiveHexRow = null;
+function centerOnHex(col, row) {
+    const wx = col * hexHorizSpacing + hexSize + offsetX;
+    const wy = row * hexVertSpacing + (col % 2 === 1 ? hexHeight / 2 : 0) + hexSize / 2 + offsetY;
+    const targetZoom = Math.min(maxZoom, Math.max(zoom, minZoom * 2.5));
+    const targetX = canvas.width  / 2 - wx * targetZoom;
+    const targetY = canvas.height / 2 - PING_PANEL_OFFSET - wy * targetZoom;
+    const startX = panX, startY = panY, startZoom = zoom, t0 = performance.now();
+    if (_panAnimId) cancelAnimationFrame(_panAnimId);
+    function step(now) {
+        const p = Math.min((now - t0) / 450, 1);
+        const e = 1 - Math.pow(1 - p, 3);
+        zoom = startZoom + (targetZoom - startZoom) * e;
+        setPan(startX + (targetX - startX) * e, startY + (targetY - startY) * e);
         drawGridLatestActive();
+        if (p < 1) _panAnimId = requestAnimationFrame(step);
+        else _panAnimId = null;
     }
+    _panAnimId = requestAnimationFrame(step);
+}
 
-    console.log("Current selected hexes data received:", hexesData);
-    console.log("Selected hexes Set contents:", Array.from(selectedHexes)); // Convert Set to Array for logging
+function flashHex(col, row) {
+    _flashHex   = { col, row };
+    _flashStart = performance.now();
+    function tick(now) {
+        if (!_flashHex) return;
+        drawGridLatestActive();
+        if (now - _flashStart < PING_DURATION) requestAnimationFrame(tick);
+        else { _flashHex = null; drawGridLatestActive(); }
+    }
+    requestAnimationFrame(tick);
+}
 
-}, (error) => {
-    console.error("Error fetching selected hexes:", error);
+hexPingRef.on('value', snap => {
+    const ping = snap.val();
+    if (!ping || ping.t <= _lastSeenPingTime) return;
+    _lastSeenPingTime = ping.t;
+    centerOnHex(ping.col, ping.row);
+    flashHex(ping.col, ping.row);
+    pingSound.currentTime = 0;
+    pingSound.play().catch(() => {});
 });
 
-// Use the url to pass in an email and password for authentication.
-function authenticateFromUrl() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const email = urlParams.get("email");
-    const password = urlParams.get("password");
+hexSelectedRef.on('value', snap => {
+    selectedHexes.clear();
+    const val = snap.val();
+    if (val) Object.entries(val).forEach(([k, color]) => selectedHexes.set(k, color));
+    drawGridLatestActive();
+});
 
-    if (email && password) {
-        console.log("Found email and password in URL. Attempting sign in...");
-
-        auth.signInWithEmailAndPassword(email, password)
-        .then((userCredential) => {
-            console.log("Sign in successful with shared credentials.");
-        })
-        .catch((error) => {
-            const errorCode = error.code;
-            const errorMessage = error.message;
-            console.error("Authentication Error:", errorCode, errorMessage);
-        });
+hexFocusRef.on('value', snap => {
+    _focusHex = snap.val();
+    if (_focusHex) {
+        latestInspectorHex = { col: _focusHex.col, row: _focusHex.row };
     } else {
-        console.log("No email or password found in URL.");
+        latestInspectorHex = null;
+        hideHexInfo();
+        attachHexNotes(null);
+        attachHexCustomName(null);
     }
+    drawGridLatestActive();
+});
+
+// ── LOGIN ──────────────────────────────────────────────────────────────────
+const loginScreen   = document.getElementById("login-screen");
+const loginError    = document.getElementById("login-error");
+const loginEmail    = document.getElementById("login-email");
+const loginPassword = document.getElementById("login-password");
+
+function toFirebaseEmail(username) {
+    const s = (username || '').trim();
+    return s.includes('@') ? s : `${s}@bytespritegames.com`;
 }
+
+function showLoginError(msg) {
+    loginError.textContent = msg;
+    loginError.classList.remove("hidden");
+}
+
+document.getElementById("email-sign-in-btn").addEventListener("click", () => {
+    const email    = toFirebaseEmail(loginEmail.value.trim());
+    const password = loginPassword.value;
+    if (!loginEmail.value.trim() || !password) { showLoginError("Enter username and password."); return; }
+    loginError.classList.add("hidden");
+    const btn = document.getElementById("email-sign-in-btn");
+    btn.textContent = "Signing in…";
+    btn.disabled = true;
+    auth.signInWithEmailAndPassword(email, password)
+        .catch(err => {
+            showLoginError(err.message);
+            btn.textContent = "Sign in";
+            btn.disabled = false;
+        });
+});
+
+loginPassword.addEventListener("keydown", e => {
+    if (e.key === "Enter") document.getElementById("email-sign-in-btn").click();
+});
+
 
 auth.onAuthStateChanged((user) => {
     if (user) {
-        console.log("Auth state changed: User is signed in (UID:", user.uid, ")");
+        loginScreen.classList.add("hidden");
+        // Register username → uid so DMs can assign characters by username
+        const username = (user.displayName || user.email || '').split('@')[0];
+        if (username) database.ref(`/inventory_user_lookup/${username}`).set(user.uid);
+        sendHexState();
     } else {
-        console.log("Auth state changed: User is signed out.");
+        loginScreen.classList.remove("hidden");
+        const btn = document.getElementById("email-sign-in-btn");
+        btn.textContent = "Sign in";
+        btn.disabled    = false;
+        sendHexState();
     }
 
     drawGridLatestActive();
@@ -639,68 +1140,18 @@ function clamp(value, min, max) {
 
 function setPan(x, y) {
     // Clamp pan to image boundaries
-    const imageWidth = image.naturalWidth * zoom;
-    const imageHeight = image.naturalHeight * zoom;
+    const imageWidth = mapWidth * zoom;
+    const imageHeight = mapHeight * zoom;
 
     const maxPanX = 0;
     const maxPanY = 0;
     const minPanX = canvas.width - imageWidth;
-    const minPanY = canvas.height - imageHeight;
+    const minPanY = canvas.height - imageHeight - 100 * zoom;
 
     panX = clamp(x, minPanX, maxPanX);
     panY = clamp(y, minPanY, maxPanY);
 }
 
-// allow draging of info panel.
-
-function makeDraggable(element) {
-    let isDragging = false;
-    let offsetX = 0;
-    let offsetY = 0;
-
-    // Mouse Events
-    element.addEventListener("mousedown", (e) => {
-        if (e.button !== 0) return; // Only left click
-        isDragging = true;
-        offsetX = e.clientX - element.offsetLeft;
-        offsetY = e.clientY - element.offsetTop;
-        e.preventDefault();
-    });
-
-    document.addEventListener("mousemove", (e) => {
-        if (!isDragging) return;
-        element.style.left = `${e.clientX - offsetX}px`;
-        element.style.top = `${e.clientY - offsetY}px`;
-    });
-
-    document.addEventListener("mouseup", () => {
-        isDragging = false;
-    });
-
-    // Touch Events
-    element.addEventListener("touchstart", (e) => {
-        if (e.touches.length !== 1) return; // Only single-finger drag
-        const touch = e.touches[0];
-        isDragging = true;
-        offsetX = touch.clientX - element.offsetLeft;
-        offsetY = touch.clientY - element.offsetTop;
-        e.preventDefault();
-    }, { passive: false });
-
-    document.addEventListener("touchmove", (e) => {
-        if (!isDragging || e.touches.length !== 1) return;
-        const touch = e.touches[0];
-        element.style.left = `${touch.clientX - offsetX}px`;
-        element.style.top = `${touch.clientY - offsetY}px`;
-        e.preventDefault();
-    }, { passive: false });
-
-    document.addEventListener("touchend", () => {
-        isDragging = false;
-    });
-}
-  
-makeDraggable(document.getElementById("info"));
 
 // Touch support
 let touchStartX = 0;
@@ -708,6 +1159,7 @@ let touchStartY = 0;
 
 let initialPinchDistance = null;
 let initialZoom = zoom;
+let _wasPinching = false;
 
 canvas.addEventListener("touchstart", (e) => {
     if (e.touches.length === 1) {
@@ -719,30 +1171,30 @@ canvas.addEventListener("touchstart", (e) => {
         const x = touch.clientX - rect.left - offsetX;
         const y = touch.clientY - rect.top - offsetY;
         const { col, row } = getHexAtPosition(x, y);
-        startRow = row;
-        startCol = col;
-        const key = `${col},${row}`;
 
-        if (col >= 0 && row >= 0) {
-            if (activeTool === 'select') {
-                isDragging = true;
-                isSelecting = true;
-                setHexSelected(key, true);
-            } else if (activeTool === 'erase') {
-                isDragging = true;
-                isSelecting = false;
-                setHexSelected(key, false);
-            } else if (activeTool === 'pan') {
-                isPanning = true;
-                startPanX = panX;
-                startPanY = panY;
+        isPanning = true;
+        startPanX = panX;
+        startPanY = panY;
+
+        // Skip fresh-tap setup if a pinch is still unwinding — iOS can fire a
+        // spurious touchstart(1) between the two touchend events of a pinch,
+        // which would reset hasDragged/startCol and cause an accidental selection.
+        if (!_wasPinching) {
+            startRow = row;
+            startCol = col;
+            const key = `${col},${row}`;
+            hasDragged = false;
+            if (col >= 0 && row >= 0) {
+                lastHex = key;
+                startPingTimer(col, row);
             }
-            drawGrid({ col, row });
-            lastHex = key;
         }
     } else if (e.touches.length === 2) {
         isDragging = false;
         isPanning = false;
+        hasDragged = true;
+        _wasPinching = true;
+        cancelPingTimer();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         initialPinchDistance = Math.hypot(dx, dy);
@@ -762,17 +1214,12 @@ canvas.addEventListener("touchmove", (e) => {
         const { col, row } = getHexAtPosition(x, y);
         const key = `${col},${row}`;
 
-        if (activeTool === 'select' || activeTool === 'erase') {
-            if (isDragging && col >= 0 && row >= 0 && key !== lastHex) {
-                setHexSelected(key, isSelecting);
-                lastHex = key;
-                drawGrid({ col, row });
-            }
-        } else if (activeTool === 'pan' && isPanning) {
+        if (isPanning) {
             const dx = touch.clientX - touchStartX;
             const dy = touch.clientY - touchStartY;
+            if (Math.hypot(dx, dy) > DRAG_THRESHOLD) { hasDragged = true; cancelPingTimer(); }
             setPan(startPanX + dx, startPanY + dy);
-            drawGrid({ col: startCol, row: startRow });
+            drawGridLatestActive();
         }
     } else if (e.touches.length === 2) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -808,121 +1255,105 @@ canvas.addEventListener("touchend", (e) => {
     if (e.touches.length < 2) {
         initialPinchDistance = null;
     }
-
-    isDragging = false;
-    isPanning = false;
-    lastHex = null;
-});
-
-// Scale handling
-function applyScale() {
-    info.style.transform = `scale(${currentInfoScale})`;
-    info.style.transformOrigin = 'bottom right';
-}
-  
-scaleUpBtn.addEventListener('click', () => {
-    currentInfoScale = Math.min(currentInfoScale * 1.2, maxInfoScale);
-    applyScale();
-});
-  
-scaleDownBtn.addEventListener('click', () => {
-    currentInfoScale = Math.max(currentInfoScale / 1.2, minInfoScale);
-    applyScale();
-});
-  
-// Reset scale and position
-resetPositionBtn.addEventListener('click', () => {
-    resetInfoPanelSize();
-});
-
-// Tool toggles
-const toolButtons = {
-    select: document.getElementById('toggleSelectBtn'),
-    erase: document.getElementById('toggleEraseBtn'),
-    pan: document.getElementById('togglePanBtn'),
-  };
-  
-let activeTool = null; // Set a default active tool
-  
-function setActiveTool(toolName) {
-    if (activeTool === toolName) return; // Do nothing if it's already active
-  
-    // Deactivate all tools
-    for (const [name, btn] of Object.entries(toolButtons)) {
-      btn.classList.remove('active');
+    cancelPingTimer();
+    if (e.touches.length === 0) {
+        if (!hasDragged && !_wasPinching && !_pingFired && startCol >= 0 && startRow >= 0) {
+            if (activeTool === 'select') {
+                const _sk = `${startCol},${startRow}`;
+                if (eraseMode) {
+                    setHexSelected(_sk, false);
+                } else {
+                    setHexSelected(_sk, selectedHexes.get(_sk) === activeDrawColor ? false : activeDrawColor);
+                }
+            } else {
+                if (_focusHex && _focusHex.col === startCol && _focusHex.row === startRow) {
+                    clearLocalFocus();
+                } else {
+                    setLocalFocus(startCol, startRow);
+                }
+            }
+        }
+        isDragging = false;
+        isPanning = false;
+        hasDragged = false;
+        _pingFired = false;
+        _wasPinching = false;
+        lastHex = null;
     }
-  
-    // Activate the chosen one
-    toolButtons[toolName].classList.add('active');
-    activeTool = toolName;
-  
-    console.log("Active tool:", activeTool);
-}
-
-toggleSelectBtn.addEventListener('click', () => {
-    setActiveTool('select');
 });
 
-toggleEraseBtn.addEventListener('click', () => {
-    setActiveTool('erase');
-});
-
-togglePanBtn.addEventListener('click', () => {
-    setActiveTool('pan');
-});
-
-const overlayButtons = {
-    political : document.getElementById('toggleFactionBtn'),
-    environmental : document.getElementById('toggleEnvironmentBtn'),
+// Tool cycle: pan ↔ select (erase is a swatch button inside select mode)
+const toolStates = ['pan', 'select'];
+const toolIcons = {
+    pan:    'fa-hand',
+    select: 'fa-paintbrush',
 };
 
-toggleFactionBtn.addEventListener('click', () => {
-    setOverlay('political');
-});
+let activeTool = 'pan';
+let eraseMode   = false;
 
-toggleEnvironmentBtn.addEventListener('click', () => {
-    setOverlay('environmental');
-});
-
-function setOverlay(overlay) {
-    for (const [name, btn] of Object.entries(overlayButtons)) {
-        btn.classList.remove('active');
-    }
-
-    showRegion = showRegion == overlay ? null : overlay;
-
-    if(showRegion != null) {
-        overlayButtons[overlay].classList.add('active');
-    }
-
-    drawGridLatestActive();
+function setActiveTool(toolName) {
+    activeTool = toolName;
+    sendHexState();
 }
 
-clearBtn.addEventListener('click', ()=> {
-    clearHexSelected();
-});
+// Overlay cycle: none → territory → environment → none
+const overlayStates = [null, 'political', 'environmental'];
+const overlayIcons  = ['fa-solid fa-fw fa-compass', 'ra ra-fw ra-tower', 'fa-solid fa-fw fa-tree'];
+let overlayIndex = 0;
 
-setActiveTool('pan');
+function sendHexState() {
+    sendToFrame({
+        type:        'hexState',
+        toolIcon:    toolIcons[activeTool],
+        overlayIcon: overlayIcons[overlayIndex],
+        toolActive:  activeTool !== 'pan',
+        showColors:  activeTool === 'select',
+        signedIn:    !!auth.currentUser,
+        activeColor: activeDrawColor,
+        eraseMode:   eraseMode,
+    });
+}
 
 function drawGridLatestActive(){
-    if(latestActiveHexCol != null && latestActiveHexRow != null)
-        drawGrid({col: latestActiveHexCol, row: latestActiveHexRow});
+    if (latestInspectorHex)
+        drawGrid(latestInspectorHex);
     else
         drawGrid();
 }
 
-const controls = document.getElementById("controls");
-const collapseBtn = document.getElementById("collapseBtn");
-
-collapseBtn.addEventListener("click", () => {
-    controls.classList.toggle("collapsed");
-
-    const icon = collapseBtn.querySelector("i");
-    if (controls.classList.contains("collapsed")) {
-        icon.classList.remove("collapsed");
-        // set toggle to pan mode.
-        setActiveTool('pan')
-    } else {
-        icon.classList.add("collapsed");
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !appEl.classList.contains('hexmap-mode')) {
+        window.invGoToHexmap && window.invGoToHexmap();
     }
 });
+
+// ── BRIDGE GLOBALS (called directly by inventory/script.js) ──────────────────
+window.hexOnGoToInventory = function() {
+    detailPanel.classList.add('no-transition', 'detail-collapsed');
+    detailPanel.style.height = '';
+    hideHexInfo();
+    attachHexNotes(null);
+    attachHexCustomName(null);
+};
+window.hexOnGoToHexmap = function() {
+    detailPanel.classList.add('no-transition', 'detail-collapsed');
+};
+window.hexSetDmStatus = function(isDM) {
+    isDMView = isDM;
+    _hexPanelKey = null;
+    _hexCustomNameKey = null;
+    _hexDescKey = null;
+    drawGridLatestActive();
+};
+window.hexAction = function(action, data) {
+    switch (action) {
+        case 'toolToggle': { const next = (toolStates.indexOf(activeTool) + 1) % toolStates.length; setActiveTool(toolStates[next]); break; }
+        case 'overlayToggle': overlayIndex = (overlayIndex + 1) % overlayStates.length; showRegion = overlayStates[overlayIndex]; sendHexState(); drawGridLatestActive(); break;
+        case 'colorSelect': if (DRAW_COLORS.includes(data)) { activeDrawColor = data; eraseMode = false; sendHexState(); } break;
+        case 'eraseToggle': eraseMode = !eraseMode; sendHexState(); break;
+        case 'clearHexes': clearHexSelected(); break;
+        case 'signOut': auth.signOut(); break;
+    }
+};
+

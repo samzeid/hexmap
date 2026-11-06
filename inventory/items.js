@@ -1,0 +1,606 @@
+// ── ITEM LIBRARY ────────────────────────────────────────────────────────────
+// Edit this file to add, remove, or modify items.
+//
+// Fields:
+//   name          (required) string
+//   bulk          (required) Bulk.PACKABLE | Bulk.STOCK | Bulk.BULKY
+//   description   (optional) HTML string shown in the inspector
+//   cost          (optional) string shown in the inspector, e.g. "50 gp"
+//   dmOnly        (optional) true → hidden from players' autocomplete
+//   noCarry       (optional) true → doesn't count toward carry capacity
+//   containerRows (optional) number → item acts as a container with this many rows
+//   containerCapacity (optional) number → fill-weight cap shown as "used/cap" on the
+//                 container header, in the same units as itemFillCost (1.0 per
+//                 stock item, 0.25 per packable). Defaults to containerRows * 2
+//                 (2 slots per row) if omitted — set this explicitly whenever
+//                 that default doesn't match the container's real-world size.
+//   variables     (optional) { key: { value, control, min, max } } → tracked counters
+
+window.Bulk = {
+  PACKABLE:  { id: 'packable'  },
+  STOCK:     { id: 'stock'     },
+  BULKY:     { id: 'bulky'     },
+};
+
+// Weapon list used by magical weapon items — update here to add new weapon types
+window.WEAPON_OPTIONS = [
+  "Club","Dagger","Greatclub","Handaxe","Javelin","Light Hammer","Mace",
+  "Quarterstaff","Sickle","Spear","Dart","Light Crossbow","Shortbow","Sling",
+  "Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd","Lance",
+  "Longsword","Maul","Morningstar","Pike","Rapier","Scimitar","Shortsword",
+  "Trident","Warhammer","War Pick","Whip","Blowgun","Hand Crossbow",
+  "Heavy Crossbow","Longbow",
+];
+
+// Swords (longsword, greatsword, shortsword, rapier, scimitar)
+window.SWORD_OPTIONS = [
+  "Longsword","Greatsword","Shortsword","Rapier","Scimitar",
+];
+
+
+// Slashing/piercing melee weapons — for items that require poison-applicable weapons
+window.ROGUE_WEAPON_OPTIONS = [
+  "Dagger","Rapier","Scimitar","Shortsword",
+];
+
+// Assassin/stealth weapons — quiet, precise melee
+window.ASSASSIN_WEAPON_OPTIONS = [
+  "Dagger","Shortsword","Rapier","Scimitar",
+];
+
+// Heroic martial weapons for Weapon of Celestia (no ranged, no purely utilitarian weapons)
+window.CELESTIA_WEAPON_OPTIONS = [
+  "Longsword","Morningstar","Rapier","Shortsword",
+  "Greatsword","Glaive","Halberd",
+];
+
+// Light weapons — for items requiring dual-wield eligibility
+window.LIGHT_WEAPON_OPTIONS = [
+  "Dagger","Handaxe","Light Hammer","Sickle","Scimitar","Shortsword","Hand Crossbow",
+];
+
+// Precise/patient weapons — for timing and setup-based items
+window.PATIENT_WEAPON_OPTIONS = [
+  "Quarterstaff","Spear","Glaive","Halberd","Longsword",
+  "Rapier","Scimitar","Shortsword","Trident",
+  "Shortbow","Longbow",
+];
+window.BOUNDLESS_WEAPON_OPTIONS = [
+  "Spear","Flail","War Pick","Battleaxe","Greataxe","Glaive","Greatsword","Halberd",
+  "Longsword","Morningstar","Rapier","Scimitar","Shortsword","Trident","Warhammer",
+  "Shortbow","Longbow",
+];
+
+// Heavy/brutal melee weapons — for crit-focused and killing-blow items
+window.BRUTAL_WEAPON_OPTIONS = [
+  "Mace","Battleaxe","Flail","Greataxe","Greatsword",
+  "Longsword","Maul","Morningstar","War Pick","Warhammer",
+];
+
+// Curated list for generic magic weapons — removes niche/minor weapons
+window.STANDARD_WEAPON_OPTIONS = [
+  "Dagger","Mace","Quarterstaff","Spear",
+  "Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd","Longsword",
+  "Maul","Morningstar","Rapier","Scimitar","Shortsword","Trident","Warhammer",
+  "Shortbow","Hand Crossbow","Heavy Crossbow","Longbow",
+];
+
+// All simple and martial melee weapons (no ranged)
+window.MELEE_WEAPON_OPTIONS = [
+  "Club","Dagger","Greatclub","Handaxe","Javelin","Light Hammer","Mace",
+  "Quarterstaff","Sickle","Spear",
+  "Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd","Lance",
+  "Longsword","Maul","Morningstar","Pike","Rapier","Scimitar","Shortsword",
+  "Trident","Warhammer","War Pick","Whip",
+];
+window.WEAPON_TYPES = {
+  // Thrown
+  "Dagger":"thrown","Handaxe":"thrown","Javelin":"thrown","Light Hammer":"thrown",
+  "Spear":"thrown","Dart":"thrown","Trident":"thrown",
+  // Ranged
+  "Light Crossbow":"ranged","Shortbow":"ranged","Sling":"ranged","Blowgun":"ranged",
+  "Hand Crossbow":"ranged","Heavy Crossbow":"ranged","Longbow":"ranged",
+  // Melee (all others default to melee — listed for completeness)
+  "Club":"melee","Greatclub":"melee","Mace":"melee","Quarterstaff":"melee",
+  "Sickle":"melee","Battleaxe":"melee","Flail":"melee","Glaive":"melee",
+  "Greataxe":"melee","Greatsword":"melee","Halberd":"melee","Lance":"melee",
+  "Longsword":"melee","Maul":"melee","Morningstar":"melee","Pike":"melee",
+  "Rapier":"melee","Scimitar":"melee","Shortsword":"melee","Warhammer":"melee",
+  "War Pick":"melee","Whip":"melee",
+};
+
+// Armor list used by magical armor items
+window.ARMOR_OPTIONS = [
+  "Padded Armor","Leather Armor","Studded Leather Armor",
+  "Hide Armor","Chain Shirt","Scale Mail","Breastplate","Half Plate",
+  "Ring Mail","Chain Mail","Splint Armor","Full Plate",
+];
+
+// Elemental damage types used by elemental variant items
+window.ELEMENT_OPTIONS = [
+  "Acid","Cold","Fire","Lightning","Necrotic","Poison","Radiant","Thunder",
+];
+
+
+window.CREATURE_OPTIONS = [
+  "Elemental","Monstrosity","Aberration","Fey","Fiend","Undead",
+];
+
+window.AMMO_OPTIONS = [
+  "Arrow","Bolt","Sling Bullet","Blowgun Needle",
+];
+
+window.SPELL_STORING_OPTIONS = [
+  "Magic Missile","Entangle","Thunderwave","Fog Cloud",
+  "Spike Growth","Silence","Darkness",
+  "Daylight","Lightning Bolt","Fireball",
+];
+
+// Cost in cp keyed by spell name (based on spell scroll commission by level)
+window.SPELL_STORING_COSTS = {
+  "Magic Missile": 6000,  // 1st — 60 gp
+  "Entangle":      6000,
+  "Thunderwave":   6000,
+  "Fog Cloud":     6000,
+  "Spike Growth":  10000, // 2nd — 100 gp
+  "Silence":       10000,
+  "Darkness":      10000,
+  "Daylight":      18000, // 3rd — 180 gp
+  "Lightning Bolt":18000,
+  "Fireball":      18000,
+};
+
+window.ITEM_LIBRARY = [
+
+  { _section: "Simple Weapons" },
+  // ── SIMPLE MELEE — LIGHT THROWN (2 gp, Packable) ────────────────────────
+  { id: 1, name: "Dagger",       bulk: Bulk.PACKABLE, cost: "2 gp",  description: `<i>Simple Melee Weapon</i><br>1d4 Piercing &mdash; Finesse, Light, Thrown (20/60) &bull; Mastery: Nick` },
+  { id: 2, name: "Handaxe",      bulk: Bulk.PACKABLE, cost: "2 gp",  description: `<i>Simple Melee Weapon</i><br>1d6 Slashing &mdash; Light, Thrown (20/60) &bull; Mastery: Vex` },
+  { id: 3, name: "Light Hammer", bulk: Bulk.PACKABLE, cost: "2 gp",  description: `<i>Simple Melee Weapon</i><br>1d4 Bludgeoning &mdash; Light, Thrown (20/60) &bull; Mastery: Nick` },
+
+  // ── SIMPLE MELEE — LIGHT (5 gp, Stock) ──────────────────────────────────
+  { id: 4, name: "Club",         bulk: Bulk.STOCK,    cost: "5 gp",  description: `<i>Simple Melee Weapon</i><br>1d4 Bludgeoning &mdash; Light &bull; Mastery: Slow` },
+  { id: 5, name: "Sickle",       bulk: Bulk.STOCK,    cost: "5 gp",  description: `<i>Simple Melee Weapon</i><br>1d4 Slashing &mdash; Light &bull; Mastery: Nick` },
+
+  // ── SIMPLE MELEE — STANDARD (10 gp, Stock) ──────────────────────────────
+  { id: 6, name: "Javelin",      bulk: Bulk.STOCK,    cost: "10 gp", description: `<i>Simple Melee Weapon</i><br>1d6 Piercing &mdash; Thrown (30/120) &bull; Mastery: Slow` },
+  { id: 7, name: "Mace",         bulk: Bulk.STOCK,    cost: "10 gp", description: `<i>Simple Melee Weapon</i><br>1d6 Bludgeoning &bull; Mastery: Sap` },
+  { id: 8, name: "Quarterstaff", bulk: Bulk.STOCK,    cost: "10 gp", description: `<i>Simple Melee Weapon</i><br>1d6 Bludgeoning &mdash; Versatile (1d8) &bull; Mastery: Topple` },
+  { id: 9, name: "Spear",        bulk: Bulk.STOCK,    cost: "10 gp", description: `<i>Simple Melee Weapon</i><br>1d6 Piercing &mdash; Thrown (20/60), Versatile (1d8) &bull; Mastery: Sap` },
+
+  // ── SIMPLE MELEE — TWO-HANDED (15 gp, Stock) ────────────────────────────
+  { id: 10, name: "Greatclub",    bulk: Bulk.STOCK,    cost: "15 gp", description: `<i>Simple Melee Weapon</i><br>1d8 Bludgeoning &mdash; Two-Handed &bull; Mastery: Push` },
+
+  // ── SIMPLE RANGED (15 gp, Stock) ────────────────────────────────────────
+  { id: 11, name: "Dart",          bulk: Bulk.PACKABLE, cost: "15 gp", description: `<i>Simple Ranged Weapon</i><br>1d4 Piercing &mdash; Finesse, Thrown (20/60) &bull; Mastery: Vex` },
+  { id: 12, name: "Light Crossbow",bulk: Bulk.STOCK,   cost: "15 gp", description: `<i>Simple Ranged Weapon</i><br>1d8 Piercing &mdash; Ammunition (80/320), Loading, Two-Handed &bull; Mastery: Slow` },
+  { id: 13, name: "Shortbow",      bulk: Bulk.STOCK,   cost: "15 gp", description: `<i>Simple Ranged Weapon</i><br>1d6 Piercing &mdash; Ammunition (80/320), Two-Handed &bull; Mastery: Vex` },
+  { id: 14, name: "Sling",         bulk: Bulk.PACKABLE, cost: "15 gp", description: `<i>Simple Ranged Weapon</i><br>1d4 Bludgeoning &mdash; Ammunition (30/120) &bull; Mastery: Slow` },
+
+  { _section: "Martial Weapons" },
+  // ── MARTIAL MELEE — LIGHT (20 gp, Stock) ────────────────────────────────
+  { id: 15, name: "Scimitar",     bulk: Bulk.STOCK,    cost: "20 gp", description: `<i>Martial Melee Weapon</i><br>1d6 Slashing &mdash; Finesse, Light &bull; Mastery: Nick` },
+  { id: 16, name: "Shortsword",   bulk: Bulk.STOCK,    cost: "20 gp", description: `<i>Martial Melee Weapon</i><br>1d6 Piercing &mdash; Finesse, Light &bull; Mastery: Vex` },
+
+  // ── MARTIAL MELEE — STANDARD (25 gp, Stock) ─────────────────────────────
+  { id: 17, name: "Battleaxe",    bulk: Bulk.STOCK,    cost: "25 gp", description: `<i>Martial Melee Weapon</i><br>1d8 Slashing &mdash; Versatile (1d10) &bull; Mastery: Topple` },
+  { id: 18, name: "Flail",        bulk: Bulk.STOCK,    cost: "25 gp", description: `<i>Martial Melee Weapon</i><br>1d8 Bludgeoning &bull; Mastery: Sap` },
+  { id: 19, name: "Longsword",    bulk: Bulk.STOCK,    cost: "25 gp", description: `<i>Martial Melee Weapon</i><br>1d8 Slashing &mdash; Versatile (1d10) &bull; Mastery: Sap` },
+  { id: 20, name: "Morningstar",  bulk: Bulk.STOCK,    cost: "25 gp", description: `<i>Martial Melee Weapon</i><br>1d8 Piercing &bull; Mastery: Sap` },
+  { id: 21, name: "Rapier",       bulk: Bulk.STOCK,    cost: "25 gp", description: `<i>Martial Melee Weapon</i><br>1d8 Piercing &mdash; Finesse &bull; Mastery: Vex` },
+  { id: 22, name: "Trident",      bulk: Bulk.STOCK,    cost: "25 gp", description: `<i>Martial Melee Weapon</i><br>1d8 Piercing &mdash; Thrown (20/60), Versatile (1d10) &bull; Mastery: Topple` },
+  { id: 23, name: "Warhammer",    bulk: Bulk.STOCK,    cost: "25 gp", description: `<i>Martial Melee Weapon</i><br>1d8 Bludgeoning &mdash; Versatile (1d10) &bull; Mastery: Push` },
+  { id: 24, name: "War Pick",     bulk: Bulk.STOCK,    cost: "25 gp", description: `<i>Martial Melee Weapon</i><br>1d8 Piercing &mdash; Versatile (1d10) &bull; Mastery: Sap` },
+  { id: 25, name: "Whip",         bulk: Bulk.STOCK,    cost: "25 gp", description: `<i>Martial Melee Weapon</i><br>1d4 Slashing &mdash; Finesse, Reach &bull; Mastery: Slow` },
+
+  // ── MARTIAL MELEE — TWO-HANDED (40 gp, Stock) ───────────────────────────
+  { id: 26, name: "Glaive",       bulk: Bulk.STOCK,    cost: "40 gp", description: `<i>Martial Melee Weapon</i><br>1d10 Slashing &mdash; Heavy, Reach, Two-Handed &bull; Mastery: Graze` },
+  { id: 27, name: "Greataxe",     bulk: Bulk.STOCK,    cost: "40 gp", description: `<i>Martial Melee Weapon</i><br>1d12 Slashing &mdash; Heavy, Two-Handed &bull; Mastery: Cleave` },
+  { id: 28, name: "Greatsword",   bulk: Bulk.STOCK,    cost: "40 gp", description: `<i>Martial Melee Weapon</i><br>2d6 Slashing &mdash; Heavy, Two-Handed &bull; Mastery: Graze` },
+  { id: 29, name: "Halberd",      bulk: Bulk.STOCK,    cost: "40 gp", description: `<i>Martial Melee Weapon</i><br>1d10 Slashing &mdash; Heavy, Reach, Two-Handed &bull; Mastery: Cleave` },
+  { id: 30, name: "Lance",        bulk: Bulk.STOCK,    cost: "40 gp", description: `<i>Martial Melee Weapon</i><br>1d10 Piercing &mdash; Heavy, Reach, Two-Handed (unless mounted) &bull; Mastery: Topple` },
+  { id: 31, name: "Maul",         bulk: Bulk.STOCK,    cost: "40 gp", description: `<i>Martial Melee Weapon</i><br>2d6 Bludgeoning &mdash; Heavy, Two-Handed &bull; Mastery: Topple` },
+  { id: 32, name: "Pike",         bulk: Bulk.STOCK,    cost: "40 gp", description: `<i>Martial Melee Weapon</i><br>1d10 Piercing &mdash; Heavy, Reach, Two-Handed &bull; Mastery: Push` },
+
+  // ── MARTIAL RANGED (40 gp, Stock) ───────────────────────────────────────
+  { id: 33, name: "Blowgun",        bulk: Bulk.STOCK,  cost: "40 gp", description: `<i>Martial Ranged Weapon</i><br>1 Piercing &mdash; Ammunition (25/100), Loading &bull; Mastery: Vex` },
+  { id: 34, name: "Hand Crossbow",  bulk: Bulk.STOCK,  cost: "40 gp", description: `<i>Martial Ranged Weapon</i><br>1d6 Piercing &mdash; Ammunition (30/120), Light, Loading &bull; Mastery: Vex` },
+  { id: 35, name: "Heavy Crossbow", bulk: Bulk.STOCK,  cost: "40 gp", description: `<i>Martial Ranged Weapon</i><br>1d10 Piercing &mdash; Ammunition (100/400), Heavy, Loading, Two-Handed &bull; Mastery: Push` },
+  { id: 36, name: "Longbow",        bulk: Bulk.STOCK,  cost: "40 gp", description: `<i>Martial Ranged Weapon</i><br>1d8 Piercing &mdash; Ammunition (150/600), Heavy, Two-Handed &bull; Mastery: Slow` },
+
+  { _section: "Armor & Shields" },
+  // ── ARMOUR ───────────────────────────────────────────────────────────────
+  { id: 37, name: "Shield",                bulk: Bulk.STOCK,  cost: "10 gp",   description: `+2 AC. You gain the Armor Class benefit of a Shield only if you have training with it.` },
+
+  { id: 38, name: "Padded Armor",          bulk: Bulk.STOCK,  cost: "5 gp",    description: `<i>Light Armor (1 min to don or doff)</i><br>AC 11 + Dex modifier. Stealth Disadvantage.` },
+  { id: 39, name: "Leather Armor",         bulk: Bulk.STOCK,  cost: "10 gp",   description: `<i>Light Armor (1 min to don or doff)</i><br>AC 11 + Dex modifier.` },
+  { id: 40, name: "Studded Leather Armor", bulk: Bulk.STOCK,  cost: "45 gp",   description: `<i>Light Armor (1 min to don or doff)</i><br>AC 12 + Dex modifier.` },
+
+  { id: 41, name: "Hide Armor",            bulk: Bulk.STOCK,  cost: "10 gp",   description: `<i>Medium Armor (5 min to don, 1 min to doff)</i><br>AC 12 + Dex modifier (max 2).` },
+  { id: 42, name: "Chain Shirt",           bulk: Bulk.STOCK,  cost: "50 gp",   description: `<i>Medium Armor (5 min to don, 1 min to doff)</i><br>AC 13 + Dex modifier (max 2).` },
+  { id: 43, name: "Scale Mail",            bulk: Bulk.STOCK,  cost: "50 gp",   description: `<i>Medium Armor (5 min to don, 1 min to doff)</i><br>AC 14 + Dex modifier (max 2). Stealth Disadvantage.` },
+  { id: 44, name: "Breastplate",           bulk: Bulk.STOCK,  cost: "400 gp",  description: `<i>Medium Armor (5 min to don, 1 min to doff)</i><br>AC 14 + Dex modifier (max 2).` },
+  { id: 45, name: "Half Plate",            bulk: Bulk.STOCK,  cost: "750 gp",  description: `<i>Medium Armor (5 min to don, 1 min to doff)</i><br>AC 15 + Dex modifier (max 2). Stealth Disadvantage.` },
+
+  { id: 46, name: "Ring Mail",             bulk: Bulk.STOCK,  cost: "30 gp",   description: `<i>Heavy Armor (10 min to don, 5 min to doff)</i><br>AC 14. Stealth Disadvantage.` },
+  { id: 47, name: "Chain Mail",            bulk: Bulk.STOCK,  cost: "75 gp",   description: `<i>Heavy Armor (10 min to don, 5 min to doff)</i><br>AC 16. Str 13 required. Stealth Disadvantage.` },
+  { id: 48, name: "Splint Armor",          bulk: Bulk.STOCK,  cost: "200 gp",  description: `<i>Heavy Armor (10 min to don, 5 min to doff)</i><br>AC 17. Str 15 required. Stealth Disadvantage.` },
+  { id: 49, name: "Full Plate",            bulk: Bulk.BULKY,  cost: "1500 gp", description: `<i>Heavy Armor (10 min to don, 5 min to doff)</i><br>AC 18. Str 15 required. Stealth Disadvantage.` },
+
+  { _section: "Currency" },
+  { id: 50, name: "Coin Purse", aliases: ["🪙"], bulk: Bulk.STOCK, warnOnRemove: "Remove Coin Purse? Any tracked coin counts will be lost.", description: `Tracks all coin types freely with no slot limit. Each denomination is counted in the coin total.`, variables: { pp: { value: 0, control: "both", min: 0, max: 999999 }, gp: { value: 0, control: "both", min: 0, max: 999999 }, sp: { value: 0, control: "both", min: 0, max: 999999 }, cp: { value: 0, control: "both", min: 0, max: 999999 } } },
+
+  { _section: "Adventuring Gear" },
+  // ── ADVENTURING GEAR ─────────────────────────────────────────────────────
+  { id: 51, name: "Rations",             bulk: Bulk.PACKABLE, cost: "1 gp",  description: `1 day worth of travel-ready food — jerky, dried fruit, hardtack, and nuts.` },
+  { id: 52, name: "Waterskin",           bulk: Bulk.PACKABLE,    cost: "1 gp",  description: `Holds up to 4 pints. If you don't drink sufficient water, you risk dehydration.` },
+  { id: 53, name: "Tinderbox",           bulk: Bulk.PACKABLE, cost: "5 sp",  description: `Contains flint, fire steel, and tinder. Bonus action to light a candle, lamp, lantern, or torch. Lighting any other fire takes 1 minute.` },
+  { id: 54, name: "Mirror",              bulk: Bulk.PACKABLE, cost: "5 sp",  description: `A handheld steel mirror — useful for personal cosmetics, peeking around corners, or reflecting light as a signal.` },
+  { id: 55, name: "Bell",                bulk: Bulk.PACKABLE, cost: "5 sp",  description: `When rung as a Utilize action, produces a sound heard up to 60 feet away.` },
+  { id: 56, name: "Chalk",               bulk: Bulk.PACKABLE, cost: "5 sp",  description: `Used to mark surfaces. Expend a piece to leave a visible mark.`, hasUses: true, variables: { uses: { value: 5, control: "both", min: 0, max: 5 } } },
+  { id: 57, name: "Parchment",           bulk: Bulk.PACKABLE, cost: "5 sp",  description: `Each sheet holds about 250 handwritten words.`, hasUses: true, variables: { uses: { value: 5, control: "both", min: 0, max: 5 } } },
+  { id: 58, name: "Ink and Pen",         bulk: Bulk.PACKABLE, cost: "5 sp",  description: `An ink pen and a 1-ounce bottle of ink — enough to write about 500 pages.` },
+  { id: 59, name: "Torch",               bulk: Bulk.PACKABLE, cost: "5 sp",  category: "weapon", description: `<i>Simple Melee Weapon</i><br>1 Fire — Burns for 1 hour, casting Bright Light in a 20-foot radius and Dim Light for an additional 20 feet.`, hasUses: true, variables: { uses: { value: 6, control: "both", min: 0, max: 6 } } },
+  { id: 60, name: "Whistle / Horn",      bulk: Bulk.PACKABLE, cost: "1 gp",  description: `Produces a sound that can be heard up to 600 feet away (whistle) or across great distances (horn). Utilize action to blow.` },
+  { id: 61, name: "Shovel",              bulk: Bulk.PACKABLE,    cost: "1 gp",  description: `Working for 1 hour, you can use a Shovel to dig a hole 5 feet on each side in soil or similar material.` },
+  { id: 62, name: "Rope (50ft)",         bulk: Bulk.PACKABLE,    cost: "1 gp",  description: `As a Utilize action, tie a knot with a DC Dexterity (Sleight of Hand) check. Burst with a successful Strength (Athletics) check. Can bind a Grappled, Incapacitated, or Restrained creature.` },
+  { id: 63, name: "Oil Flask",           bulk: Bulk.PACKABLE, cost: "2 gp",  description: `Fuel for lanterns. Bonus action to douse a creature or object; on a hit, target takes 5 Fire damage if ignited before the start of your next turn. One flask fuels a lantern for 6 hours.`, hasUses: true, variables: { uses: { value: 5, control: "both", min: 0, max: 5 } } },
+  { id: 64, name: "Manacles",            bulk: Bulk.PACKABLE,    cost: "2 gp",  description: `As a Utilize action, bind a Grappled, Incapacitated, or Restrained creature within 5 feet (DC Dexterity (Sleight of Hand) check). While bound, the creature has Disadvantage on attack rolls and can't cast spells with somatic components. DC 20 Strength (Athletics) or DC 15 Dexterity (Sleight of Hand) to escape.` },
+  { id: 65, name: "Grappling Hook",      bulk: Bulk.PACKABLE, cost: "2 gp",  description: `As a Utilize action, throw up to 50 feet to catch on a railing, ledge, or similar (DC Dexterity (Acrobatics) check). Attach a rope to climb.` },
+  { id: 66, name: "Crowbar",             bulk: Bulk.PACKABLE,    cost: "2 gp",  description: `Using a Crowbar gives you Advantage on Strength checks where its leverage can be applied.` },
+  { id: 67, name: "Lantern, Hooded",     bulk: Bulk.PACKABLE,    cost: "5 gp",  description: `Burns oil as fuel. Casts Bright Light in a 30-foot radius and Dim Light for an additional 30 feet. Bonus action to lower the hood (Dim Light in a 5-foot radius) or raise it again.` },
+  { id: 68, name: "Pouch",               bulk: Bulk.STOCK,    cost: "5 sp",  description: `A small belt pouch.`, noCarry: true, containerRows: 2, containerCapacity: 1 },
+  { id: 69, name: "Satchel",             bulk: Bulk.STOCK,    cost: "2 gp",  description: `Holds gear. Does not count toward carry capacity.`, noCarry: true, containerRows: 1 },
+  { id: 70, name: "Backpack",            bulk: Bulk.STOCK,    cost: "5 gp",  description: `Holds up to 30 pounds within 1 cubic foot. Does not count toward carry capacity.`, noCarry: true, containerRows: 4 },
+  { id: 71, name: "Saddlebag",           bulk: Bulk.STOCK,    cost: "5 gp",  description: `Attaches to a mount. Holds gear and does not count toward your carry capacity.`, noCarry: true, containerRows: 2 },
+  { id: 72, name: "Ammunition",          bulk: Bulk.PACKABLE, cost: "0 gp",  category: "ammunition", description: `Arrows, bolts, sling bullets, or blowgun needles. Use the counter to track remaining quantity.` },
+  { id: 73, name: "Ammunition Cache",    bulk: Bulk.STOCK,    cost: "15 gp", description: `One cache per ammunition type. Represents a full, regularly resupplied supply — no need to track individual rounds. Must be worn to access. Thrown, magical, or otherwise unique ammunition must still be tracked separately; a cache of their kind holds up to 8.`, fixedCarryWeight: 1, containerRows: 4 },
+  { id: 74, name: "Ball Bearings",       bulk: Bulk.PACKABLE, cost: "1 gp",  description: `As a Utilize action, spill to cover a level 10-foot-square area within 10 feet. Creatures entering the area must succeed on a DC 13 Dexterity saving throw or fall Prone. Takes 10 minutes to collect.` },
+  { id: 75, name: "Caltrops",            bulk: Bulk.PACKABLE, cost: "1 gp",  description: `As a Utilize action, spread to cover a 5-foot-square area within 5 feet. Creatures entering must succeed on a DC 15 Dexterity saving throw or take 1 Piercing damage and have Speed reduced to 0 until the start of their next turn.` },
+  { id: 76, name: "Basic Poison",        bulk: Bulk.PACKABLE, cost: "5 gp",  description: `As a Bonus Action, coat one weapon or up to three pieces of ammunition. A creature that takes Piercing or Slashing damage from the poisoned weapon takes an extra 1d4 Poison damage. Retains potency for 1 minute or until its first hit.` },
+  { id: 338, name: "Carrion Crawler Mucus", bulk: Bulk.PACKABLE, cost: "200 gp", dmOnly: true, description: `<i>Adventuring Gear, Poison (Contact)</i><br>A creature subjected to Carrion Crawler Mucus must succeed on a DC 13 Constitution saving throw or have the Poisoned condition for 1 minute. The creature also has the Paralyzed condition while Poisoned in this way. The creature repeats the save at the end of each of its turns, ending the effect on itself on a success.` },
+  { id: 77, name: "Holy Water",          bulk: Bulk.PACKABLE, cost: "25 gp", description: `When you take the Attack action, you can replace one of your attacks with throwing a flask of Holy Water. Target one creature you can see within 20 feet of yourself. The target must succeed on a Dexterity saving throw (DC 8 plus your Dexterity modifier and Proficiency Bonus) or take 2d8 Radiant damage if it is a Fiend or an Undead.` },
+  { _section: "Alchemist Items" },
+  { id: 78, name: "Acid",                bulk: Bulk.PACKABLE, cost: "25 gp", description: `When you take the Attack action, you can replace one of your attacks with throwing a vial of Acid. Target one creature or object you can see within 20 feet of yourself. The target must succeed on a Dexterity saving throw (DC 8 plus your Dexterity modifier and Proficiency Bonus) or take 2d6 Acid damage.` },
+  { id: 79, name: "Alchemist's Fire",    bulk: Bulk.PACKABLE, cost: "50 gp", description: `When you take the Attack action, you can replace one of your attacks with throwing a flask of Alchemist's Fire. Target one creature or object you can see within 20 feet of yourself. The target must succeed on a Dexterity saving throw (DC 8 plus your Dexterity modifier and Proficiency Bonus) or take 1d4 Fire damage and start burning.` },
+  { id: 80, name: "Bottled Lightning",   bulk: Bulk.PACKABLE, cost: "8 gp",  description: `As a Utilize action, open the Bottled Lightning. A bolt of lightning in a 30-foot-long, 1-foot-wide line blasts in a direction you choose. If the lightning would strike a creature, that creature must succeed on a Dexterity saving throw (DC 8 plus your Dexterity modifier and Proficiency Bonus) or take 1d8 Lightning damage; the lightning stops if it hits a creature. The item is destroyed.` },
+  { id: 81, name: "Flask of Floods",     bulk: Bulk.PACKABLE, cost: "8 gp",  description: `As a Utilize action, open the Flask of Floods. Water pours out as though you used the geyser option of a <i>decanter of endless water</i>. The item is destroyed.` },
+  { id: 82, name: "Smoke Bomb",          bulk: Bulk.PACKABLE, cost: "8 gp",  description: `As a Utility action, you can ignite and throw a Smoke Bomb. Target a location you can see within 20ft, the bomb creates a 10-foot-radius Sphere of smoke there. The area is Heavily Obscured. At the start of each of your turns there is a 50 percent chance the smoke disperses. A wind of moderate or greater speed disperses it immediately. The item is destroyed.` },
+  { id: 83, name: "Winter's Breath",     bulk: Bulk.PACKABLE, cost: "8 gp",  description: `As a Utilize action, open the Winter's Breath. Creatures in a 15-foot cone from you must succeed on a Constitution saving throw (DC 8 plus your Dexterity modifier and Proficiency Bonus) or take 1d4 Cold damage and have their speed halved until the start of your next turn. The item is destroyed.` },
+  { id: 84, name: "Oil of Elemental Damage", bulk: Bulk.PACKABLE, cost: "8 gp", description: `As a bonus action, coat a weapon or three pieces of ammunition with this oil to have it deal an extra 1d6 damage of the chosen type. Once applied, the oil retains potency for 1 minute or until its damage is dealt, whichever comes first.`, variables: { element: { control: "select", value: "Fire", options: ELEMENT_OPTIONS } } },
+  { id: 85, name: "Healing Potion",      bulk: Bulk.PACKABLE, cost: "8 gp",  description: `As a Bonus Action, drink or administer to a creature within 5 feet. The creature regains 2d4 + 2 Hit Points.` },
+
+  { _section: "Magical Consumables" },
+  { _rarity: "Common" },
+  { id: 86, name: "Gem of False Value",      bulk: Bulk.PACKABLE, cost: "1 cp",   description: `Appears to be a valuable gemstone worth 100 gp or more, but is magically worthless. A creature that examines it must succeed on a DC 15 Intelligence (Arcana) check to identify the ruse.` },
+  { id: 87, name: "Identifying Scroll",      bulk: Bulk.PACKABLE, cost: "15 gp",  description: `A scroll inscribed with the Identify spell. Cast it without requiring a spell slot or material components to learn the properties of one magic item or one spell affecting a creature.` },
+  { id: 88, name: "Sticky Finger",           bulk: Bulk.PACKABLE, cost: "15 gp",  description: `Inserted into a non-magical lock, this thin metal finger immediately grows filaments, reshaping itself into a matching key. Once transformed, it remains in that shape permanently.` },
+  { id: 89, name: "Raven Charm",             bulk: Bulk.PACKABLE, cost: "30 gp",  description: `This small statuette can be used to cast <i>animal messenger</i> at 3rd level, transforming into a raven as a target for the spell. Once the spell ends, the raven transforms back into the figurine, then becomes non-magical.` },
+  { id: 90, name: "Ammunition of Capture",   bulk: Bulk.PACKABLE, cost: "30 gp",  category: "ammunition", description: `You can forgo the attack roll when you attack with this ammunition to have the target make a Dexterity saving throw (DC 13) as if it were affected by a <i>net</i> (Escape DC 13; AC 13; 10 HP). The ammunition is destroyed.` },
+  { id: 91, name: "Ammunition of Tracking",  bulk: Bulk.PACKABLE, cost: "30 gp",  category: "ammunition", description: `When this ammunition hits, it transforms into a small invisible mark. For 24 hours you know the target's distance and direction. The ammunition is destroyed.` },
+  { id: 92, name: "Ammunition of Grappling", bulk: Bulk.PACKABLE, cost: "30 gp",  category: "ammunition", description: `When fired, this ammunition becomes immovable when it strikes. It can hold up to 500 pounds and has a small ring for attaching rope. It can be removed with a DC 20 Strength (Athletics) check, destroying it in the process.` },
+  { id: 93, name: "Bubble Token",            bulk: Bulk.PACKABLE, cost: "60 gp",  description: `This small metal disk is inscribed with the image of a jet of bubbles. As a magic action, choose up to 5 creatures underwater you can see within 60ft; they gain 1 hour of additional air before suffocating while they remain underwater. The token's magic is expended, whereupon the disk becomes nonmagical.` },
+  { id: 94, name: "Feather Token",           bulk: Bulk.PACKABLE, cost: "60 gp",  description: `This small metal disk is inscribed with the image of a feather. When you fall at least 20 feet while the token is on your person, you descend 60 feet per round and take no damage from falling. The token's magic is expended after you land, whereupon the disk becomes nonmagical.` },
+  { id: 95, name: "Balm of Disguise",        bulk: Bulk.PACKABLE, cost: "60 gp",  description: `You can apply this balm to gain the effects of the <i>disguise self</i> spell (DC 13). The effect ends early if you are fully submerged in water.` },
+  { id: 96, name: "Tonic of Potency",        bulk: Bulk.PACKABLE, cost: "10 gp",  description: `This bottle contains 6 drops. As an action, you can add up to 3 drops to any of the following items: alchemist's fire, basic poison, bottled lightning, flask of floods, holy water, oil of elemental damage, and winter's breath. When the item deals damage, deal an additional damage die for each drop added (maximum 3).`, hasUses: 'coins', variables: { uses: { value: 6, control: "both", min: 0, max: 6 } } },
+  { id: 97, name: "Seed of Climbing",        bulk: Bulk.PACKABLE, cost: "60 gp",  description: `As a magic action, you can plant this seed adjacent to a wall. The seed immediately sprouts a thick network of vines that grows up to 30 feet high and 5 feet wide along the wall. Immediately after planting the seed, you can choose to climb onto the vines as they grow, near instantly ascending to the top.` },
+
+  { _rarity: "Uncommon" },
+  { id: 98, name: "Waning Wand of Magic Missile", bulk: Bulk.PACKABLE, cost: "60 gp", description: `<i>Waning wand — cannot be recharged</i><br>Expend a charge to cast Magic Missile (3 darts). Each charge spent increases the level by 1 (max 5th level).`, hasUses: 'coins', variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 99, name: "Waning Wand of Web",           bulk: Bulk.PACKABLE, cost: "60 gp", description: `<i>Waning wand — cannot be recharged</i><br>Expend a charge to cast Web (DC 13).`, hasUses: 'coins', variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 100, name: "Waning Wand of Darkness",      bulk: Bulk.PACKABLE, cost: "60 gp", description: `<i>Waning wand — cannot be recharged</i><br>Expend a charge to cast Darkness.`, hasUses: 'coins', variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 101, name: "Waning Wand of Paralysis",     bulk: Bulk.PACKABLE, cost: "60 gp", description: `<i>Waning wand — cannot be recharged</i><br>Expend a charge to cast Hold Person (DC 13).`, hasUses: 'coins', variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 102, name: "Waning Wand of Wonder",        bulk: Bulk.PACKABLE, cost: "60 gp", description: `<i>Waning wand — cannot be recharged</i><br>Expend a charge to trigger a random magical effect (roll on the Wand of Wonder table).`, hasUses: 'coins', variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+
+  // Uncommon
+  { id: 103, name: "Gem of Recall",         bulk: Bulk.PACKABLE, cost: "120 gp", description: `You can attune this gem to a single item no larger than 3 feet in any dimension by holding it against the object for 10 minutes. Once attuned, you can shatter the gem as a bonus action to summon the item instantly into your hand or at your feet. If the object is more than 1 mile away, the item isn't summoned. The gem is destroyed when used.` },
+  { id: 104, name: "Deathrite Coins",       bulk: Bulk.PACKABLE, cost: "120 gp", description: `Placing these gold coins over a corpse's eyes casts <i>speak with dead</i> on it. The coins then lose their magic.` },
+  { id: 105, name: "Dust of Revealing",     bulk: Bulk.PACKABLE, cost: "120 gp", description: `As a magical action, you can scatter this dust in a 10-foot emanation. For 1 minute, it glows faintly, revealing magical auras and ending invisibility and illusions within the area and on affected creatures. The dust is consumed on use.` },
+  { id: 106, name: "Dust of Disappearance", bulk: Bulk.PACKABLE, cost: "120 gp", description: `When you take a Utilize action to throw the dust into the air, you and each creature and object within a 10-foot emanation have the <i>invisible</i> condition for 2d4 minutes. The duration is the same for all subjects, and the dust is consumed when its magic takes effect. Immediately after an affected creature makes an attack roll, deals damage, or casts a spell, the <i>invisible</i> condition ends for that creature.` },
+  { id: 107, name: "Salt of Binding",       bulk: Bulk.PACKABLE, cost: "120 gp", description: `You can spend 1 minute spreading this salt in a 5-foot-radius circle. When a creature enters the circle, or touches its edge, if you are within 60ft, you can use your reaction to activate it. You learn the creature's type and the area is affected by the <i>magic circle</i> spell (DC 13) for 1 hour, or until a creature of that type within 10 feet of the area is dealt damaged. The salt is consumed on use.` },
+  { id: 108, name: "Stone of Illusion",     bulk: Bulk.PACKABLE, cost: "120 gp", description: `You can place this stone to cast <i>major image</i> at its location. The effect cannot be moved and remains until dispelled or the stone is moved, at which point this becomes a non-magical stone.` },
+  { id: 109, name: "Cloudy Hag Eye",        bulk: Bulk.PACKABLE, cost: "120 gp", description: `This functions as a <i>Hag Eye</i>. When used, there is a 10 percent chance it instead emits a loud, mocking cackle audible within 300 feet and disintegrates.` },
+  { id: 110, name: "Flicker Dagger",        bulk: Bulk.PACKABLE, category: "weapon", cost: "120 gp", description: `When you throw this weapon, you can teleport to the targeted space or a space adjacent to it as long as you can see the location and it is unoccupied. Immediately after, the dagger is destroyed.`, variables: { weapon: { control: "select", value: "Dagger", options: ["Dagger"] } } },
+  { id: 111, name: "Deep-Haul Harpoon",     bulk: Bulk.STOCK,    category: "weapon", cost: "60 gp", description: `When you find this spear it has 1d3 charges. When thrown, you can expend a charge to return it to your hand, and if you hit a target that is large or smaller, pull them up to 15 feet straight toward yourself. When this spear has no charges, it becomes non-magical.`, hasUses: 'coins', variables: { weapon: { control: "select", value: "Spear", options: ["Spear"] }, uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 112, name: "Weapon of Silence",     bulk: Bulk.STOCK, cost: "60 gp", description: `When you find this weapon it has 1d3 charges. When it deals damage, you can expend a charge to make its target create no sound (as though within the area of the <i>silence</i> spell) until the end of your next turn. When this weapon has no charges, it becomes non-magical.`, hasUses: 'coins', variables: { weapon: { control: "select", value: "Longsword", options: ASSASSIN_WEAPON_OPTIONS }, uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 113, name: "Luster Weapon",         bulk: Bulk.STOCK,    cost: "60 gp", description: `When you find this weapon, it has 1d3 charges. This gilded weapon bears a small, magical mouth. You can spend 10 minutes feeding it 40gp worth of gold to expend a charge and make it a +1 weapon for 24 hours. When all charges are expended, the weapon becomes a worthless non-magical weapon.`, hasUses: 'coins', variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS }, uses: { value: 3, control: "both", min: 0, max: 3 } } },
+
+  { _rarity: "Rare" },
+  { id: 114, name: "Waning Wand of Lightning Bolt", bulk: Bulk.PACKABLE, cost: "120 gp", description: `<i>Waning wand — cannot be recharged</i><br>Expend a charge to cast Lightning Bolt (DC 15, 8d6).`, hasUses: 'coins', variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 115, name: "Waning Wand of Fireball",       bulk: Bulk.PACKABLE, cost: "120 gp", description: `<i>Waning wand — cannot be recharged</i><br>Expend a charge to cast Fireball (DC 15, 8d6).`, hasUses: 'coins', variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 116, name: "Waning Wand of Polymorph",      bulk: Bulk.PACKABLE, cost: "120 gp", description: `<i>Waning wand — cannot be recharged</i><br>Expend a charge to cast Polymorph (DC 15).`, hasUses: 'coins', variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 117, name: "Ammunition of Spell Storing",   bulk: Bulk.PACKABLE, cost: "60 gp", category: "ammunition",  description: `One of the following spells can be stored in this piece of ammunition by casting it at its minimum spell level: Magic Missile, Entangle, Thunderwave, Fog Cloud, Spike Growth, Silence, Darkness, Daylight, Lightning Bolt, Fireball. When found, there is a 50 percent chance it already contains a stored spell. As a magic action, fire it from a ranged weapon; the stored spell is cast from the point of impact (DC 13). If the spell is a line or cone, you choose the direction. The ammunition is destroyed on use.`, variables: { spell: { control: "select", value: "Magic Missile", options: SPELL_STORING_OPTIONS } } },
+  { id: 118, name: "Undead Paw",                    bulk: Bulk.PACKABLE, cost: "120 gp", description: `This shriveled undead hand has 1d4+1 fingers when found. As a magical action, you can expend a finger to cast <i>Animate Dead</i>. The undead created cannot be controlled and is hostile toward all living creatures. When all fingers are gone, the paw loses its magic.`, hasUses: 'coins', variables: { uses: { value: 5, control: "both", min: 0, max: 5 } } },
+  { id: 119, name: "Ammunition of Creature Slaying", bulk: Bulk.PACKABLE, cost: "40 gp", category: "ammunition", description: `When it deals damage to a creature of the chosen type, deal an additional 2d6 Force damage. After dealing its extra damage, the ammunition becomes nonmagical.`, variables: { creature: { control: "select", value: "Undead", options: CREATURE_OPTIONS } } },
+  { id: 120, name: "Spear of Lightning",            bulk: Bulk.STOCK,    cost: "120 gp", category: "weapon", description: `You can have this spear deal Lightning damage. When you throw this weapon at a target no farther than 60 feet, instead the weapon turns into a 5-foot-wide bolt of lightning between you and the target. Each other creature in the line makes a Dexterity saving throw (DC 13), taking 4d6 Lightning damage on a failed save or half as much on a successful one. Immediately after, the weapon is destroyed.`, variables: { weapon: { control: "select", value: "Spear", options: ["Spear"] } } },
+  { id: 121, name: "Glyph Scroll",                  bulk: Bulk.PACKABLE, cost: "240 gp",        description: `By spending 10 minutes holding this scroll to a surface, you can cast <i>glyph of warding</i>. The scroll is destroyed when used.` },
+  { id: 122, name: "Litany Seal",                  bulk: Bulk.PACKABLE, cost: "240 gp", description: `When hostile magic would charm, curse, frighten, or possess you while wearing this affixed seal and parchment, it burns away and is destroyed, preventing the effect.` },
+  { id: 123, name: "Death-Knell Weapon",            bulk: Bulk.STOCK,    cost: "120 gp", description: `<i>(requires attunement)</i><br>When you find this weapon it has 1d3 charges. While it has a charge it is a +1 magical weapon. When an attack from this weapon is a critical hit, it loses a charge and deals an additional die of the weapon's damage. When it has no charges, it becomes non-magical.`, hasUses: 'coins', variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS }, uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 124, name: "Builder's Impossible Belt",     bulk: Bulk.PACKABLE, cost: "120 gp", description: `This belt has 1d3 + 2 embroidered patches, each showing a construction item. As a magical action, you can pull off a patch and throw it into an unoccupied space within 10 feet. It becomes the depicted nonmagical item or fixture. Roll a d6 for each patch when found:<br><b>d6 Patch:</b> 1 Portable battering ram &bull; 2 15-foot wooden ladder &bull; 3 Wooden bridge 5ft × 15ft &bull; 4 Stone barricade 5ft × 15ft &bull; 5 Tunnel 5ft × 5ft × 15ft, placeable on a wall or the ground &bull; 6 Iron door 10ft × 10ft barred on one side, placeable in an opening<br>Once used, a patch cannot be restored. When all patches are gone, the belt loses its magic.`, hasUses: 'coins', variables: { uses: { value: 5, control: "both", min: 0, max: 5 } } },
+  { _rarity: "Very Rare" },
+  { id: 126, name: "Elemental Gem", aliases: ["Elemental Gem (Air)", "Elemental Gem (Water)", "Elemental Gem (Fire)", "Elemental Gem (Earth)"], bulk: Bulk.PACKABLE, cost: "500 gp",
+    description: `Crush to summon an Elemental that serves you for 1 hour or until reduced to 0 HP.`,
+    descriptions: {
+      "Air":   `Crush to summon an Air Elemental that serves you for 1 hour or until reduced to 0 HP.`,
+      "Water": `Crush to summon a Water Elemental that serves you for 1 hour or until reduced to 0 HP.`,
+      "Fire":  `Crush to summon a Fire Elemental that serves you for 1 hour or until reduced to 0 HP.`,
+      "Earth": `Crush to summon an Earth Elemental that serves you for 1 hour or until reduced to 0 HP.`,
+    },
+    variables: { variant: { control: "select", value: "Air", options: ["Air", "Water", "Fire", "Earth"] } } },
+  { id: 130, name: "Chalk of Passwall",      bulk: Bulk.PACKABLE, cost: "500 gp",  description: `Spending 10 minutes drawing a doorway with this chalk creates a passage as though you cast <i>passwall</i>. The chalk is expended when used.`, linkedSpell: "Passwall" },
+  { id: 131, name: "Tears of Celestia",      bulk: Bulk.PACKABLE, cost: "500 gp",  description: `This pendant holds 6 drops of healing elixir. Applying drops to a creature within reach restores 4d4 + 4 hit points each. Alternatively, spending 2 drops casts <i>lesser restoration</i>; spending 5 drops casts <i>greater restoration</i>. Once all drops are used, the pendant becomes nonmagical.`, hasUses: true, variables: { uses: { value: 6, control: "both", min: 0, max: 6 } } },
+  { id: 132, name: "Deck of Wonder",         bulk: Bulk.PACKABLE, cost: "1800 gp", description: `*` },
+
+  { _section: "Gems of Enchantment" },
+  // ── GEMS OF ENCHANTMENT ──────────────────────────────────────────────────
+  { _rarity: "Uncommon" },
+  { id: 133, name: "Gem of Elemental Resistance", bulk: Bulk.PACKABLE, cost: "500 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> You can attach this gem to an item. Thereafter, you have resistance to the chosen damage type while that item is within your reach.`, variables: { element: { control: "select", value: "Fire", options: ELEMENT_OPTIONS } } },
+  { id: 134, name: "Gem of Returning Weapon",   bulk: Bulk.PACKABLE, cost: "500 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> You can attach this gem to a weapon. Thereafter, the weapon returns to your hand immediately after it is thrown to make a ranged attack.` },
+  { id: 135, name: "Gem of Shifting Weapon",    bulk: Bulk.PACKABLE, cost: "500 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> You can attach this gem to an item. Thereafter, as a bonus action you can change its form to one other simple or martial weapon (chosen when you attach the gem) or back.` },
+  { id: 136, name: "Gem of Elemental Weapon", bulk: Bulk.PACKABLE, cost: "500 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> You can attach this gem to a weapon. Thereafter, you can have the weapon deal damage of the chosen type.`, variables: { element: { control: "select", value: "Fire", options: ELEMENT_OPTIONS } } },
+  { id: 137, name: "Gem of Ghost-Strike",       bulk: Bulk.PACKABLE, cost: "500 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> You can attach this gem to a weapon. Thereafter, treat it as a <i>Ghost-Strike Weapon</i>.` },
+  { id: 138, name: "Gem of Aquatic Weapon",     bulk: Bulk.PACKABLE, cost: "500 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> You can attach this gem to a weapon. Thereafter, treat it as an <i>Aquatic Weapon</i>.` },
+  { id: 139, name: "Gem of Accuracy",           bulk: Bulk.PACKABLE, cost: "500 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> You can attach this gem to a weapon. Thereafter, when you have advantage on an attack roll with the weapon using Dexterity, Intelligence, Wisdom, or Charisma, you can reroll one of the dice once.` },
+  { id: 141, name: "Gem of Resilience",    bulk: Bulk.PACKABLE, cost: "500 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> You can attach this gem to an item. Thereafter, you have +1 to all saving throws while the gem is within reach.` },
+
+  { _rarity: "Rare" },
+  { id: 140, name: "Gem of Mastery",            bulk: Bulk.PACKABLE, cost: "800 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> You can attach this gem to a weapon. Thereafter, while attached, you have proficiency with that weapon and can use its weapon mastery.` },
+  { id: 142, name: "Gem of Creature Warning", bulk: Bulk.PACKABLE, cost: "800 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> You can attach this gem to an item. Thereafter, while that item is within your reach, you and allies within 30 feet have advantage on initiative rolls against creatures of the chosen type.`, variables: { creature: { control: "select", value: "Undead", options: CREATURE_OPTIONS } } },
+  { id: 143, name: "Gem of Excess",        bulk: Bulk.PACKABLE, cost: "800 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> When attuned, it occupies two attunement slots. You can attach this gem to a weapon. Thereafter, the first time you hit with the weapon each turn, you can deal an additional 1d4 damage of its damage type.` },
+  { id: 144, name: "Gem of Spell Storing", bulk: Bulk.PACKABLE, cost: "800 gp", description: `<i>(requires attunement)</i><br>This is a <i>Gem of Enchantment</i>. <i>You can spend 10 minutes attaching this gem to an item it specifies. It can be removed for 30gp as a downtime activity.</i> You can attach this gem to an item. Thereafter, it functions as a Ring of Spell Storing that can store one spell of up to 3rd level.` },
+
+  { _section: "Magical Items" },
+  // ── MAGICAL CURIOS ───────────────────────────────────────────────────────
+  { _rarity: "Common" },
+  // Common (240 gp)
+  { id: 145, name: "Cloak of Billowing",        bulk: Bulk.STOCK,    cost: "240 gp", description: `As a bonus action, you can cause this cloak to billow dramatically.` },
+  { id: 146, name: "Charlatan's Die",           bulk: Bulk.PACKABLE, cost: "240 gp", description: `Whenever you roll this six-sided die, you can control which number it rolls.` },
+  { id: 147, name: "Pole of Collapsing",        bulk: Bulk.PACKABLE,    cost: "240 gp", description: `While holding this 10-foot pole, you can use a bonus action to speak a command word and cause it to collapse into a 1-foot rod. Speaking the command word again causes the rod to extend back into a pole.` },
+  { id: 148, name: "Staff of Birdcalls",        bulk: Bulk.STOCK,    cost: "240 gp", category: "weapon", description: `This wooden staff has 10 charges. While holding it, you can use an action to expend 1 charge to create one of the following sounds within 60 feet: a finch's chirp, raven's caw, duck's quack, owl's hoot, turkey's gobble, seagull's cry, hummingbird's hum, or chicken's cluck. The staff regains 1d6+4 charges daily at dawn. If the last charge is expended, roll a d20; on a 1, the staff vanishes in a burst of feathers.`, hasUses: true, variables: { weapon: { control: "select", value: "Staff", options: ["Staff"] }, uses: { value: 10, control: "both", min: 0, max: 10 } } },
+  { id: 149, name: "Horn of Silent Alarm",      bulk: Bulk.PACKABLE, cost: "240 gp", description: `This horn has 4 charges. When you use an action to blow it, one creature of your choice within 600 feet that isn't deafened hears the horn's blare — no other creature hears it. The horn regains 1d4 charges daily at dawn.`, hasUses: true, variables: { uses: { value: 4, control: "both", min: 0, max: 4 } } },
+  { id: 150, name: "Cloak of Many Fashions",    bulk: Bulk.STOCK,    cost: "240 gp", description: `As a bonus action, you can change the style, color, and apparent quality of this cloak. It can duplicate the appearance of other cloaks but not their magical properties.` },
+  { id: 151, name: "Rope of Mending",           bulk: Bulk.STOCK,    cost: "240 gp", description: `You can cut this 50-foot coil of hempen rope into any number of pieces, then use an action to speak a command word and cause the pieces to knit back together. The pieces must be in contact with each other and not otherwise in use.` },
+  { id: 152, name: "Ring of Magic Sensitivity", bulk: Bulk.PACKABLE, cost: "240 gp", description: `This ring glows faintly when held to a magic item or object.` },
+  { id: 153, name: "Boots of False Tracks",     bulk: Bulk.PACKABLE,    cost: "240 gp", description: `While wearing these boots, you can choose to have them leave tracks like those of a different kind of humanoid of the same size.` },
+  { id: 154, name: "Ruby of the War Mage",      bulk: Bulk.PACKABLE, cost: "240 gp", description: `<i>(requires attunement)</i><br>Pressing this ruby against a weapon for 10 minutes attaches it. Thereafter, you can use that weapon as a spellcasting focus. the ruby can't be removed unless you detach it as a magic action, the weapon is destroyed, or your attunement to the ruby ends.` },
+  { id: 155, name: "Veteran's Cane",            bulk: Bulk.STOCK,    cost: "240 gp", category: 'weapon', description: `While holding this cane, you can use a bonus action to speak its command word, transforming it into a mundane longsword, or speak the command word again to return it to a cane.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Longsword"] } } },
+  { id: 156, name: "Moon-Touched Weapon",       bulk: Bulk.STOCK,    cost: "240 gp", description: `In darkness, this weapon sheds moonlight, creating bright light in a 10-foot radius and dim light for an additional 10 feet.`, variables: { weapon: { control: "select", value: "Longsword", options: SWORD_OPTIONS } } },
+
+  { _rarity: "Uncommon" },
+  { id: 157, name: "Pigskin Purse",               bulk: Bulk.STOCK,    cost: "500 gp", description: `This snouted pouch can store up to 2,500 gp. Once you have carried it for 24 hours, it bonds with you. While separated from it, you know its distance and direction and can command it to squeal, audible out to 300 feet, until it is returned or you command it to stop.` },
+  { id: 158, name: "Prismatic Ring",              bulk: Bulk.PACKABLE, cost: "500 gp", description: `<i>(requires attunement)</i><br>This opalescent glass ring functions as a spellcasting focus. While wearing it, you can reshape cone spells you cast using it into 5-foot-wide lines twice the cone's range, or line spells into cones with half the line's length.` },
+  { id: 159, name: "Gloves of Eavesdropping",     bulk: Bulk.PACKABLE, cost: "500 gp", description: `While wearing these gloves, you can place your hand on a solid surface no more than 10 feet thick to hear through it as if you were on the other side.` },
+  { id: 160, name: "Purifying Waterskin",         bulk: Bulk.PACKABLE, cost: "500 gp", description: `This waterskin is always cool to the touch; liquid placed inside and food it pours upon becomes free of disease and poison. Drinking from it as a bonus action lets you make poison and disease saving throws with advantage for 1 minute.` },
+  { id: 161, name: "Meteor Shield",               bulk: Bulk.STOCK,    cost: "500 gp", category: "shield", description: `This shield can be used as a thrown weapon (range 60/120). On a hit, it deals 1d8 + your Strength modifier fire damage.` },
+  { id: 162, name: "Ring of the Locksmith",       bulk: Bulk.PACKABLE, cost: "500 gp", description: `You can use a magic action and tap an object with this ring to cast <i>knock</i> or <i>arcane lock</i> on it. This property can't be used again until you finish a long rest.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 163, name: "Brawler's Gloves",            bulk: Bulk.PACKABLE, cost: "500 gp", description: `As a bonus action, you can cock your arms to activate these gloves. For 1 hour, you gain the benefits of the Tavern Brawler feat. This property can't be used again until you finish a short or long rest.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 164, name: "Dredge Armor",               bulk: Bulk.STOCK,    cost: "500 gp", description: `<i>(requires attunement)</i><br>While wearing this armor, you can hold your breath underwater for 8 hours, and while standing on the bottom of a body of water, you have a swimming speed equal to your walking speed. While submerged, you can choose to fall through the water, descending up to 60 feet per round.`, variables: { armor: { control: "select", value: "Chain Mail", options: ARMOR_OPTIONS } } },
+  { id: 165, name: "Mask of Mimicry",             bulk: Bulk.PACKABLE,    cost: "500 gp", description: `While wearing this mask you can mimic any sounds you have heard, including voices. A creature can tell the sounds they are imitations with a successful DC 13 Wisdom (Insight) check.` },
+  { id: 166, name: "Death Mask of Bated Breath",  bulk: Bulk.PACKABLE,    cost: "500 gp", description: `While wearing this mask, you can use it as a holy symbol and you don't need to breathe.` },
+  { id: 167, name: "Veteran's Gorget",            bulk: Bulk.PACKABLE,    cost: "500 gp", description: `Immediately after rolling initiative, you can swap your result with one willing ally in the same combat.` },
+  { id: 168, name: "Gilled Collar",               bulk: Bulk.PACKABLE, cost: "500 gp", description: `<i>(requires attunement)</i><br>While wearing this collar, you can breathe underwater, and have a swim speed equal to your speed.` },
+  { id: 169, name: "Armor of Scuttling",          bulk: Bulk.STOCK,    cost: "500 gp", description: `<i>(requires attunement)</i><br>While wearing this armor, you can move at your normal speed while prone or when moving through a narrow opening sized for a smaller creature. Also, you having the prone condition does not give creatures advantage on attack rolls against you.`, variables: { armor: { control: "select", value: "Chain Mail", options: ARMOR_OPTIONS } } },
+  { id: 170, name: "Shield of Legends",           bulk: Bulk.STOCK,    cost: "500 gp", category: "shield", description: `<i>(requires attunement)</i><br>When you perform a heroic deed, you can have the moment magically etched into the shield over the next minute. The shield holds up to ten etchings; when full, the oldest fades to make room for a new one. While wielding the shield, you have advantage on saving throws against being frightened.` },
+  { id: 171, name: "Boots of Pouncing",           bulk: Bulk.PACKABLE,    cost: "500 gp", description: `<i>(requires attunement)</i><br>You can spend 10 feet of movement and use a bonus action to jump up to 30 feet. This property can't be used again until you finish a long rest.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 172, name: "Booming Belt",                bulk: Bulk.PACKABLE,    cost: "500 gp", description: `<i>(requires attunement)</i><br>As a magic action, you can shout a sentence audible out to 600 feet. As part of the same action, you can also cast <i>thunderwave</i> (DC 13). Once used, this property can't be used again until you finish a long rest.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 173, name: "Bull-Headed Belt",            bulk: Bulk.PACKABLE,    cost: "500 gp", description: `<i>(requires attunement)</i><br>When you are moved against your will, you can use your reaction to remain in place instead. This property can't be used again until you finish a short or long rest.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 174, name: "Craven Armor",                bulk: Bulk.STOCK,    cost: "500 gp", description: `<i>(requires attunement)</i><br>While wearing this armor, when you take the Disengage or Dodge action, your speed increases by 10ft until the end of the turn.`, variables: { armor: { control: "select", value: "Chain Mail", options: ARMOR_OPTIONS } } },
+  { id: 175, name: "Helm of Night",               bulk: Bulk.STOCK,    cost: "500 gp", description: `<i>(requires attunement)</i><br>While wearing this helm, you have Darkvision out to 30 feet. If you already have Darkvision, wearing the helm increases its range by 30 feet.` },
+  { id: 176, name: "Catseye Charm",               bulk: Bulk.PACKABLE, cost: "500 gp", description: `<i>(requires attunement)</i><br>While wearing this charm, you have a climbing speed of 20 feet and when you make a Dexterity (Acrobatics) check, treat a d20 roll of 9 or lower as a 10.` },
+  { id: 177, name: "Mantle of Eyes",              bulk: Bulk.STOCK,    cost: "500 gp", description: `<i>(requires attunement)</i><br>This cloak has 3 charges. As a bonus action, you can expend a charge to cause unblinking eyes to open across it. For 10 minutes, when you make a Wisdom (Perception) check, treat a d20 roll of 9 or lower as a 10. When you finish a long rest, regain all charges.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 178, name: "Boots of Continuous Step",    bulk: Bulk.PACKABLE,    cost: "500 gp", description: `<i>(requires attunement)</i><br>When you would fall, you can use your reaction to activate these boots. Until the end of your turn, you can move through the air at your current elevation as though walking on solid ground. This property can't be used again until you finish a short or long rest.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 179, name: "Spellsword's Vambrace",       bulk: Bulk.PACKABLE,    cost: "500 gp", description: `<i>(requires attunement by a spellcaster)</i><br>While wearing this vambrace, you know the <i>true strike</i> cantrip. When a creature provokes an opportunity attack from you, you can cast <i>true strike</i> targeting it instead of making the attack.` },
+  { id: 346, name: "Ring of Talent",              bulk: Bulk.PACKABLE,    cost: "500 gp", description: `<i>(requires attunement)</i><br>As a bonus action, you can gain proficiency in one weapon, skill, or tool of your choice for 10 minutes. You can't use this property again until you finish a long rest.`, hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 342, name: "Restless Scabbard",           bulk: Bulk.PACKABLE,    cost: "500 gp", description: `When you roll initiative, you can immediately draw the sword stowed in this scabbard. If you do, you gain a +1 bonus to the initiative roll.` },
+  { id: 343, name: "Instrument of the Beast",     bulk: Bulk.PACKABLE,    cost: "500 gp", description: `If you have proficiency with this kind of instrument, you can use a magic action to play it to cast <i>Dominate Beast</i> (DC 13). On each of your turns, you must use your action playing the instrument to maintain the spell. Once you use this property, you can't use it again until you finish a long rest.`, hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 344, name: "Witch's Ladder",               bulk: Bulk.PACKABLE,    cost: "500 gp", description: `<i>(requires attunement)</i><br>This knotted braid woven with feathers and small charms hides you from divination magic. While wearing it, you can't be targeted by divination spells or perceived through magical scrying sensors.` },
+
+  { _rarity: "Rare" },
+  { id: 180, name: "Container of Sharing",        bulk: Bulk.STOCK,    cost: "800 gp", description: `These magically linked containers share a single inventory. If the containers are more than 1-mile apart, their contents appears as a featureless black void and cannot be modified. The number of item slots available is equal to that of the smallest linked container.`, noCarry: true, containerRows: 4 },
+  { id: 182, name: "Circlet of Telepathy",        bulk: Bulk.PACKABLE,    cost: "800 gp", description: `While wearing this circlet, you can speak telepathically with any creature within 60 feet of you. The creature can respond telepathically in the same manner.` },
+  { id: 183, name: "Amulet of Telekinesis",       bulk: Bulk.PACKABLE, cost: "800 gp", description: `While wearing this amulet you know the <i>mage hand</i> spell. You cast it without verbal or somatic components, and can make the spectral hand <i>invisible</i> when you cast it. The spell's spellcasting ability is your Intelligence.` },
+  { id: 184, name: "Wisplight", aliases: ["Wisplight - Sun", "Wisplight - Moon", "Wisplight - Eclipse"], bulk: Bulk.PACKABLE, cost: "800 gp",
+    description: `You can cause this orb to hover and follow within 5 feet of you. On your turn, you can command it to shed light equivalent to the <i>light</i> spell or to stop shedding light.`,
+    descriptions: {
+      "Sun":     `This small glass orb has a <b>Sun</b> symbol etched into its surface. You can cause the orb to hover and follow within 5 feet of you. On your turn, you can command the orb to shed light equivalent to the <i>light</i> spell or to stop shedding light.<br>As a magic action, for 10 minutes the orb sheds light equivalent to the <i>daylight</i> spell. You can't use this property again until the next dawn.`,
+      "Moon":    `This small glass orb has a <b>Moon</b> symbol etched into its surface. You can cause the orb to hover and follow within 5 feet of you. On your turn, you can command the orb to shed light equivalent to the <i>light</i> spell or to stop shedding light.<br>As a magic action, for 10 minutes invisible creatures and objects within the orb's light become visible. You can't use this property again until the next dawn.`,
+      "Eclipse": `This small glass orb has an <b>Eclipse</b> symbol etched into its surface. You can cause the orb to hover and follow within 5 feet of you. On your turn, you can command the orb to shed light equivalent to the <i>light</i> spell or to stop shedding light.<br>You can make the orb's light visible only to creatures within its illuminated area.`,
+    },
+    variables: { variant: { control: "select", value: "Sun", options: ["Sun", "Moon", "Eclipse"] } } },
+  { id: 185, name: "Cloak of the Fence",          bulk: Bulk.STOCK,    cost: "800 gp", description: `<i>(requires attunement)</i><br>You can store up to 4 item slots of items in this cloak, turning them into symbols sewn upon it. These items are weightless and can be drawn as a bonus action. This cloak appears nonmagical to divination magic, such as <i>detect magic</i>.`, noCarry: true, containerRows: 2, weightlessContents: true },
+  { id: 186, name: "Mirror Shield",               bulk: Bulk.STOCK,    cost: "800 gp", category: "shield", description: `<i>(requires attunement)</i><br>While donning this shield, when you roll a 20 on a saving throw against a spell, or a creature rolls a 1 when targeting you with a spell attack, the source suffers the effect of the spell instead.` },
+  { id: 187, name: "Cape of the Butterfly",       bulk: Bulk.STOCK,    cost: "800 gp", description: `<i>(requires attunement)</i><br>As a magic action, you can unfurl this cape, revealing vivid eye patterns. A creature with Intelligence 5 or less within 60ft that can see makes an Intelligence saving throw (DC 13). If it fails, it has the <i>frightened</i> and <i>incapacitated</i> conditions for 1 minute; it tries to move as far from you as it can on its turns. This effect ends early if the creature takes damage. This property can't be used again until you finish a long rest.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 188, name: "Mawed Shield",                bulk: Bulk.STOCK,    cost: "800 gp", category: "shield", description: `<i>(requires attunement)</i><br>When a large or smaller creature within 5 feet rolls a 1 on a melee attack roll against you, you can use your reaction to have the shield bite it; it is dealt 1d8 piercing damage and grappled (escape DC 13). While grappled, it takes 1d8 piercing damage at the end of each of its turns. You can choose to end the grapple on your turn.` },
+  { id: 189, name: "Boots of Retracing Step",     bulk: Bulk.PACKABLE,    cost: "800 gp", description: `<i>(requires attunement)</i><br>As a magic action, you can create a shadowy set of footprints at your current location. Within the next minute, you can use a bonus action to teleport to that space, leaving behind a brief illusory trail. If the destination is occupied, the effect fails. Once used, this property can't be used again until you finish a long rest.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 190, name: "Cloak of Stillness",          bulk: Bulk.STOCK,    cost: "800 gp", description: `<i>(requires attunement)</i><br>This cloak has 3 charges; as a magic action you can expend a charge to become invisible for 1 minute. You remain invisible until you take damage or act in any way. When you finish a long rest, regain all charges.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 191, name: "Mothgaze Cloak",              bulk: Bulk.STOCK,    cost: "800 gp", description: `<i>(requires attunement)</i><br>As a bonus action, you can activate this cloak. For 10 minutes, creatures of your choosing that can see you within 30ft make Wisdom (Perception) and Wisdom (Insight) checks with disadvantage unless you are the focus of the check. You can't use this property again until you finish a short or long rest.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 192, name: "Bulwark Shield",              bulk: Bulk.STOCK,    cost: "800 gp", category: "shield", description: `<i>(requires attunement)</i><br>As a magic action, you can plant this shield, causing it to unfurl into a 5ft wide, 5ft tall wall (AC 15, 20 hit points). It provides half cover, or full cover if prone beside it, and can be used to block openings. The wall remains until it is reduced to 0 hit points, a creature makes a DC 15 Strength (Athletics) check to uproot it, or you use a bonus action to uproot it. After which, it folds back into a shield and cannot use this property again until you finish a long rest.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 194, name: "Dungeon Crawler's Rosaries",  bulk: Bulk.PACKABLE, cost: "800 gp", description: `These rosaries have 3 charges. You can expend a charge and spend 10 minutes meditating while holding these rosaries to attune to a magic item. All charges are restored when you finish a long rest.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 339, name: "Pauldron of the Bulette",    bulk: Bulk.STOCK,    cost: "800 gp", description: `<i>(requires attunement)</i><br>As a bonus action, you can cast <i>meld into stone</i> on yourself. The effect lasts for 1 minute. While merged, you can move through the stone at a speed of 20ft, but must remain within 5 feet of the surface. The movement creates visible quaking and a rumbling noise audible out to 30 feet. You can't use this property again until you finish a long rest.`, hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 340, name: "Silkstride Armor",           bulk: Bulk.STOCK,    cost: "800 gp", description: `<i>(requires attunement)</i><br>While wearing this armor, you can't be caught in webs, instead treating them as difficult terrain. As a bonus action, you can activate this armor. Then, for 10 minutes you have a climb speed equal to your speed and can move up, down, and across vertical surfaces and along ceilings, while leaving your hands free. You can't use this property again until you finish a long rest.`, hasUses: true, variables: { armor: { control: "select", value: "Chain Mail", options: ARMOR_OPTIONS }, uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 341, name: "Eye of Zalt",                bulk: Bulk.PACKABLE, cost: "800 gp", description: `<i>(requires attunement by a spellcaster)</i><br>This crystal orb hovers within 5 feet of you and can be used as a spellcasting focus. When you cast a spell, you can cause it to move up to 10 feet and have the spell originate from the orb instead of you. It then returns to within 5 feet of you immediately after the spell is cast.` },
+  { id: 202, name: "Compass of Secrets",          bulk: Bulk.PACKABLE, cost: "800 gp", description: `This compass has 3 charges and regains all expended charges when you finish a long rest. While holding it, you can use a magic action to expend 1 charge. If a secret door or trap is within 60 feet of you, you learn the direction of the nearest one.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+
+  { _rarity: "Very Rare" },
+  { id: 195, name: "Chest of Ambulation",         bulk: Bulk.BULKY,    cost: "1800 gp", description: `This chest has a dozen small feet. It has a speed of 30 feet and follows its owner within 30 feet unless commanded otherwise. It obeys verbal commands and holds up to 12 item slots of equipment.<br><b>Sentient.</b> The chest is sentient. It has 90 feet normal vision, Int: 8, Wis: 8, Cha: 8. It does not speak but understands Common and communicates via body language (stomping, shuffling).`, noCarry: true, containerRows: 6 },
+  { id: 196, name: "Tome of Forgotten Secrets",   bulk: Bulk.PACKABLE,    cost: "1800 gp", description: `You can spend 8 hours studying this tome and burn incense worth 100 gp to cast <i>legend lore</i>. The lore revealed is limited to information that was known at least a century ago.<br><b>Sentient.</b> The book is sentient. It speaks by changing the writing upon its pages, and can hear out to 30 feet, Int: 19, Wis: 15, Cha: 12.` },
+  { id: 197, name: "Amulet of Reaper's Mercy",    bulk: Bulk.PACKABLE, cost: "1800 gp", description: `<i>(requires attunement)</i><br>While wearing this amulet, when you make a death saving throw, a roll of 19 or 20 causes you to regain 1 hit point. Also, the first time you are reduced to 0 hit points after each long rest, you don't suffer exhaustion.` },
+  { id: 198, name: "Ring of Realms",              bulk: Bulk.PACKABLE, cost: "1800 gp", description: `<i>(requires attunement)</i><br>As a magic action you can cast <i>invisibility</i> and <i>see invisibility</i> on yourself. The effects only apply to creatures of the gem's type. You can't use this property again until you finish a long rest.`, hasUses: true, variables: { variant: { control: "select", value: "Diamond (Humanoid)", options: ["Diamond (Humanoid)", "Ruby (Monstrosity)", "Amethyst (Aberration)", "Moonstone (Fey)", "Obsidian (Fiend)", "Jet (Undead)"] }, uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 199, name: "Cape of the Cockerel",        bulk: Bulk.STOCK,    cost: "1800 gp", description: `<i>(requires attunement)</i><br>As a bonus action, you can make opportunity attacks have disadvantage against you, and gain a flying speed of 20 feet until the end of your turn. You can't do so again until the next sunrise.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 200, name: "Ring of Regeneration",        bulk: Bulk.PACKABLE, cost: "1800 gp", description: `<i>(requires attunement)</i><br>While wearing this ring, you can use a bonus action to activate it. When you do, you regain 2d4 + 2 hit points, and for 1 minute you regain 1 hit point at the start of each of your turns if you have at least 1 hit point. Once used, this property can't be used again until you finish a long rest.` , hasUses: true, variables: { uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 201, name: "Warded Armor",                bulk: Bulk.STOCK,    cost: "1800 gp", description: `<i>(requires attunement)</i><br>While wearing this armor, you have advantage on saving throws you make to avoid or end being charmed, cursed, frightened, or possessed by magical effects.`, variables: { armor: { control: "select", value: "Chain Mail", options: ARMOR_OPTIONS } } },
+
+  { _section: "Magical Weapons" },
+  // ── MAGICAL WEAPONS ──────────────────────────────────────────────────────
+  { _rarity: "Uncommon" },
+  { id: 203, name: "Aquatic Weapon",          bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>While submerged treat this as a +1 weapon, and it suffers no penalties for being underwater.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
+  { id: 204, name: "Ghost-Strike Weapon",     bulk: Bulk.STOCK, cost: "500 gp",  description: `This weapon can strike targets on the Ethereal Plane and its damage ignores resistances of creatures with <i>incorporeal movement</i>.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
+  { id: 205, name: "Titan-Slayer Weapon",     bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you attack a huge or larger creature with this weapon, treat it as a +1 weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
+  { id: 206, name: "Mage-Slayer Weapon",      bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>This weapon's attacks ignore the AC bonuses of spells. When you damage a concentrating spellcaster with this weapon, they have disadvantage on their concentration saving throw.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Dagger","Mace","Quarterstaff","Spear","Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd","Longsword","Maul","Morningstar","Rapier","Scimitar","Shortsword","Trident","Warhammer"] } } },
+  { id: 207, name: "Weapon of Creature Slaying",       bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When attacking the chosen creature type, treat it as a +1 weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS }, creature: { control: "select", value: "Undead", options: CREATURE_OPTIONS } } },
+  { id: 208, name: "Crestfall Weapon",        bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>While bloodied you can treat this as a +1 weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
+  { id: 209, name: "Branding Weapon",         bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you hit a creature with this weapon you can choose to brand it. Until the end of your next turn, the target sheds bright light in a 5-foot radius, and it can't benefit from the <i>invisible</i> condition.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
+  { id: 210, name: "Envious Weapon",          bulk: Bulk.STOCK, cost: "500 gp",  description: `When wielded with another <i>light</i> weapon, this weapon copies its magical properties and effects. Charges and uses are shared between both weapons. As a bonus action, you can transform this weapon into the kind of weapon in your other hand, or back.`, variables: { weapon: { control: "select", value: "Shortsword", options: LIGHT_WEAPON_OPTIONS } } },
+  { id: 211, name: "Keen Weapon",             bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you roll a 19 or 20 on an attack roll for this weapon, the hit is a critical hit.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Dagger","Handaxe","Sickle","Spear","Battleaxe","Glaive","Greataxe","Greatsword","Halberd","Longsword","Morningstar","Pike","Rapier","Scimitar","Shortsword","Trident","War Pick"] } } },
+  { id: 212, name: "Fell Weapon",             bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you score a critical hit with this weapon, you can roll two additional weapon damage dice and add them to the extra damage.`, variables: { weapon: { control: "select", value: "Longsword", options: BRUTAL_WEAPON_OPTIONS } } },
+  { id: 213, name: "Striving Weapon",         bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>Once each turn, you can reroll one weapon damage die for an attack made with this weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
+  { id: 214, name: "Boundless Weapon",        bulk: Bulk.STOCK, cost: "500 gp",  description: `<i>(requires attunement)</i><br>When you roll the maximum result on a weapon damage die from this weapon, roll an additional weapon damage die and add it as extra damage.`, variables: { weapon: { control: "select", value: "Longsword", options: BOUNDLESS_WEAPON_OPTIONS } } },
+
+  { _rarity: "Rare" },
+  { id: 215, name: "Patient Weapon",          bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>Once on your turn, you can forgo an attack with this weapon. If you do, the next attack you make with this weapon before the end of your next turn is made with advantage, even if you would have disadvantage.`, variables: { weapon: { control: "select", value: "Longsword", options: PATIENT_WEAPON_OPTIONS } } },
+  { id: 216, name: "Brutal Weapon",           bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>Once on your turn, you can forgo advantage on an attack with this weapon to have it deal an additional 1d8 damage of the weapon's damage type.`, variables: { weapon: { control: "select", value: "Longsword", options: BRUTAL_WEAPON_OPTIONS } } },
+  { id: 217, name: "Vigilant Weapon",         bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>Once on your turn, you can forgo an attack with this weapon. Then, if a creature moves into your reach before the start of your next turn, you can make an opportunity attack against it using this weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Quarterstaff","Spear","Glaive","Greatsword","Halberd","Longsword","Rapier","Shortsword","Trident","Pike"] } } },
+  { id: 218, name: "Shifting Weapon",         bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>As a <i>free object interaction</i> you can change this weapon's form to any simple or martial melee weapon. It is made of a single piece of unique metal, is immune to effects that corrode items, and cannot be silvered.`, variables: { weapon: { control: "select", value: "Longsword", options: MELEE_WEAPON_OPTIONS } } },
+  { id: 219, name: "Weapon of Echoes",        bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>A second Weapon of Echoes can be attuned without occupying an attunement slot. When this weapon hits a target already struck by a Weapon of Echoes this round, deal an additional 1d4 thunder damage.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Mace","Quarterstaff","Spear","Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd","Longsword","Maul","Morningstar","Rapier","Scimitar","Shortsword","Trident","Warhammer"] } } },
+  { id: 220, name: "Weapon of Mastery",       bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>You gain proficiency with this weapon and can use its weapon mastery. If you already could, choose one other mastery when you attune to this weapon. You can use the chosen mastery with this weapon. Only one weapon mastery property can apply to an attack.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
+  { id: 221, name: "Fatal Weapon",            bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>After dealing damage with this weapon, if the target has hit points equal to or less than the maximum result of this weapon's damage dice, they die.`, variables: { weapon: { control: "select", value: "Longsword", options: BRUTAL_WEAPON_OPTIONS } } },
+  { id: 222, name: "Mage Blade",              bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement by a spellcaster)</i><br>As a bonus action, you can expend a 2nd level or higher spell slot to treat this sword as a +1 weapon that deals Force damage until your next long rest.`, variables: { weapon: { control: "select", value: "Longsword", options: SWORD_OPTIONS } } },
+  { id: 223, name: "Weeping Weapon",          bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>A poison coating this weapon doesn't lose potency over time. As a bonus action, you can have a poison you coated this weapon with in the past bleed from the ouroboros encircled eye etched in its blade, magically coating it. This property can't be used again until you finish a long rest.`, hasUses: true, variables: { weapon: { control: "select", value: "Shortsword", options: ASSASSIN_WEAPON_OPTIONS }, uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 224, name: "Blink Weapon",            bulk: Bulk.STOCK, cost: "800 gp",  description: `<i>(requires attunement)</i><br>While holding this weapon, you can cast <i>misty step</i>. Once used, this property can't be used again until you finish a long rest. Immediately after you teleport no more than 30ft and make an attack with this weapon, you can teleport back to your previous space if it is unoccupied.`, hasUses: true, variables: { weapon: { control: "select", value: "Shortsword", options: ASSASSIN_WEAPON_OPTIONS }, uses: { value: 1, control: "both", min: 0, max: 1 } } },
+  { id: 225, name: "Elemental Sword",         bulk: Bulk.STOCK, cost: "800 gp",  category: "weapon", description: `<i>(requires attunement)</i><br>As a bonus action, while holding the hilt, you can form a longsword from elemental energy of the chosen type. While formed, it deals that damage type, sheds bright light in a 15-foot radius and dim light for an additional 15 feet, and has the <i>finesse</i> property. It remains formed until you dismiss it as a bonus action, or you drop or stow it.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Longsword"] }, element: { control: "select", value: "Acid", options: ["Acid","Cold","Fire","Lightning","Radiant","Thunder"] } } },
+  { id: 226, name: "Weapon of Slots",         bulk: Bulk.STOCK, cost: "800 gp",  description: `The total attunement cost of gems attached to this weapon is reduced by 1 (to a minimum of 1). You can remove a gem attached from this weapon for no cost.`, variables: { weapon: { control: "select", value: "Longsword", options: STANDARD_WEAPON_OPTIONS } } },
+
+  { _rarity: "Very Rare" },
+  { id: 227, name: "Sword of Life Stealing",  bulk: Bulk.STOCK, cost: "1800 gp", description: `<i>(requires attunement)</i><br>When you attack a creature with this weapon and roll a 20 on the d20 for the attack roll, that target takes an extra 15 Necrotic damage if it isn't a Construct or an Undead, and you gain temporary hit points equal to the amount of Necrotic damage taken.`, variables: { weapon: { control: "select", value: "Longsword", options: SWORD_OPTIONS } } },
+  { id: 228, name: "Weapon of Celestia",      bulk: Bulk.STOCK, cost: "1800 gp", description: `<i>(requires attunement)</i><br>When you hit a Fiend or Undead with this weapon, it is treated as vulnerable to the weapon's damage dice. When planted in the ground, after 1 hour, this weapon creates the effect of the <i>hallow</i> spell at its location. The effect ends when the weapon is uprooted.`, variables: { weapon: { control: "select", value: "Longsword", options: CELESTIA_WEAPON_OPTIONS } } },
+  { id: 229, name: "Frost Brand",             bulk: Bulk.STOCK, cost: "1800 gp", description: `<i>(requires attunement)</i><br>While holding this weapon, you have resistance to fire damage. In freezing temperatures, the weapon sheds bright light in a 10-foot radius and dim light for an additional 10 feet. The first time each turn you hit with this weapon, deal an extra 1d4 Cold damage. When you draw this weapon, you can extinguish all nonmagical flames within 30 feet of yourself. Once used, this property can't be used again for 1 hour.`, variables: { weapon: { control: "select", value: "Longsword", options: SWORD_OPTIONS } } },
+  { id: 230, name: "Flame-Tongue",            bulk: Bulk.STOCK, cost: "1800 gp", description: `<i>(requires attunement)</i><br>While holding this weapon, you can use a bonus action and speak a command word to ignite it. While ignited, it sheds bright light in a 40-foot radius, dim light for an additional 40 feet, and the first time each turn you hit with this weapon, deal an extra 1d6 Fire damage. It remains ignited until you use a bonus action to issue the command again or drop, stow, or sheathe the weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: SWORD_OPTIONS } } },
+  { id: 231, name: "Vorpal Sword",            bulk: Bulk.STOCK, cost: "1800 gp", category: "weapon", variables: { weapon: { control: "select", value: "Longsword", options: ["Longsword"] } }, description: `<i>(requires attunement)</i><br>This weapon ignores resistance to Slashing damage. When you roll a 20 on the d20 for an attack roll with this longsword against a creature, if the target has 40 hit points or fewer and has a head that can be severed, it is decapitated. If not dead or decapitated, it takes an additional 20 Slashing damage.` },
+  { id: 232, name: "Weapon of Notches",       bulk: Bulk.STOCK, cost: "1800 gp", description: `<i>(requires attunement)</i><br>This weapon bears 1d4-1 notches carved into its surface when found. Each time you kill a creature with it, a new notch magically appears. <b>Tell the DM whenever you get a multiple of 5.</b>`, hasUses: true, variables: { weapon: { control: "select", value: "Longsword", options: ["Longsword","Greatsword","Rapier","Scimitar","Shortsword","Battleaxe","Greataxe"] }, uses: { value: 0, control: "both", min: 0, max: 25 } } },
+  { id: 233, name: "Sentient Weapon",         bulk: Bulk.STOCK, cost: "1800 gp", description: `<i>(requires attunement)</i><br>Int: 10, Wis: 10, Cha: 10.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Dagger","Mace","Quarterstaff","Spear","Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd","Longsword","Maul","Morningstar","Rapier","Scimitar","Shortsword","Trident","Warhammer","Shortbow","Longbow"] } } },
+  { id: 234, name: "Questing Weapon",         bulk: Bulk.STOCK, cost: "1800 gp", description: `<i>(requires attunement)</i><br>A poem, story, or map etched into this weapon tells of a quest to unlock its power. Upon completing the quest, it becomes a magical weapon.`, variables: { weapon: { control: "select", value: "Longsword", options: ["Dagger","Mace","Quarterstaff","Spear","Battleaxe","Flail","Glaive","Greataxe","Greatsword","Halberd","Longsword","Maul","Morningstar","Rapier","Scimitar","Shortsword","Trident","Warhammer","Shortbow","Longbow"] } } },
+  { id: 345, name: "Luck Blade",              bulk: Bulk.STOCK, cost: "340 gp", costBase: "800 gp", description: `<i>(requires attunement)</i><br>When you roll a 1 on the d20 for an attack roll with this weapon, you can reroll the die and must use the new roll.<br><br>When this weapon is found, roll 1d3 d20s and record the numbers rolled. If this weapon is on your person, you can replace any D20 Test made by you or a creature that you can see with one of these rolls, expending it. This property can't be used again until you finish a long rest.`, hasUses: 'coins', variables: { weapon: { control: "select", value: "Longsword", options: [...SWORD_OPTIONS, "Dagger"] }, uses: { value: 3, control: "both", min: 0, max: 3 } } },
+
+  { _section: "Toolkits" },
+  // ── TOOLKITS ─────────────────────────────────────────────────────────────
+  { id: 235, name: "Camp Supplies",          bulk: Bulk.STOCK, cost: "10 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Wisdom</i><br>When you camp to short rest, if your Wisdom (Survival) check is less than 10, treat it as a 10.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 236, name: "Climber's Tools",       bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Strength</i><br>When you spend 10 minutes setting up a climb, this doesn't cost a use and if your Strength (Athletics) check is less than 10, treat it as a 10.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 237, name: "Smith's Tools",         bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Strength</i><br>Craft: Metal material objects.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 238, name: "Mason's Tools",         bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Strength</i><br>Craft: Stone material objects.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 239, name: "Woodcarver's Tools",    bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Dexterity</i><br>Craft: Wood material objects.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 240, name: "Leatherworker's Tools", bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Dexterity</i><br>Craft: Leather material objects.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 241, name: "Weaver's Tools",        bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Dexterity</i><br>Craft: Cloth material objects.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 242, name: "Calligrapher's Supplies", bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Intelligence</i><br>Craft: Spell scrolls.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 243, name: "Painter's Supplies",    bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Wisdom</i><br>Spend 10 minutes to make a recognizable image including a Holy Symbol or Druidic Focus.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 244, name: "Jeweler's Tools",       bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Intelligence</i><br>Spend 10 minutes to determine the value of a treasure. Craft: Jewellery.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 245, name: "Cook's Utensils",       bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Wisdom</i><br>Spend 10 minutes to detect spoiled or poisoned food.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 246, name: "Healer's Kit",          bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Wisdom</i><br>Spend 10 minutes to heal a creature by half its maximum hit dice. Hit dice are not expended, but the target can't benefit from this effect again until it completes a short rest.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 247, name: "Poisoner's Kit",        bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Intelligence</i><br>Craft: Antitoxin, Basic Poison.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 248, name: "Herbalism Kit",         bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Intelligence</i><br>Craft: Antitoxin, Potion of Healing.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 249, name: "Glassblower's Tools",   bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Intelligence</i><br>Craft: Glass material object.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 250, name: "Potter's Tools",        bulk: Bulk.STOCK, cost: "15 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Intelligence</i><br>Craft: Ceramic material object.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 251, name: "Thieves' Tools",        bulk: Bulk.STOCK, cost: "25 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Dexterity</i><br>When you spend 10 minutes to pick a lock, or disarm a trap, this doesn't cost a use.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 252, name: "Tinker's Tools",        bulk: Bulk.STOCK, cost: "25 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Dexterity</i><br>Spend a use of this item and spend 10 minutes to craft one of the following: Bell, Lanterns, Hunting Trap, Lock, Manacles, Mirror, Shovel, Signal Whistle, Tinderbox.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 253, name: "Alchemist's Supplies",  bulk: Bulk.STOCK, cost: "25 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Intelligence</i><br>Craft: Alchemist's item.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 254, name: "Disguise Kit",          bulk: Bulk.STOCK, cost: "25 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Charisma</i><br>Spend a use of this item and spend 1 hour to craft a costume. While wearing the costume crafted with this kit, you have advantage on checks to impersonate the person or type of person it represents.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { id: 255, name: "Navigator's Tools",     bulk: Bulk.STOCK, cost: "75 gp", description: `<i>Expend a use to give advantage on a check or saving throw that uses this toolkit.</i><br><i>Ability: Wisdom</i><br>When you spend 10 minutes to determine your location, if your Wisdom (Survival) check is less than 10, treat it as a 10.`, hasUses: true, variables: { uses: { value: 3, control: "both", min: 0, max: 3 } } },
+  { _section: "Vehicles & Mounts" },
+  // ── MOUNTS ───────────────────────────────────────────────────────────────
+  { id: 256, name: "Donkey / Mule",  bulk: Bulk.BULKY, cost: "20 gp",  description: `A sturdy beast of burden. Can carry heavy loads over long distances. Speed 40 ft.` },
+  { id: 257, name: "Draft Horse",    bulk: Bulk.BULKY, cost: "50 gp",  description: `A large, powerful horse bred for hauling. Speed 40 ft. Can pull a wagon or plow.` },
+  { id: 258, name: "Riding Horse",   bulk: Bulk.BULKY, cost: "75 gp",  description: `A well-trained horse suitable for travel and combat. Speed 60 ft.` },
+  { id: 259, name: "Warhorse",       bulk: Bulk.BULKY, cost: "400 gp", description: `A combat-trained horse. Speed 60 ft. Can be used as a mount in battle without being spooked.` },
+  { id: 260, name: "Sled Dog",       bulk: Bulk.BULKY, cost: "50 gp",  description: `<i>Exotic Mount</i><br>A trained sled dog. Four sled dogs are required to pilot a Sled. Speed 40 ft.` },
+  { id: 261, name: "Camel",          bulk: Bulk.BULKY, cost: "50 gp",  description: `<i>Exotic Mount</i><br>A desert-adapted mount. Speed 50 ft. Can go without water for up to two weeks.` },
+  { id: 262, name: "Axe Beak",       bulk: Bulk.BULKY, cost: "100 gp", description: `<i>Exotic Mount</i><br>A large flightless bird with a heavy bill. Speed 50 ft. Can be trained as a mount.` },
+  { id: 263, name: "Elephant",       bulk: Bulk.BULKY, cost: "600 gp", description: `<i>Exotic Mount</i><br>A massive, intelligent beast. Speed 40 ft. Can carry enormous loads and serve in battle.` },
+
+  // ── VEHICLES ─────────────────────────────────────────────────────────────
+  { id: 264, name: "Sled",         bulk: Bulk.BULKY, cost: "20 gp",  noCarry: true, containerRows: 20,  description: `40 item slots. Requires 4 sled dogs to pilot. Encumbrance limit is 5× the mounts' carry capacity.` },
+  { id: 265, name: "Small Wagon", bulk: Bulk.BULKY, cost: "75 gp",  noCarry: true, containerRows: 45, description: `90 item slots. Requires 1 large mount to pilot. Encumbrance limit is 5× the mount's carry capacity.` },
+  { id: 266, name: "Large Wagon", bulk: Bulk.BULKY, cost: "100 gp", noCarry: true, containerRows: 90, description: `180 item slots. Requires 2 large mounts to pilot. Encumbrance limit is 5× the mounts' carry capacity.` },
+
+  { _section: "Valuables" },
+  // Gems and Jewelry: use the value counter to track worth in gp
+  { id: 267, name: "Gems",    bulk: Bulk.PACKABLE, treasure: true, editableCost: true, description: `Precious or semi-precious stones.` },
+  { id: 268, name: "Jewelry", bulk: Bulk.PACKABLE, treasure: true, editableCost: true, description: `Rings, necklaces, bracelets, or other ornaments.` },
+
+  // Ingots — fixed value, Stock
+  { id: 269, name: "Copper Ingot",        bulk: Bulk.STOCK, treasure: true, cost: "125 gp",    description: `A refined copper ingot worth 125 gp.` },
+  { id: 270, name: "Iron / Silver Ingot", bulk: Bulk.STOCK, treasure: true, cost: "250 gp",    description: `A refined iron or silver ingot worth 250 gp.` },
+  { id: 271, name: "Gold Ingot",          bulk: Bulk.STOCK, treasure: true, cost: "500 gp",    description: `A refined gold ingot worth 500 gp.` },
+  { id: 272, name: "Mithral Ingot",       bulk: Bulk.STOCK, treasure: true, cost: "500 gp",    description: `A refined mithral ingot worth 500 gp.` },
+  { id: 273, name: "Adamantine Ingot",    bulk: Bulk.STOCK, treasure: true, cost: "500 gp",    description: `A refined adamantine ingot worth 500 gp.` },
+
+  // Nuggets — variable value range, Bulky
+  { id: 274, name: "Copper Nugget",        bulk: Bulk.BULKY, treasure: true, editableCost: true, cost: "50–125 gp",  description: `A raw copper nugget. Worth 50–125 gp depending on size and purity.` },
+  { id: 275, name: "Iron / Silver Nugget", bulk: Bulk.BULKY, treasure: true, editableCost: true, cost: "100–250 gp", description: `A raw iron or silver nugget. Worth 100–250 gp depending on size and purity.` },
+  { id: 276, name: "Gold Nugget",          bulk: Bulk.BULKY, treasure: true, editableCost: true, cost: "200–500 gp", description: `A raw gold nugget. Worth 200–500 gp depending on size and purity.` },
+  { id: 277, name: "Mithral Nugget",       bulk: Bulk.BULKY, treasure: true, editableCost: true, cost: "200–500 gp", description: `A raw mithral nugget. Worth 200–500 gp depending on size and purity.` },
+  { id: 278, name: "Adamantine Nugget",    bulk: Bulk.BULKY, treasure: true, editableCost: true, cost: "200–500 gp", description: `A raw adamantine nugget. Worth 200–500 gp depending on size and purity.` },
+
+  { _section: "Potions" },
+  // ── POTIONS ───────────────────────────────────────────────────────────────
+  { _rarity: "Common" },
+  { id: 279, name: "Potion of Darkvision",       bulk: Bulk.PACKABLE, cost: "60 gp",  description: `When you drink this potion you gain darkvision out to 60 feet for 1 hour (if you already have Darkvision, its range extends by 60 feet).` },
+  { id: 280, name: "Potion of Water Breathing",  bulk: Bulk.PACKABLE, cost: "60 gp",  description: `You can breathe underwater for 1 hour after drinking this potion.` },
+  { id: 281, name: "Potion of Climbing",         bulk: Bulk.PACKABLE, cost: "60 gp",  description: `When you drink this potion, you gain a climbing speed equal to your walking speed for 1 hour. During this time, you have advantage on Strength (Athletics) checks you make to climb.` },
+  { id: 282, name: "Potion of Animal Friendship",bulk: Bulk.PACKABLE, cost: "60 gp",  description: `When you drink this potion, you can cast the animal friendship spell (save DC 13) for 1 hour at will.`, linkedSpell: "Animal Friendship" },
+  { _rarity: "Uncommon" },
+  { id: 283, name: "Potion of Elemental Breath", bulk: Bulk.PACKABLE, cost: "60 gp", description: `After drinking this potion, you can use a bonus action to exhale Elemental at a target within 30 feet of you. The target must make a DC 13 Dexterity saving throw, taking 4d6 Elemental damage on a failed save, or half as much damage on a successful one. The effect ends after you exhale the Elemental three times or when 1 hour has passed.`, variables: { element: { control: "select", value: "Fire", options: ["Acid","Cold","Fire","Lightning","Poison","Thunder"] } } },
+  { id: 284, name: "Philter of Love",            bulk: Bulk.PACKABLE, cost: "60 gp",  description: `The next time you see a creature within 10 minutes after drinking this philter, you become charmed by that creature for 1 hour. If the creature is of a species and gender you are normally attracted to, you regard it as your true love while you are charmed.` },
+  { id: 285, name: "Potion of Elemental Resistance", bulk: Bulk.PACKABLE, cost: "60 gp", description: `When you drink this potion, you have Resistance to Elemental damage for 1 hour.`, variables: { element: { control: "select", value: "Fire", options: ELEMENT_OPTIONS } } },
+  { id: 286, name: "Potion of Greater Healing",  bulk: Bulk.PACKABLE, cost: "60 gp",  description: `You regain 4d4+4 hit points when you drink this potion.` },
+  { _rarity: "Rare" },
+  { id: 287, name: "Potion of Mind Reading",     bulk: Bulk.PACKABLE, cost: "120 gp", description: `When you drink this potion, you gain the effect of the detect thoughts spell (save DC 13).`, linkedSpell: "Detect Thoughts" },
+  { id: 288, name: "Potion of Growth",           bulk: Bulk.PACKABLE, cost: "120 gp", description: `When you drink this potion, you gain the "enlarge" effect of the enlarge/reduce spell for 1d4 hours (no concentration required).`, linkedSpell: "Enlarge/Reduce" },
+  { id: 289, name: "Elixir of Health",           bulk: Bulk.PACKABLE, cost: "120 gp", description: `When you drink this potion, it removes the blinded, deafened, paralyzed, and poisoned conditions.` },
+  { id: 290, name: "Potion of Superior Healing", bulk: Bulk.PACKABLE, cost: "120 gp", description: `You regain 8d4+8 hit points when you drink this potion.` },
+  { _rarity: "Very Rare" },
+  { id: 291, name: "Potion of Invisibility",     bulk: Bulk.PACKABLE, cost: "500 gp", description: `When you drink this potion, you become invisible for 1 hour. Anything you wear or carry is invisible with you. The effect ends early if you attack or cast a spell.` },
+  { id: 292, name: "Potion of Gaseous Form",     bulk: Bulk.PACKABLE, cost: "500 gp", description: `When you drink this potion, you gain the effect of the gaseous form spell for 1 hour (no concentration required) or until you end the effect as a bonus action.`, linkedSpell: "Gaseous Form" },
+  { id: 293, name: "Potion of Speed",            bulk: Bulk.PACKABLE, cost: "500 gp", description: `When you drink this potion, you gain the effect of the haste spell for 1 minute (no concentration required) without suffering the wave of lethargy that typically occurs when the effect ends.`, linkedSpell: "Haste" },
+  { id: 294, name: "Potion of Heroism",          bulk: Bulk.PACKABLE, cost: "500 gp", description: `For 1 hour after drinking it, you gain 10 temporary hit points that last for 1 hour. For the same duration, you are under the effect of the bless spell (no concentration required).`, linkedSpell: "Bless" },
+  { id: 295, name: "Potion of Flying",           bulk: Bulk.PACKABLE, cost: "500 gp", description: `When you drink this potion, you gain a flying speed equal to your walking speed for 1 hour and can hover. If you're in the air when the potion wears off, you fall unless you have some other means of staying aloft.` },
+  { id: 296, name: "Potion of Giant Strength",   bulk: Bulk.PACKABLE, cost: "500 gp", description: `When you drink this potion, your Strength score changes to 21 for 1 hour. The potion has no effect on you if your Strength is equal to or greater than that score.` },
+  { id: 298, name: "Potion of Vitality",         bulk: Bulk.PACKABLE, cost: "500 gp", description: `When you drink this potion, it removes any exhaustion you are suffering and cures any disease or poison affecting you. For the next 24 hours, you regain the maximum number of hit points for any Hit Die you spend.` },
+
+  { _section: "Spell Scrolls" },
+  { _rarity: "Cantrip" },
+  { id: 299, name: "Scroll of Light",            bulk: Bulk.PACKABLE, cost: "40 gp", linkedSpell: "Light" },
+  { id: 300, name: "Scroll of Blade Ward",       bulk: Bulk.PACKABLE, cost: "40 gp", linkedSpell: "Blade Ward" },
+  { id: 301, name: "Scroll of Minor Illusion",   bulk: Bulk.PACKABLE, cost: "40 gp", linkedSpell: "Minor Illusion" },
+  { id: 302, name: "Scroll of Message",          bulk: Bulk.PACKABLE, cost: "40 gp", linkedSpell: "Message" },
+  { id: 303, name: "Scroll of Mending",          bulk: Bulk.PACKABLE, cost: "40 gp", linkedSpell: "Mending" },
+  { id: 304, name: "Scroll of Resistance",       bulk: Bulk.PACKABLE, cost: "40 gp", linkedSpell: "Resistance" },
+  { id: 305, name: "Scroll of Sorcerous Burst",  bulk: Bulk.PACKABLE, cost: "40 gp", linkedSpell: "Sorcerous Burst" },
+  { id: 306, name: "Scroll of Fire Bolt",        bulk: Bulk.PACKABLE, cost: "40 gp", linkedSpell: "Fire Bolt" },
+  { id: 307, name: "Scroll of Eldritch Blast",   bulk: Bulk.PACKABLE, cost: "40 gp", linkedSpell: "Eldritch Blast" },
+
+  { _rarity: "1st Level" },
+  { id: 308, name: "Scroll of Feather Fall",              bulk: Bulk.PACKABLE, cost: "60 gp", linkedSpell: "Feather Fall" },
+  { id: 309, name: "Scroll of Magic Missile",             bulk: Bulk.PACKABLE, cost: "60 gp", linkedSpell: "Magic Missile" },
+  { id: 310, name: "Scroll of Shield",                    bulk: Bulk.PACKABLE, cost: "60 gp", linkedSpell: "Shield" },
+  { id: 311, name: "Scroll of Charm Person",              bulk: Bulk.PACKABLE, cost: "60 gp", linkedSpell: "Charm Person" },
+  { id: 312, name: "Scroll of Detect Magic",              bulk: Bulk.PACKABLE, cost: "60 gp", linkedSpell: "Detect Magic" },
+  { id: 313, name: "Scroll of Detect Poison and Disease", bulk: Bulk.PACKABLE, cost: "60 gp", linkedSpell: "Detect Poison and Disease" },
+  { id: 314, name: "Scroll of Disguise Self",             bulk: Bulk.PACKABLE, cost: "60 gp", linkedSpell: "Disguise Self" },
+  { id: 315, name: "Scroll of Sleep",                     bulk: Bulk.PACKABLE, cost: "60 gp", linkedSpell: "Sleep" },
+  { id: 316, name: "Scroll of Healing Word",              bulk: Bulk.PACKABLE, cost: "60 gp", linkedSpell: "Healing Word" },
+  { id: 317, name: "Scroll of Cure Wounds",               bulk: Bulk.PACKABLE, cost: "60 gp", linkedSpell: "Cure Wounds" },
+
+  { _rarity: "2nd Level" },
+  { id: 318, name: "Scroll of Mirror Image",       bulk: Bulk.PACKABLE, cost: "100 gp", linkedSpell: "Mirror Image" },
+  { id: 319, name: "Scroll of Misty Step",         bulk: Bulk.PACKABLE, cost: "100 gp", linkedSpell: "Misty Step" },
+  { id: 320, name: "Scroll of Hold Person",        bulk: Bulk.PACKABLE, cost: "100 gp", linkedSpell: "Hold Person" },
+  { id: 321, name: "Scroll of Invisibility",       bulk: Bulk.PACKABLE, cost: "100 gp", linkedSpell: "Invisibility" },
+  { id: 322, name: "Scroll of Spider Climb",       bulk: Bulk.PACKABLE, cost: "100 gp", linkedSpell: "Spider Climb" },
+  { id: 323, name: "Scroll of Lesser Restoration", bulk: Bulk.PACKABLE, cost: "100 gp", linkedSpell: "Lesser Restoration" },
+  { id: 324, name: "Scroll of Levitate",           bulk: Bulk.PACKABLE, cost: "100 gp", linkedSpell: "Levitate" },
+  { id: 325, name: "Scroll of Darkness",           bulk: Bulk.PACKABLE, cost: "100 gp", linkedSpell: "Darkness" },
+  { id: 326, name: "Scroll of Aid",                bulk: Bulk.PACKABLE, cost: "100 gp", linkedSpell: "Aid" },
+  { id: 327, name: "Scroll of Prayer of Healing",  bulk: Bulk.PACKABLE, cost: "100 gp", linkedSpell: "Prayer of Healing" },
+
+  { _rarity: "3rd Level" },
+  { id: 328, name: "Scroll of Fireball",           bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Fireball" },
+  { id: 329, name: "Scroll of Counterspell",       bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Counterspell" },
+  { id: 330, name: "Scroll of Fly",                bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Fly" },
+  { id: 331, name: "Scroll of Lightning Bolt",     bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Lightning Bolt" },
+  { id: 332, name: "Scroll of Dispel Magic",       bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Dispel Magic" },
+  { id: 333, name: "Scroll of Haste",              bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Haste" },
+  { id: 334, name: "Scroll of Leomund's Tiny Hut", bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Leomund's Tiny Hut" },
+  { id: 335, name: "Scroll of Major Image",        bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Major Image" },
+  { id: 336, name: "Scroll of Mass Healing Word",  bulk: Bulk.PACKABLE, cost: "180 gp", linkedSpell: "Mass Healing Word" },
+  { id: 337, name: "Scroll of Revivify",           bulk: Bulk.PACKABLE, cost: "500 gp", linkedSpell: "Revivify" },
+
+];

@@ -1,0 +1,13 @@
+{
+  "name": "hexmap-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node run-all.mjs",
+    "test:unit": "node unit/merge.test.mjs",
+    "test:integration": "node run-all.mjs --integration-only"
+  },
+  "dependencies": {
+    "puppeteer": "^25"
+  }
+}

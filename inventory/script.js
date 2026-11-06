@@ -1,782 +1,10375 @@
+// Prefixes used for inspector keys that do NOT reference a real slot in
+// state.containers — toggleShopItem/showShopItem (both in InventorySystem
+// below) open with container: null for all of these, so loadState()'s
+// container-slot re-targeting logic (see keepInspector handling) must
+// treat them as "not a container slot" rather than trying to parse them as
+// one. Keep this in sync with every prefix those two functions are called
+// with (grep for "inv.toggleShopItem(" / "inv.showShopItem(").
+window.INSPECTOR_KEY_NON_SLOT_PREFIXES = ['shop-', 'rand-', 'dm-listing-'];
 
-window.InventorySystem = ({ database, auth }) => {
-  let CELL_WIDTH;
-  let CELL_HEIGHT;
+window.InventorySystem = ({ database, auth, onChange, onCrossCharDrop, onShopPurchase, onDmListingDrop, onItemSell, onItemDestroy, isHiddenFromPlayer, onSound, onUiChange }) => {
+  const INSPECTOR_KEY_NON_SLOT_PREFIXES = window.INSPECTOR_KEY_NON_SLOT_PREFIXES;
 
-  const inspectorDiv = document.getElementById("inspector");
+  // ── STATE ──────────────────────────────────────────────────────────────
+  function createDefaultContainers() {
+    return [
+      { id: 'equipped', name: 'Equipped',      rows: 1, collapsed: false, permanent: true, slots: [[null,null]] },
+      { id: 'strapped', name: 'Strapped Gear', rows: 2, collapsed: false, permanent: true, slots: [[null,null],[null,null]] },
+    ];
+  }
 
-  window.addEventListener("DOMContentLoaded", () => {
-    const rootStyles = getComputedStyle(document.documentElement);
-    CELL_WIDTH = parseInt(rootStyles.getPropertyValue("--cell-width"));
-    CELL_HEIGHT = parseInt(rootStyles.getPropertyValue("--cell-height"));
-    drawInventory(inventory);
-  });
+  const CS_FIELDS = [
+    ['cs-class','charClass'],['cs-subclass','subclass'],['cs-race','race'],['cs-level','level'],
+    ['cs-str','str'],['cs-dex','dex'],['cs-con','con'],['cs-int','int'],['cs-wis','wis'],['cs-cha','cha'],
+    ['cs-str-save','strSave'],['cs-dex-save','dexSave'],['cs-con-save','conSave'],
+    ['cs-int-save','intSave'],['cs-wis-save','wisSave'],['cs-cha-save','chaSave'],
+    ['cs-athletics','athletics'],
+    ['cs-acrobatics','acrobatics'],['cs-sleight-of-hand','sleightOfHand'],['cs-stealth','stealth'],
+    ['cs-arcana','arcana'],['cs-history','history'],['cs-investigation','investigation'],
+    ['cs-nature','nature'],['cs-religion','religion'],
+    ['cs-animal-handling','animalHandling'],['cs-insight','insight'],['cs-medicine','medicine'],
+    ['cs-perception','perception'],['cs-survival','survival'],
+    ['cs-deception','deception'],['cs-intimidation','intimidation'],
+    ['cs-performance','performance'],['cs-persuasion','persuasion'],
+    ['cs-hp','hp'],['cs-hp-max','hpMax'],['cs-ac','ac'],['cs-temp-hp','tempHp'],
+    ['cs-hit-dice-remaining','hitDiceRemaining'],['cs-hit-dice-count','hitDiceCount'],['cs-hit-dice-type','hitDiceType'],
+    ['cs-speed','speed'],['cs-initiative','initiative'],
+    ['cs-proficiency','proficiency'],
+    ['cs-languages','languages'],['cs-tools-prof','toolsProf'],
+    ['cs-weapons-prof','weaponsProf'],['cs-armor-prof','armorProf'],
+  ];
 
-  const Bulk = {
-    PACKABLE: { id: 'packable', width: 1, height: 1 },
-    HANDHELD: { id: 'handheld', width: 1, height: 1 },
-    BULKY: { id: 'bulky', width: 2, height: 1 },
-    VERYBULKY: { id: 'verybulky', width: 2, height: 2}
+  const CLASS_HIT_DIE = {
+    artificer:8, barbarian:12, bard:8, cleric:8, druid:8,
+    fighter:10, monk:8, paladin:10, ranger:10, rogue:8,
+    sorcerer:6, warlock:8, wizard:6,
   };
 
-  let idCounter = 0;
+  const CLASS_SAVE_PROFS = {
+    artificer:  ['con','int'],
+    barbarian:  ['str','con'],
+    bard:       ['dex','cha'],
+    cleric:     ['wis','cha'],
+    druid:      ['int','wis'],
+    fighter:    ['str','con'],
+    monk:       ['str','dex'],
+    paladin:    ['wis','cha'],
+    ranger:     ['str','dex'],
+    rogue:      ['dex','int'],
+    sorcerer:   ['con','cha'],
+    warlock:    ['wis','cha'],
+    wizard:     ['int','wis'],
+  };
 
+  const CS_ID_MAP = Object.fromEntries(CS_FIELDS.map(([id, k]) => [k, id]));
 
-  function variableDisplayText() {
-    const lines = [this.name];
+  const PROF_KEYS = [
+    'strSaveProf','dexSaveProf','conSaveProf','intSaveProf','wisSaveProf','chaSaveProf',
+    'athleticsProf','acrobaticsProf','sleightOfHandProf','stealthProf',
+    'arcanaProf','historyProf','investigationProf','natureProf','religionProf',
+    'animalHandlingProf','insightProf','medicineProf','perceptionProf','survivalProf',
+    'deceptionProf','intimidationProf','performanceProf','persuasionProf',
+  ];
 
-    if (this.variables && Object.keys(this.variables).length > 0) {
-      for (const [key, meta] of Object.entries(this.variables)) {
-        const value = typeof meta === "object" && "value" in meta ? meta.value : meta;
-        lines.push(`${key}: ${value}`);
-      }
-    }
+  const SKILL_AB = {
+    athletics:'str',
+    acrobatics:'dex', sleightOfHand:'dex', stealth:'dex',
+    arcana:'int', history:'int', investigation:'int', nature:'int', religion:'int',
+    animalHandling:'wis', insight:'wis', medicine:'wis', perception:'wis', survival:'wis',
+    deception:'cha', intimidation:'cha', performance:'cha', persuasion:'cha',
+  };
 
-    return lines.join("<br>");
+  const EXPERTISE_SKILL_NAMES = {
+    athletics:'Athletics', acrobatics:'Acrobatics', sleightOfHand:'Sleight of Hand', stealth:'Stealth',
+    arcana:'Arcana', history:'History', investigation:'Investigation', nature:'Nature', religion:'Religion',
+    animalHandling:'Animal Handling', insight:'Insight', medicine:'Medicine', perception:'Perception', survival:'Survival',
+    deception:'Deception', intimidation:'Intimidation', performance:'Performance', persuasion:'Persuasion',
+  };
+
+  const FEAT_ABILITY_NAMES = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
+
+  const FEAT_OPTIONS = [
+    { id: 'ability-score-improvement', name: 'Ability Score Improvement' },
+    { id: 'dual-wielder',              name: 'Dual Wielder' },
+    { id: 'shield-master',             name: 'Shield Master' },
+    { id: 'tough',                     name: 'Tough' },
+  ];
+
+  const SAVE_AB = {
+    strSave:'str', dexSave:'dex', conSave:'con', intSave:'int', wisSave:'wis', chaSave:'cha',
+  };
+
+  function evalMath(str) {
+    const s = String(str).trim();
+    if (!s) return null;
+    if (!/^[0-9+\-*/(). ]+$/.test(s)) return null;
+    try {
+      const result = Function('"use strict"; return (' + s + ')')();
+      if (typeof result !== 'number' || !isFinite(result)) return null;
+      return Math.round(result);
+    } catch { return null; }
   }
 
+  // base AC and dex-cap for standard armor (keys match item names in items.js)
+  const ARMOR_AC_TABLE = {
+    'Padded Armor':          { base: 11, dexCap: Infinity },
+    'Leather Armor':         { base: 11, dexCap: Infinity },
+    'Studded Leather Armor': { base: 12, dexCap: Infinity },
+    'Hide Armor':            { base: 12, dexCap: 2 },
+    'Chain Shirt':           { base: 13, dexCap: 2 },
+    'Scale Mail':            { base: 14, dexCap: 2 },
+    'Breastplate':           { base: 14, dexCap: 2 },
+    'Half Plate':            { base: 15, dexCap: 2 },
+    'Ring Mail':             { base: 14, dexCap: 0 },
+    'Chain Mail':            { base: 16, dexCap: 0 },
+    'Splint Armor':          { base: 17, dexCap: 0 },
+    'Full Plate':            { base: 18, dexCap: 0 },
+  };
 
-  function containerDisplayText() {
-    const itemName = `<div class='container-title'>${this.name}</div>`;
-
-    if (!this.innerContainer) return itemName;
-
-    const innerItems = Object.values(this.innerContainer.items);
-    if (innerItems.length === 0) return itemName;
-
-    const listed = [];
-    const seen = new Set();
-    for (const item of innerItems) {
-      if (!seen.has(item)) {
-        listed.push(item.name);
-        seen.add(item);
+  function calcArmorAC(armorName, dexMod) {
+    const dex = typeof dexMod === 'number' && isFinite(dexMod) ? dexMod : 0;
+    // Direct match first, then substring match for magical armor (e.g. "Dredge Chain Mail")
+    let entry = ARMOR_AC_TABLE[armorName];
+    if (!entry) {
+      for (const [key, val] of Object.entries(ARMOR_AC_TABLE)) {
+        if (armorName.includes(key)) { entry = val; break; }
       }
     }
-
-    // If 5 or fewer items, show as single column list
-    if (listed.length <= 5) {
-      const lines = listed.map(name => `• ${name}`).join("<br>");
-      return `${itemName}<br>${lines}`;
-    }
-
-    // Otherwise, divide into two roughly even columns
-    const mid = Math.ceil(listed.length / 2);
-    const col1 = listed.slice(0, mid);
-    const col2 = listed.slice(mid);
-
-    const colHTML = `
-      <div class="container-columns">
-        <ul>${col1.map(name => `<li>• ${name}</li>`).join("")}</ul>
-        <ul>${col2.map(name => `<li>• ${name}</li>`).join("")}</ul>
-      </div>
-    `;
-
-    return itemName + colHTML;
+    if (!entry) return null;
+    return entry.base + Math.min(dex, entry.dexCap);
   }
 
-
-  class InventoryItem {
-    constructor({ name = "", bulk = Bulk.HANDHELD, container = null, displayText = null, variableDisplayText = null, description = "", variables = {} }) {
-      this.id = `item-${++idCounter}`;
-      this.name = name;
-      this.size = bulk;
-      this.description = description;
-      // Deep clone variables to avoid shared references
-      this.variables = JSON.parse(JSON.stringify(variables)); 
-      
-      if (container) {
-        this.innerContainer = new InventoryContainer(container);
-        this.innerContainer.ownerId = this.id;
-      }
-      if (displayText) {
-        this.displayText = displayText;
-      }
-      if (variableDisplayText) {
-        this.variableDisplayText = variableDisplayText;
-      }
-    }
-
-    isContainer() {
-      return !!this.innerContainer;
-    }
-
-    isPackable() {
-      return this.size.id === Bulk.PACKABLE.id;
-    }
-
-    getDisplayText() {
-      if (typeof this.displayText === "function") {
-        return this.displayText.call(this);
-      }
-      return this.name;
-    }
-
-    getVariableDisplayText() {
-      if (typeof this.variableDisplayText === "function") {
-        return this.variableDisplayText.call(this);
-      }
-      return ""; // fallback blank if no function assigned
-    }
+  function abilityMod(score) {
+    const n = parseInt(score);
+    if (isNaN(n)) return '—';
+    const mod = Math.floor((n - 10) / 2);
+    return mod >= 0 ? `+${mod}` : `${mod}`;
   }
 
+  function fmtMod(n) { return n >= 0 ? `+${n}` : `${n}`; }
 
-  class InventoryContainer {
-    constructor({ col, row }) {
-      this.col = col;
-      this.row = row;
-      this.items = {}; // key = "x,y"
-    }
-
-    getItem(x, y) {
-      return this.items[`${x},${y}`] || null;
-    }
-
-    getItemOrigin(item) {
-      for (const key in this.items) {
-        if (this.items[key] === item) return key.split(",").map(Number);
-      }
-      return null;
-    }
-
-    getItemOccupiedSlots(item) {
-      const origin = this.getItemOrigin(item);
-      if (!origin) return [];
-      const [ox, oy] = origin;
-      const slots = [];
-      for (let dx = 0; dx < item.size.width; dx++) {
-        for (let dy = 0; dy < item.size.height; dy++) {
-          slots.push({ x: ox + dx, y: oy + dy });
-        }
-      }
-      return slots;
-    }
-
-    removeItem(item) {
-      for (const slot of this.getItemOccupiedSlots(item)) {
-        delete this.items[`${slot.x},${slot.y}`];
-      }
-    }
-
-    addItem(item, x, y, skipPouchAuto = false) {
-      // If item is packable and container is NOT a pouch, and we are NOT skipping pouch auto-creation:
-      if (item.isPackable() && !isContainerPouch(this) && !skipPouchAuto) {
-        const pouch = createPouch();
-    
-        for (let dx = 0; dx < pouch.size.width; dx++) {
-          for (let dy = 0; dy < pouch.size.height; dy++) {
-            this.items[`${x + dx},${y + dy}`] = pouch;
-          }
-        }
-    
-        // Put the packable inside the pouch's inner container at (0, 0)
-        pouch.innerContainer.addItem(item, 0, 0);
-    
-        return true;
-      }
-    
-      // Normal add for other items and packables inside pouch
-      for (let dx = 0; dx < item.size.width; dx++) {
-        for (let dy = 0; dy < item.size.height; dy++) {
-          this.items[`${x + dx},${y + dy}`] = item;
-        }
-      }
-    
-      return true;
-    }
+  // Returns the effective ability score: base (what the user typed) + any bonuses
+  // granted by active features/feats. Returns null if the base score is blank.
+  function effectiveAbScore(ab) {
+    const base = parseInt(state[ab]);
+    if (isNaN(base)) return null;
+    let bonus = 0;
+    state.activeFeatures.forEach(fid => {
+      const fd = state.featureData[fid];
+      if (!fd) return;
+      if (fd.ab1 === ab) bonus += fd.bonus1 || 0;
+      if (fd.ab2 === ab) bonus += fd.bonus2 || 0;
+    });
+    return base + bonus;
   }
 
-  class Inventory {
-    containers = {
-      base: new InventoryContainer({ col: 2, row: 2 }),
+  const _csDefaults = Object.fromEntries(CS_FIELDS.map(([, k]) => [k, '']));
+  const _profDefaults = Object.fromEntries(PROF_KEYS.map(k => [k, false]));
+  const state = {
+    charName: '', carryCapacity: '', containers: createDefaultContainers(),
+    ..._csDefaults, ..._profDefaults,
+    attacks: [],
+    attackOrder: [],
+    weaponAttackData: {},
+    equippedArmor: '',
+    armorActive: true,
+    equippedShield: '',
+    shieldActive: false,
+    inspiration: false,
+    deathSaves: { successes: 0, failures: 0 },
+    exhaustion: 0,
+    subrace:          '',
+    activeFeatures:   [],
+    hiddenFeatures:   [],
+    featureData:      {},
+    notes: [],
+  };
+
+  // Feature accordion open/closed state, feature drag order, and note
+  // expand/collapse are per-viewer UI preferences, not character data.
+  // InventorySystem itself has no real Firebase connection (it's built with
+  // stub database/auth — see where it's constructed in CharacterManager), so
+  // persistence for this data is owned by CharacterManager, same as the rest
+  // of the app's Firebase I/O: CharacterManager feeds the loaded blob in via
+  // applyLocalUi(), and onUiChange() reports mutations back out to be saved
+  // under /inventory_user_ui/{uid}/{charId}, a path scoped to the logged-in
+  // viewer's own uid so it follows them across devices without ever being
+  // visible to (or overwritten by) anyone else viewing the same character.
+  let localFeatureUi    = { collapsed: {}, order: null, textCollapsed: {} };
+  let localNotesUi      = { open: {} };
+  let localSectionsUi   = { notes: false, otherProfs: false };
+  let localContainersUi = { collapsed: {} };
+
+  function normalizeFeatureUi(blob) {
+    return {
+      collapsed: (blob.collapsed && typeof blob.collapsed === 'object') ? blob.collapsed : {},
+      order: Array.isArray(blob.order) ? blob.order : null,
+      textCollapsed: (blob.textCollapsed && typeof blob.textCollapsed === 'object') ? blob.textCollapsed : {},
     };
   }
 
-  const itemDivCache = new Map();
-  const dynamicContainers = {};
+  function normalizeNotesUi(blob) {
+    return { open: (blob.notesOpen && typeof blob.notesOpen === 'object') ? blob.notesOpen : {} };
+  }
 
-  function drawInventory(inventory) {
-    const inventoryDiv = document.getElementById("inventory");
-    inventoryDiv.innerHTML = "";
-    const allContainers = { ...inventory.containers, ...dynamicContainers };
-    for (const [id, container] of Object.entries(allContainers)) {
-      const containerDiv = drawContainer(container, id);
-      inventoryDiv.appendChild(containerDiv);
-      updateItemPositions(container, containerDiv);
+  function normalizeSectionsUi(blob) {
+    const s = (blob.sections && typeof blob.sections === 'object') ? blob.sections : {};
+    return { notes: !!s.notes, otherProfs: !!s.otherProfs };
+  }
+
+  function normalizeContainersUi(blob) {
+    return { collapsed: (blob.containersCollapsed && typeof blob.containersCollapsed === 'object') ? blob.containersCollapsed : {} };
+  }
+
+  function applySectionOpen(toggle, body, open) {
+    if (!toggle || !body) return;
+    body.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.classList.toggle('cs-other-profs-open', open);
+  }
+
+  function getLocalUiSnapshot() {
+    return {
+      collapsed:          localFeatureUi.collapsed,
+      order:              localFeatureUi.order,
+      textCollapsed:       localFeatureUi.textCollapsed,
+      notesOpen:          localNotesUi.open,
+      sections:           localSectionsUi,
+      containersCollapsed: localContainersUi.collapsed,
+    };
+  }
+
+  function reportUiChange() {
+    if (onUiChange) onUiChange(getLocalUiSnapshot());
+  }
+
+  function saveLocalFeatureUi() { reportUiChange(); }
+
+  function getFeatureDisplayOrder() {
+    const base = state.activeFeatures;
+    const order = localFeatureUi.order;
+    if (!order || !order.length) return base;
+    const baseSet = new Set(base);
+    const ordered = order.filter(id => baseSet.has(id));
+    const orderedSet = new Set(ordered);
+    base.forEach(id => { if (!orderedSet.has(id)) ordered.push(id); });
+    return ordered;
+  }
+
+  function saveLocalNotesUi() { reportUiChange(); }
+
+  function genNoteId() {
+    return `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  }
+
+  function isNoteOpen(note) {
+    return localNotesUi.open[note.id] !== false;
+  }
+
+  function updateProfButtons() {
+    document.querySelectorAll('.cs-skill-dot[data-prof-key]').forEach(btn => {
+      const key = btn.dataset.profKey;
+      const proficient = !!state[key];
+      btn.classList.toggle('cs-proficient', proficient);
+      const isSave = btn.closest('.cs-save') !== null;
+      btn.textContent = isSave ? (proficient ? '■' : '□') : (proficient ? '●' : '○');
+    });
+  }
+
+  function updateCsCalculations() {
+    const level = parseInt(state.level);
+    const classKey = String(state.charClass || '').toLowerCase().trim();
+    const dieSides = CLASS_HIT_DIE[classKey] || null;
+
+    // Proficiency bonus: auto from level (2024 5e: ceil(level/4)+1), or manual
+    const profAuto = !isNaN(level) && level >= 1 ? Math.ceil(level / 4) + 1 : null;
+    const prof = (state.proficiency === '' || state.proficiency == null) && profAuto !== null
+      ? profAuto : (parseInt(state.proficiency) || 0);
+
+    const mods = {};
+    ['str','dex','con','int','wis','cha'].forEach(ab => {
+      const n = effectiveAbScore(ab);
+      mods[ab] = n !== null ? Math.floor((n - 10) / 2) : null;
+    });
+    const _isEditing = document.getElementById('stats-panel')?.classList.contains('editing');
+    ['str','dex','con','int','wis','cha'].forEach(ab => {
+      const modEl = document.getElementById(`cs-${ab}-mod`);
+      if (modEl) modEl.textContent = mods[ab] !== null ? fmtMod(mods[ab]) : '—';
+      const scoreEl = document.getElementById(`cs-${ab}`);
+      const eff = effectiveAbScore(ab);
+      const effEl = document.getElementById(`cs-${ab}-eff`);
+      if (effEl) effEl.textContent = (_isEditing && eff !== null) ? `(${eff})` : '';
+      if (!scoreEl || document.activeElement === scoreEl) return;
+      scoreEl.value = _isEditing ? (state[ab] || '') : (eff !== null ? String(eff) : '');
+    });
+
+    function applyAuto(id, stateKey, autoVal, rawNum) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const v = state[stateKey];
+      const isAuto = (v === '' || v == null) && autoVal !== null;
+      el.classList.toggle('cs-auto', isAuto);
+      if (document.activeElement === el) return;
+      if (isAuto) el.value = rawNum ? String(autoVal) : fmtMod(autoVal);
+      else el.value = v || '';
+    }
+
+    const exhPenalty = state.exhaustion || 0;
+
+    Object.entries(SAVE_AB).forEach(([saveKey, ab]) => {
+      const mod = mods[ab];
+      const base = mod !== null ? mod + (state[saveKey + 'Prof'] ? prof : 0) : null;
+      const auto = base !== null ? base - exhPenalty : null;
+      applyAuto(CS_ID_MAP[saveKey], saveKey, auto);
+      const el = document.getElementById(CS_ID_MAP[saveKey]);
+      if (el) el.classList.toggle('cs-exh-penalty', exhPenalty > 0 && mod !== null);
+    });
+
+    const expertiseSkills = new Set();
+    (state.activeFeatures || []).forEach(fid => {
+      const feat = FEATURES_LIBRARY.find(f => f.id === fid);
+      if (feat?.type === 'expertise') {
+        ((state.featureData[fid] || {}).slots || []).forEach(s => { if (s) expertiseSkills.add(s); });
+      }
+    });
+
+    Object.entries(SKILL_AB).forEach(([skill, ab]) => {
+      const mod = mods[ab];
+      const hasProficiency = !!state[skill + 'Prof'];
+      const profMult = hasProficiency && expertiseSkills.has(skill) ? 2 : 1;
+      const base = mod !== null ? mod + (hasProficiency ? prof * profMult : 0) : null;
+      const auto = base !== null ? base - exhPenalty : null;
+      applyAuto(CS_ID_MAP[skill], skill, auto);
+      const el = document.getElementById(CS_ID_MAP[skill]);
+      if (el) el.classList.toggle('cs-exh-penalty', exhPenalty > 0 && mod !== null);
+    });
+
+    [
+      { id: 'cs-passive-perc',       skill: 'perception', ab: 'wis' },
+      { id: 'cs-passive-insight',    skill: 'insight',    ab: 'wis' },
+      { id: 'cs-passive-deception',  skill: 'deception',  ab: 'cha' },
+      { id: 'cs-passive-stealth',    skill: 'stealth',    ab: 'dex' },
+    ].forEach(({ id, skill, ab }) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const mod = mods[ab];
+      const _hasProficiency = !!state[skill + 'Prof'];
+      const _profMult = _hasProficiency && expertiseSkills.has(skill) ? 2 : 1;
+      const autoSkill = mod !== null ? mod + (_hasProficiency ? prof * _profMult : 0) : null;
+      const effectiveSkill = (state[skill] === '' || state[skill] == null)
+        ? autoSkill
+        : parseInt(state[skill]);
+      el.textContent = (effectiveSkill !== null && !isNaN(effectiveSkill))
+        ? String(10 + effectiveSkill - exhPenalty)
+        : '—';
+      el.classList.toggle('cs-exh-penalty', exhPenalty > 0 && mod !== null);
+    });
+
+    // Initiative = DEX modifier
+    const initiativeAuto = mods['dex'] !== null ? mods['dex'] : null;
+    applyAuto('cs-initiative', 'initiative', initiativeAuto);
+
+    // Carry capacity = STR + 4
+    const strScore = effectiveAbScore('str');
+    const carryAutoVal = strScore !== null ? strScore : null;
+    const carryEl = document.getElementById('char-carry');
+    if (carryEl && document.activeElement !== carryEl) {
+      const isCarryAuto = (state.carryCapacity === '' || state.carryCapacity == null) && carryAutoVal !== null;
+      carryEl.classList.toggle('cs-auto', isCarryAuto);
+      if (isCarryAuto) carryEl.value = String(carryAutoVal);
+      else carryEl.value = state.carryCapacity || '';
+    }
+
+    // Proficiency bonus display
+    applyAuto('cs-proficiency', 'proficiency', profAuto);
+
+    // Hit die type from class
+    const dieTypeAuto = dieSides ? `d${dieSides}` : null;
+    applyAuto('cs-hit-dice-type', 'hitDiceType', dieTypeAuto, true);
+
+    // Hit dice count = level (+ bonus dice from Path of the Cursed features)
+    const bonusHitDice = (state.activeFeatures.includes('cursed-dark-well') ? 1 : 0)
+      + (state.activeFeatures.includes('cursed-curses-claim') ? 1 : 0);
+    const hitDiceCountAuto = !isNaN(level) && level >= 1 ? level + bonusHitDice : null;
+    applyAuto('cs-hit-dice-count', 'hitDiceCount', hitDiceCountAuto, true);
+
+    // effectiveMax used only for display label — remaining is always user-controlled
+    const effectiveMax = (state.hitDiceCount === '' || state.hitDiceCount == null) && hitDiceCountAuto !== null
+      ? hitDiceCountAuto : parseInt(state.hitDiceCount);
+
+    // Hit dice display label (non-edit mode: shows max+type only, e.g. "6d8")
+    const dispEl = document.getElementById('cs-hit-dice-display');
+    if (dispEl) {
+      const maxD = !isNaN(effectiveMax) ? effectiveMax : '—';
+      const type = (state.hitDiceType === '' || state.hitDiceType == null) ? (dieTypeAuto || '') : state.hitDiceType;
+      dispEl.textContent = `${maxD}${type}`;
+    }
+
+    // HP max: level 1 = max die + con; each subsequent = ceil((die+1)/2) + con
+    let hpMaxAuto = null;
+    if (dieSides && !isNaN(level) && level >= 1) {
+      const conMod = mods.con !== null ? mods.con : 0;
+      const avgDie = Math.ceil((dieSides + 1) / 2);
+      hpMaxAuto = dieSides + conMod + (level - 1) * (avgDie + conMod);
+    }
+    // Tough feat: +2 HP per level, tracked as a delta so manual edits stay consistent
+    let toughHpBonus = 0;
+    if (!isNaN(level) && level >= 1) {
+      state.activeFeatures.forEach(fid => {
+        const feat = FEATURES_LIBRARY.find(f => f.id === fid && f.type === 'feat');
+        if (!feat) return;
+        const fd = state.featureData[fid];
+        if (!fd || fd.feat !== 'tough') return;
+        const expected = 2 * level;
+        const applied = fd.toughBonus || 0;
+        toughHpBonus += expected;
+        if (expected !== applied) {
+          fd.toughBonus = expected;
+          if (state.hpMax !== '' && state.hpMax != null) {
+            state.hpMax = String(Math.max(0, (parseInt(state.hpMax) || 0) + (expected - applied)));
+          }
+        }
+      });
+    }
+    if (hpMaxAuto !== null) hpMaxAuto += toughHpBonus;
+    applyAuto('cs-hp-max', 'hpMax', hpMaxAuto, true);
+
+    // HP low-health tint
+    const hpEl = document.getElementById('cs-hp');
+    const hpContainer = hpEl && hpEl.closest('.cs-stat-big');
+    if (hpContainer) {
+      const hpVal = parseInt(state.hp);
+      const hpMax = (state.hpMax === '' || state.hpMax == null) && hpMaxAuto !== null
+        ? hpMaxAuto : parseInt(state.hpMax);
+      const isLow = !isNaN(hpVal) && !isNaN(hpMax) && hpMax > 0 && hpVal <= hpMax / 2;
+      hpContainer.classList.toggle('cs-hp-low', isLow);
+    }
+
+    // AC auto-calculation: armor-based or unarmored (10 + Dex [+ Con w/ Unarmored
+    // Defense]), plus shield
+    const acEl = document.getElementById('cs-ac');
+    const acStatEl = acEl && acEl.closest('.cs-ac-stat');
+    const armorInactive = state.equippedArmor && !state.armorActive;
+    const shieldInactive = state.equippedShield && !state.shieldActive;
+    if (acStatEl) acStatEl.classList.toggle('cs-ac-inactive', !!(armorInactive || shieldInactive));
+    if (acEl && document.activeElement !== acEl && (state.ac === '' || state.ac == null)) {
+      const dexMod = mods.dex !== null ? mods.dex : 0;
+      const conMod = mods.con !== null ? mods.con : 0;
+      const shieldBonus = (state.equippedShield && state.shieldActive) ? 2 : 0;
+      const useArmor = state.equippedArmor && state.armorActive;
+      // Unarmored Defense (Barbarian): 10 + Dex + Con while not wearing armor.
+      const unarmoredBonus = state.activeFeatures.includes('barbarian-unarmored-defense') ? conMod : 0;
+      const baseAC = useArmor ? calcArmorAC(state.equippedArmor, dexMod) : 10 + dexMod + unarmoredBonus;
+      const autoAC = baseAC !== null ? baseAC + shieldBonus : null;
+      if (autoAC !== null && !isNaN(autoAC)) {
+        acEl.value = String(autoAC);
+        acEl.classList.add('cs-auto');
+      }
+    } else if (acEl && state.ac !== '' && state.ac != null) {
+      acEl.classList.remove('cs-auto');
+    }
+
+    // Speed: default 30ft, every 2 exhaustion levels = -5ft
+    // Let Evil Take Hold (Path of the Cursed) adds +10ft while raging.
+    const speedEl = document.getElementById('cs-speed');
+    if (speedEl && document.activeElement !== speedEl) {
+      const isEmpty = state.speed === '' || state.speed == null;
+      const baseSpeed = isEmpty ? 30 : parseInt(state.speed);
+      const speedPenalty = Math.floor(exhPenalty / 2) * 5;
+      const ragingSpeedBonus = (isRaging() && state.activeFeatures.includes('cursed-let-evil-take-hold')) ? 10 : 0;
+      if (!isNaN(baseSpeed)) {
+        speedEl.value = String(Math.max(0, baseSpeed - speedPenalty + ragingSpeedBonus));
+        speedEl.classList.toggle('cs-auto', isEmpty || speedPenalty > 0 || ragingSpeedBonus > 0);
+        speedEl.classList.toggle('cs-exh-penalty', speedPenalty > 0);
+        speedEl.classList.toggle('cs-rage-boost', ragingSpeedBonus > 0);
+      } else {
+        speedEl.value = state.speed || '';
+        speedEl.classList.remove('cs-auto', 'cs-exh-penalty', 'cs-rage-boost');
+      }
+    }
+
+    renderAttacks();
+  }
+
+  function updateCsNameDisplay() {
+    const el = document.getElementById('cs-char-name-display');
+    if (el) el.textContent = state.charName || '—';
+  }
+
+  // ── ITEM LIBRARY (defined in items.js) ──────────────────────────────────
+  const Bulk           = window.Bulk;
+  const ITEM_LIBRARY   = window.ITEM_LIBRARY;
+  const WEAPON_OPTIONS = window.WEAPON_OPTIONS;
+  const ARMOR_OPTIONS    = window.ARMOR_OPTIONS;
+  const ELEMENT_OPTIONS  = window.ELEMENT_OPTIONS;
+
+
+  // ── HELPERS ─────────────────────────────────────────────────────────────
+  function resolveItemDescription(lib, slotData) {
+    if (!lib) return '';
+    let desc;
+    if (lib.descriptions) {
+      const vars = slotData.variables || {};
+      desc = lib.description || '';
+      for (const meta of Object.values(vars)) {
+        if (meta.control === 'select' && meta.value && lib.descriptions[meta.value] !== undefined) {
+          desc = lib.descriptions[meta.value];
+          break;
+        }
+      }
+    } else {
+      desc = lib.description || '';
+    }
+    const ev = slotData.variables?.element;
+    if (ev?.control === 'select' && ev.value) desc = desc.replace(/\bElemental\b/g, ev.value);
+    return desc;
+  }
+
+  function getLibraryItem(name) {
+    if (!name || typeof name !== 'string') return null;
+    const key = name.trim().toLowerCase();
+    return ITEM_LIBRARY.find(i => i.name && (
+      i.name.toLowerCase() === key ||
+      (i.aliases && i.aliases.some(a => a.toLowerCase() === key))
+    )) || null;
+  }
+
+  // Captures the instance-specific data a history log entry would otherwise
+  // lose once the item is sold/destroyed/moved: coin amounts (a Coin Purse
+  // holding real gold), any dropdown/select choice (weapon type, material),
+  // and free-text notes. Returns null when there's nothing notable to show.
+  function summarizeItemDetail(slotData) {
+    if (!slotData) return null;
+    const vars = slotData.variables || {};
+    const parts = [];
+
+    const COIN_KEYS = ['pp', 'gp', 'sp', 'cp'];
+    const coinParts = COIN_KEYS
+      .filter(k => vars[k] && vars[k].value > 0)
+      .map(k => `${vars[k].value}${k}`);
+    if (coinParts.length) parts.push(coinParts.join(' '));
+
+    Object.entries(vars).forEach(([key, meta]) => {
+      if (COIN_KEYS.includes(key) || key === 'qty') return;
+      if (meta && meta.control === 'select' && meta.value) parts.push(`${key}: ${meta.value}`);
+    });
+
+    if (slotData.notes && slotData.notes.trim()) parts.push(`note: "${slotData.notes.trim()}"`);
+
+    return parts.length ? parts.join(', ') : null;
+  }
+  window.summarizeItemDetail = summarizeItemDetail;
+
+  function getLibraryItemSection(name) {
+    let section = null;
+    for (const item of ITEM_LIBRARY) {
+      if (item._section) section = item._section;
+      if (item.name && item.name === name) return section;
+    }
+    return null;
+  }
+
+  function getEffectiveCategory(slotData) {
+    if (slotData.custom) {
+      return slotData.category || (slotData.isContainer ? 'container' : slotData.isWeapon ? 'weapon' : '');
+    }
+    // Derive from variables first (catches magical weapons/armor)
+    if (slotData.variables && slotData.variables.weapon) return 'weapon';
+    if (slotData.variables && slotData.variables.armor)  return 'armor';
+    // Check explicit category on the library item definition
+    const lib = getLibraryItem(slotData.name);
+    if (lib && lib.category) return lib.category;
+    // Fall back to section
+    const section = getLibraryItemSection(slotData.name);
+    if (section === 'Simple Weapons' || section === 'Martial Weapons' || section === 'Magical Weapons') return 'weapon';
+    if (section === 'Armor & Shields') return slotData.name === 'Shield' ? 'shield' : 'armor';
+    return null;
+  }
+
+  function computeDisplayName(slotData) {
+    let name = slotData.name || '';
+    const wv = slotData.variables && slotData.variables.weapon;
+    const av = slotData.variables && slotData.variables.armor;
+    const ev = slotData.variables && slotData.variables.element;
+    if (wv && wv.control === 'select' && wv.value) name = name.replace('Weapon', wv.value);
+    if (av && av.control === 'select' && av.value) name = name.replace('Armor', av.value);
+    if (ev && ev.control === 'select' && ev.value) name = name.replace('Elemental', ev.value);
+    const sv = slotData.variables && slotData.variables.spell;
+    if (sv && sv.control === 'select' && sv.value) name = name.replace('Spell Storing', sv.value);
+    const crv = slotData.variables && slotData.variables.creature;
+    if (crv && crv.control === 'select' && crv.value) name = name.replace('Creature', crv.value);
+    return name;
+  }
+
+  function isNoCarry(slotData) {
+    if (!slotData) return false;
+    if (slotData.isContainer) return true;
+    const lib = getLibraryItem(slotData.name);
+    return !!(lib && lib.noCarry);
+  }
+
+  function isContainerItem(slotData) {
+    if (!slotData) return false;
+    if (slotData.isContainer) return true;
+    const lib = getLibraryItem(slotData.name);
+    return !!(lib && lib.containerRows);
+  }
+
+  // Migrate old packableGroup data — flatten groups into individual items in slots
+  function flattenPackableGroups(containers) {
+    containers.forEach(container => {
+      for (let r = 0; r < container.slots.length; r++) {
+        for (let c = 0; c < 2; c++) {
+          const slot = container.slots[r][c];
+          if (!slot || !slot.packableGroup) continue;
+          const items = slot.items || [];
+          container.slots[r][c] = items[0] || null;
+          for (let i = 1; i < items.length; i++) {
+            let placed = false;
+            for (let rr = 0; rr < container.slots.length; rr++) {
+              if (!container.slots[rr][0]) { container.slots[rr][0] = items[i]; placed = true; break; }
+              if (!container.slots[rr][1]) { container.slots[rr][1] = items[i]; placed = true; break; }
+            }
+            if (!placed) { container.slots.push([items[i], null]); container.rows++; }
+          }
+        }
+      }
+    });
+  }
+
+  function containerHasItems(container) {
+    return container.slots.some(row => row[0] !== null || row[1] !== null);
+  }
+
+  function createLinkedContainer(slotData, srcContainerId, r, c) {
+    const lib = getLibraryItem(slotData.name);
+    const maxRows = slotData.isContainer
+      ? (slotData.containerRows || 2)
+      : (lib && lib.containerRows) || 2;
+    // Explicit override for containers whose real-world size doesn't match
+    // the default "maxRows * 2" fill-capacity formula (a Pouch has room for
+    // several small slots so items have somewhere to sit, but can't
+    // actually hold much weight — see containerCapacity in items.js).
+    const fillCapacity = slotData.isContainer
+      ? slotData.containerCapacity
+      : (lib && lib.containerCapacity);
+    const linked = {
+      id: `linked-${Date.now()}`,
+      name: slotData.name,
+      rows: 1,
+      maxRows,
+      collapsed: false,
+      slots: [[null, null]],
+      linkedTo: { containerId: srcContainerId, r, c },
+      ...(fillCapacity != null ? { fillCapacity } : {}),
+    };
+    slotData.containerId = linked.id;
+    state.containers.push(linked);
+  }
+
+  function updateCurrencyDisplay() {
+    const el = document.getElementById('coin-counter');
+    if (!el) return;
+    let pp = 0, gp = 0, sp = 0, cp = 0;
+    for (const container of state.containers) {
+      for (const row of container.slots) {
+        for (const slot of row) {
+          if (!slot || !slot.variables) continue;
+          const v = slot.variables;
+          if (v.pp) pp += v.pp.value || 0;
+          if (v.gp) gp += v.gp.value || 0;
+          if (v.sp) sp += v.sp.value || 0;
+          if (v.cp) cp += v.cp.value || 0;
+        }
+      }
+    }
+    el.innerHTML = [
+      `<span class="coin-pp"><i class="fas fa-coins coin-icon"></i> ${pp}pp</span>`,
+      `<span class="coin-gp"><i class="fas fa-coins coin-icon"></i> ${gp}gp</span>`,
+      `<span class="coin-sp"><i class="fas fa-coins coin-icon"></i> ${sp}sp</span>`,
+      `<span class="coin-cp"><i class="fas fa-coins coin-icon"></i> ${cp}cp</span>`,
+      `<span id="carry-compact" class="carry-compact-label"></span>`,
+    ].join('');
+    el.hidden = false;
+  }
+
+  function updateCarryDisplay() {
+    const used   = countCarry();
+    const usedEl = document.getElementById('carry-used');
+    const header = document.getElementById('char-header');
+    usedEl.textContent = used;
+    const strScore = effectiveAbScore('str');
+    const carryAutoVal = strScore !== null ? strScore : null;
+    const isCarryAuto = (state.carryCapacity === '' || state.carryCapacity == null) && carryAutoVal !== null;
+    const max  = isCarryAuto ? carryAutoVal : parseInt(state.carryCapacity);
+    const over = !isNaN(max) && max > 0 && used > max;
+    usedEl.classList.toggle('carry-over', over);
+    header.classList.toggle('carry-over', over);
+    const compact = document.getElementById('carry-compact');
+    if (compact) {
+      compact.innerHTML = '';
+      const icon = document.createElement('i');
+      icon.className = 'fas fa-weight-hanging';
+      icon.style.cssText = 'font-size:10px;opacity:0.7;';
+      compact.appendChild(icon);
+      const displayMax = !isNaN(max) ? String(max) : '—';
+      compact.appendChild(document.createTextNode(` ${used}/${displayMax}`));
+      compact.classList.toggle('carry-compact-over', over);
     }
   }
 
-  function handleDrop(e, dropX, dropY, containerId) {
-    e.preventDefault();
-    const target = getCellCoordinatesFromMouseEvent(e);
-    if (!target) return;
+  function countCarry() {
+    // Build the set of containers rooted in 'equipped' (direct and nested)
+    const exempt = new Set(['equipped']);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const c of state.containers) {
+        if (!exempt.has(c.id) && c.linkedTo && exempt.has(c.linkedTo.containerId)) {
+          exempt.add(c.id);
+          changed = true;
+        }
+      }
+    }
 
-    const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-    const src = getContainerById(data.sourceContainerId);
-    const dst = getContainerById(containerId);
+    let used = 0;
+    for (const container of state.containers) {
+      if (exempt.has(container.id)) continue;
+      const libC = container.linkedTo ? getLibraryItem(container.name) : null;
+      if (libC && libC.weightlessContents) continue;
+      if (libC && libC.fixedCarryWeight != null) continue;
+      for (const row of container.slots)
+        for (const slot of row)
+          if (slot && !isNoCarry(slot)) used += itemFillCost(slot, container);
+    }
 
-    const item = getItemFromData(data, src);
-    if (!item || !dst) return;
-
-    const ox = target.x - data.offsetX;
-    const oy = target.y - data.offsetY;
-
-    if (!isWithinBounds(item, dst, ox, oy)) return;
-
-    const conflict = collidesWith(item, dst, ox, oy);
-    if (conflict) return; // Customize this later if needed
-
-    if (handlePouchDrop(item, dst, data, ox, oy)) return;
-    if (handlePackableAutoPouch(item, dst, src, data, ox, oy)) return;
-
-    // Standard drop
-    dst.addItem(item, ox, oy, true);
-    if (!data.fromSearch) src.removeItem(item);
-
-    cleanupEmptyPouches();
+    return parseFloat(used.toFixed(2));
   }
 
-  function getContainerById(id) {
-    return inventory.containers[id] || dynamicContainers[id];
+  function itemFillCost(slotData, container) {
+    if (!slotData) return 0;
+    const lib = getLibraryItem(slotData.name);
+    if (slotData.category === 'ammunition' || lib?.category === 'ammunition') {
+      if (!container) return 0;
+      const cLib = container.linkedTo ? getLibraryItem(container.name) : null;
+      if (cLib?.fixedCarryWeight != null) return 0; // inside ammo cache or fixed-weight container
+      const qty = slotData.variables?.qty?.value || 1;
+      return qty * 0.25;
+    }
+    if (lib && lib.fixedCarryWeight != null) return lib.fixedCarryWeight;
+    const v = slotData.variables;
+    if (v && ('pp' in v || 'gp' in v || 'sp' in v || 'cp' in v)) {
+      const total = (v.pp?.value || 0) + (v.gp?.value || 0)
+                  + (v.sp?.value || 0) + (v.cp?.value || 0);
+      return Math.ceil(total / 50) * 0.25;
+    }
+    const id = slotData.bulk ? slotData.bulk.id
+             : (lib?.bulk || Bulk.STOCK).id;
+    const qty = v?.qty?.value || 1;
+    if (id === 'packable') return qty * 0.25;
+    if (id === 'bulky' || id === 'verybulky') return 2 * qty;
+    return 1 * qty;
   }
 
-  function getItemFromData(data, src) {
-    if (data.fromSearch) {
-      const baseItem = ITEM_LIBRARY.find(i => i.name === data.name);
-      if (!baseItem) return null;
+  function containerFillUsed(container) {
+    let fill = 0;
+    for (const row of container.slots)
+      for (const slot of row) fill += itemFillCost(slot, container);
+    return fill;
+  }
 
-      // Build a new object with expected props, fallback to baseItem props
-      const itemData = {
-        name: baseItem.name,
-        bulk: baseItem.bulk,
-        container: baseItem.container,
-        description: baseItem.description || "",
-        variables: baseItem.variables ? { ...baseItem.variables } : {},
-        displayText: baseItem.displayText,
-        variableDisplayText: baseItem.variableDisplayText,
-        ...data,  // override with any data props
+  function containerFillCapacity(container) {
+    const libCap = getLibraryItem(container.name)?.containerCapacity;
+    if (libCap != null) return libCap;
+    if (container.fillCapacity != null) return container.fillCapacity;
+    if (!container.maxRows) return Infinity;
+    return container.maxRows * 2;
+  }
+
+  function containerFillAvailable(container) {
+    return containerFillCapacity(container) - containerFillUsed(container);
+  }
+
+  function ensurePackableQty(slotData) {
+    if (!slotData) return;
+    const id = slotData.bulk ? slotData.bulk.id
+             : (getLibraryItem(slotData.name)?.bulk || Bulk.STOCK).id;
+    if (id !== 'packable') return;
+    slotData.variables = slotData.variables || {};
+    if (!('qty' in slotData.variables)) {
+      slotData.variables.qty = { value: 1, control: 'both', min: 1, max: 999 };
+    }
+  }
+
+  // ── DOM REFS ────────────────────────────────────────────────────────────
+  const containersEl = document.getElementById('containers');
+  const dropdownEl   = document.getElementById('autocomplete-dropdown');
+  const inspectorEl  = document.getElementById('inspector');
+  const detailPanelEl = document.getElementById('detail-panel');
+
+  // Active autocomplete context
+  let acContainer = null, acRow = -1, acCol = -1, acInput = null;
+  let ignoreNextBlur = false;
+
+  // Tracks which item is currently shown in the inspector (key = containerId-r-c or shop-name)
+  let inspectorItemKey    = null;
+  let _customEditKey      = null;
+  let _customEditOpen     = false;
+
+  // Drag state
+  let dragState        = null;
+  let ghostEl          = null;
+  let longPressTimer   = null;
+  let dragScrollVel    = 0;
+  let dragScrollRaf    = null;
+  let manualScrolling  = false;
+  let manualScrollLastY = 0;
+
+  // Edge auto-scroll while dragging an item. The hot zone is measured from
+  // the scrollable pane's own top/bottom edges (not the raw screen edges),
+  // so it never reaches into the always-visible character tab bar above it
+  // — that region simply isn't part of the pane's rect. The trash button
+  // floats over the bottom of the pane though, so its bounding box (plus a
+  // little padding) is explicitly carved out of the bottom hot zone: hovering
+  // it to delete should never also start a scroll.
+  //
+  // Reaching a character tab (to hand an item to another character) still
+  // means passing through the top band on the way there, since the tabs sit
+  // right above the pane. A dwell requirement handles that: entering the
+  // band doesn't scroll immediately, only staying there continuously past
+  // a dwell threshold does. That threshold is depth-dependent rather than
+  // flat: near the band's outer edge (shallow) you're likely just passing
+  // through toward a tab, so it takes longer (DRAG_SCROLL_DWELL_MAX) to
+  // confirm intent; right at the pane's true edge (deep) there's nothing
+  // above to reach for, so it's a clear "I want to scroll" and responds
+  // almost immediately (DRAG_SCROLL_DWELL_MIN).
+  const DRAG_SCROLL_EDGE      = 80;  // px band, measured inward from the pane edge
+  const DRAG_SCROLL_MAX       = 10;  // px/frame at the true edge
+  const DRAG_SCROLL_DWELL_MAX = 400; // ms required at the band's outer edge (shallow)
+  const DRAG_SCROLL_DWELL_MIN = 300; // ms required at the pane's true edge (deep)
+
+  let dragScrollZone      = null; // 'top' | 'bottom' | null — band currently in
+  let dragScrollZoneSince = 0;    // timestamp we entered it continuously
+
+  function resetDragScrollZone() {
+    dragScrollZone = null;
+    dragScrollZoneSince = 0;
+  }
+
+  function dragScrollTarget() {
+    const shopPanelEl = document.getElementById('shop-panel');
+    const isShopView = shopPanelEl && !shopPanelEl.hidden;
+    return document.getElementById(isShopView ? 'shop-scroll' : 'inv-scroll');
+  }
+
+  function computeDragScrollVel(clientX, clientY) {
+    const el = dragScrollTarget();
+    if (!el) { resetDragScrollZone(); return 0; }
+    const rect = el.getBoundingClientRect();
+
+    let zone = null;
+    let depth = 0;
+
+    if (clientY >= rect.top && clientY < rect.top + DRAG_SCROLL_EDGE) {
+      zone = 'top';
+      depth = (rect.top + DRAG_SCROLL_EDGE) - clientY;
+    } else if (clientY <= rect.bottom && clientY > rect.bottom - DRAG_SCROLL_EDGE) {
+      const tr = !_trashBtn.hidden ? _trashBtn.getBoundingClientRect() : null;
+      const pad = 16;
+      const overTrash = tr
+        && clientX >= tr.left - pad && clientX <= tr.right + pad
+        && clientY >= tr.top  - pad && clientY <= tr.bottom + pad;
+      if (!overTrash) {
+        zone = 'bottom';
+        depth = clientY - (rect.bottom - DRAG_SCROLL_EDGE);
+      }
+    }
+
+    if (!zone) { resetDragScrollZone(); return 0; }
+
+    const now = performance.now();
+    if (zone !== dragScrollZone) {
+      dragScrollZone = zone;
+      dragScrollZoneSince = now;
+    }
+
+    // f: 0 at the band's outer edge, 1 at the pane's true edge.
+    const f = Math.min(1, depth / DRAG_SCROLL_EDGE);
+    const requiredDwell = DRAG_SCROLL_DWELL_MIN + (DRAG_SCROLL_DWELL_MAX - DRAG_SCROLL_DWELL_MIN) * (1 - f);
+    if (now - dragScrollZoneSince < requiredDwell) return 0;
+
+    const speed = DRAG_SCROLL_MAX * f;
+    return zone === 'top' ? -speed : speed;
+  }
+
+  function dragScrollStep() {
+    if (!dragState || dragScrollVel === 0) { dragScrollRaf = null; return; }
+    const el = dragScrollTarget();
+    if (el) el.scrollTop += dragScrollVel;
+    dragScrollRaf = requestAnimationFrame(dragScrollStep);
+  }
+
+  // ── RENDER ──────────────────────────────────────────────────────────────
+  function growEquipped() {
+    const equipped = state.containers.find(c => c.id === 'equipped');
+    if (!equipped) return;
+    const hasEmptyRow = equipped.slots.some(row => row[0] === null && row[1] === null);
+    if (!hasEmptyRow) {
+      equipped.slots.push([null, null]);
+      equipped.rows++;
+    }
+  }
+
+  function shrinkEquipped() {
+    const equipped = state.containers.find(c => c.id === 'equipped');
+    if (!equipped) return;
+    while (equipped.slots.length > 1) {
+      const last = equipped.slots[equipped.slots.length - 1];
+      const prev = equipped.slots[equipped.slots.length - 2];
+      if (last[0] === null && last[1] === null && prev[0] === null && prev[1] === null) {
+        equipped.slots.pop();
+        equipped.rows--;
+      } else {
+        break;
+      }
+    }
+  }
+
+  function growStrapped() {
+    const strapped = state.containers.find(c => c.id === 'strapped');
+    if (!strapped) return;
+    const hasEmptyRow = strapped.slots.some(row => row[0] === null && row[1] === null);
+    if (!hasEmptyRow) {
+      strapped.slots.push([null, null]);
+      strapped.rows++;
+    }
+  }
+
+  function shrinkStrapped() {
+    const strapped = state.containers.find(c => c.id === 'strapped');
+    if (!strapped) return;
+    while (strapped.slots.length > 1) {
+      const last = strapped.slots[strapped.slots.length - 1];
+      const prev = strapped.slots[strapped.slots.length - 2];
+      if (last[0] === null && last[1] === null && prev[0] === null && prev[1] === null) {
+        strapped.slots.pop();
+        strapped.rows--;
+      } else {
+        break;
+      }
+    }
+  }
+
+  function growContainer(container) {
+    if (!container.maxRows) container.maxRows = container.rows;
+    const hasEmptyRow = container.slots.some(row => row[0] === null && row[1] === null);
+    if (!hasEmptyRow) {
+      container.slots.push([null, null]);
+      container.rows++;
+    }
+  }
+
+  function shrinkContainer(container) {
+    while (container.slots.length > 1) {
+      const last = container.slots[container.slots.length - 1];
+      const prev = container.slots[container.slots.length - 2];
+      if (last[0] === null && last[1] === null && prev[0] === null && prev[1] === null) {
+        container.slots.pop();
+        container.rows--;
+      } else {
+        break;
+      }
+    }
+  }
+
+  function renderContainers() {
+    containersEl.innerHTML = '';
+    state.containers.forEach(c => containersEl.appendChild(buildCard(c)));
+  }
+
+  function render() {
+    // Clear any accidentally persisted maxRows from strapped (it has no capacity cap)
+    const _strapped = state.containers.find(c => c.id === 'strapped');
+    if (_strapped) delete _strapped.maxRows;
+    growEquipped();
+    shrinkEquipped();
+    growStrapped();
+    shrinkStrapped();
+    state.containers.forEach(c => {
+      if (c.linkedTo) { growContainer(c); shrinkContainer(c); }
+    });
+    renderContainers();
+    updateCurrencyDisplay();
+    updateCarryDisplay();
+
+    // Refresh inspector name if panel is open for an inventory slot
+    if (inspectorItemKey && !inspectorItemKey.startsWith('shop-')
+        && !detailPanelEl.classList.contains('detail-collapsed')) {
+      const lastH = inspectorItemKey.lastIndexOf('-');
+      const prevH = inspectorItemKey.lastIndexOf('-', lastH - 1);
+      const cid = inspectorItemKey.substring(0, prevH);
+      const ir  = parseInt(inspectorItemKey.substring(prevH + 1, lastH));
+      const ic  = parseInt(inspectorItemKey.substring(lastH + 1));
+      const cnt = state.containers.find(c => c.id === cid);
+      const sd  = cnt && cnt.slots[ir] && cnt.slots[ir][ic];
+      if (sd) {
+        const _sdLib = getLibraryItem(sd.name);
+        const _sdEl  = document.getElementById('insp-name');
+        if (_sdLib && _sdLib.gridSymbol) _sdEl.innerHTML = `${_sdLib.gridSymbol}&nbsp;${_sdLib.name}`;
+        else _sdEl.textContent = sd.name || '';
+      }
+    }
+
+    populateArmorDatalist();
+    populateShieldDatalist();
+    syncEquippedContainer();
+    renderAttacks();
+    if (onChange) onChange();
+  }
+
+  function buildCard(container) {
+    const card = document.createElement('div');
+    const specialClass = container.id === 'equipped' ? ' card-equipped'
+                       : container.id === 'strapped'  ? ' card-strapped'
+                       : !container.permanent         ? ' card-added' : '';
+    const isOpen = container.linkedTo && !container.collapsed;
+    card.className = 'inv-card' + specialClass + (isOpen ? ' card-open' : '');
+    card.dataset.containerId = container.id;
+
+    const hdr = document.createElement('div');
+    hdr.className = 'inv-hdr';
+
+    const toggle = document.createElement('button');
+    toggle.className = 'inv-hdr-toggle';
+    let _capHtml = '';
+    if (container.linkedTo && container.maxRows) {
+      const _fillUsed = containerFillUsed(container);
+      // Re-derived from the item library on every render (not just read from
+      // whatever was stamped onto the container when it was first placed) so
+      // a capacity fix in items.js applies to containers created before the
+      // fix too, without needing a data migration.
+      const _libCap = getLibraryItem(container.name)?.containerCapacity;
+      const _fillCap = _libCap != null ? _libCap
+        : container.fillCapacity != null ? container.fillCapacity
+        : container.maxRows * 2;
+      const _over = _fillUsed > _fillCap + 0.001;
+      _capHtml = `<span class="container-capacity${_over ? ' container-capacity-over' : ''}">${parseFloat(_fillUsed.toFixed(2))}/${_fillCap}</span>`;
+    } else if (container.id === 'strapped') {
+      const _fillUsed = containerFillUsed(container);
+      const _fillCap  = 4;
+      const _over = _fillUsed > _fillCap + 0.001;
+      _capHtml = `<span class="container-capacity${_over ? ' container-capacity-over' : ''}">${parseFloat(_fillUsed.toFixed(2))}/${_fillCap}</span>`;
+    }
+    toggle.innerHTML = `<span>${container.name}${_capHtml}</span><span class="inv-chevron">${container.collapsed ? '▶' : '▼'}</span>`;
+    toggle.addEventListener('click', () => {
+      container.collapsed = !container.collapsed;
+      localContainersUi.collapsed[container.id] = container.collapsed;
+      reportUiChange();
+      render();
+    });
+
+    if (!container.permanent) {
+      const handle = document.createElement('button');
+      handle.className = 'container-drag-handle';
+      handle.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+      handle.title = 'Drag to reorder';
+      handle.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        startContainerDrag(container.id, card, e.pointerId, e.clientY);
+      });
+      hdr.appendChild(handle);
+    }
+
+    hdr.appendChild(toggle);
+    card.appendChild(hdr);
+
+    if (!container.collapsed) {
+      const grid = document.createElement('div');
+      grid.className = 'inv-grid';
+
+      container.slots.forEach((row, r) => {
+        grid.appendChild(buildSlot(container, r, 0, row[0]));
+        grid.appendChild(buildSlot(container, r, 1, row[1]));
+      });
+
+      card.appendChild(grid);
+    }
+
+    return card;
+  }
+
+
+  function buildSlot(container, r, c, slotData) {
+    const conflict = slotData && slotData.conflict;
+    const linkedContainer = slotData && slotData.containerId
+      ? state.containers.find(cnt => cnt.id === slotData.containerId)
+      : null;
+    const containerIsOpen = !!(linkedContainer && !linkedContainer.collapsed);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'slot'
+      + (containerIsOpen ? ' slot-container-open': '');
+    wrap.dataset.containerId = container.id;
+    wrap.dataset.r = r;
+    wrap.dataset.c = c;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'slot-input' + (slotData ? ' slot-filled' : '') + (conflict ? ' slot-conflict' : '');
+    input.value = slotData ? slotData.name : '';
+    input.placeholder = '—';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.enterKeyHint = 'done';
+
+    const prev = slotData ? slotData.name : '';
+    // typedValue tracks the user's live input independently of input.value, which
+    // some Android browsers reset via blur before keydown/keyup fires.
+    let typedValue = '';
+
+    input.addEventListener('focus', () => {
+      typedValue = input.value;
+      acContainer = container; acRow = r; acCol = c; acInput = input;
+      updateDropdown(input.value);
+    });
+
+    input.addEventListener('input', () => {
+      typedValue = input.value;
+      updateDropdown(input.value);
+    });
+
+    const commitFromTyped = () => {
+      if (!document.contains(input)) return; // element removed by a prior render()
+      const val = typedValue.trim();
+      typedValue = '';
+      if (val) commitSlot(val, container, r, c);
+      else if (slotData) clearSlot(container, r, c);
+      else closeDropdown();
+    };
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitFromTyped();
+      } else if (e.key === 'Escape') {
+        typedValue = '';
+        input.value = prev;
+        closeDropdown();
+        input.blur();
+      }
+    });
+
+    // Fallback for Samsung / Android keyboards that report Enter on keyup
+    // after IME composition (keydown fires with key='Unidentified' instead).
+    input.addEventListener('keyup', e => {
+      if (e.key === 'Enter') commitFromTyped();
+    });
+
+    input.addEventListener('blur', () => {
+      input.classList.remove('slot-editing');
+      if (ignoreNextBlur) { ignoreNextBlur = false; return; }
+      // Commit if the user typed something different (covers mobile "Next"/"Done"
+      // which fires blur without an Enter event). Safe on Android too — if blur
+      // fires before keyup, commitFromTyped() clears typedValue and renders,
+      // removing the input from the DOM so the keyup handler returns early.
+      if (typedValue.trim() && typedValue !== prev) {
+        commitFromTyped();
+        return;
+      }
+      typedValue = '';
+      input.value = prev;
+      closeDropdown();
+    });
+
+    wrap.appendChild(input);
+
+    if (slotData) {
+      const itemKey = `${container.id}-${r}-${c}`;
+      const isInspected = inspectorItemKey === itemKey && !detailPanelEl.classList.contains('detail-collapsed');
+
+      const label = document.createElement('span');
+      const isContainerItem2 = isNoCarry(slotData);
+      const showWarning = conflict;
+      label.className = 'slot-label'
+        + (showWarning      ? ' slot-label-conflict'  : '')
+        + (isContainerItem2 ? ' slot-label-container' : '');
+
+      const varEntries = Object.entries(slotData.variables || {});
+      const numVarEntry = varEntries.find(([k, v]) => k !== 'qty' && (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number')
+                       || varEntries.find(([, v]) => (v.control === 'plusminus' || v.control === 'both') && typeof v.value === 'number')
+                       || null;
+      const numVar = numVarEntry ? numVarEntry[1] : null;
+      const _bulkId = slotData.bulk ? slotData.bulk.id
+                    : (getLibraryItem(slotData.name)?.bulk || Bulk.STOCK).id;
+      const isPackableSlot = _bulkId === 'packable';
+      if (isPackableSlot) wrap.classList.add('slot-packable');
+      else if (_bulkId === 'bulky' || _bulkId === 'verybulky') wrap.classList.add('slot-bulky');
+      const _silverPfx = (slotData.silvered || slotData.material === 'silvered') ? 'Silvered ' : '';
+      const _metalMat  = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
+      const matPfx = _silverPfx + (_metalMat ? _metalMat.charAt(0).toUpperCase() + _metalMat.slice(1) + ' ' : '');
+      const dispName = computeDisplayName(slotData);
+
+      {
+        const libForLabel = getLibraryItem(slotData.name);
+        const gridSymbol  = libForLabel && libForLabel.gridSymbol;
+        const cv = slotData.variables || {};
+        const _hasCoinVars = ['pp','gp','sp','cp'].every(k => k in cv);
+        if (gridSymbol) {
+          const activeCoins = [['pp',cv.pp],['gp',cv.gp],['sp',cv.sp],['cp',cv.cp]]
+            .filter(([,v]) => v && (v.value || 0) > 0);
+          const coinParts = activeCoins.map(([k,v]) => `<span class="coin-label-${k}">${v.value}${k}</span>`);
+          const iconClass = activeCoins.length === 1 ? `coin-label-${activeCoins[0][0]}` : 'coin-label-white';
+          const iconHtml = `<span class="${iconClass}">${gridSymbol}</span>`;
+          label.innerHTML = coinParts.length
+            ? `${iconHtml}&nbsp;${coinParts.join(' ')}`
+            : `${gridSymbol}&nbsp;${libForLabel.name}`;
+          label.classList.add('slot-label-symbol');
+        } else if (_hasCoinVars) {
+          // Coin purse without gridSymbol: show colored coin amounts, no icon
+          const activeCoins = ['pp','gp','sp','cp'].filter(k => (cv[k]?.value || 0) > 0);
+          const coinParts = activeCoins.map(k => `<span class="coin-label-${k}">${cv[k].value}${k}</span>`);
+          label.innerHTML = coinParts.length
+            ? coinParts.join(' ')
+            : `<span class="coin-label-white">${libForLabel ? libForLabel.name : slotData.name}</span>`;
+          label.classList.add('slot-label-symbol');
+        } else {
+          const libForCost = libForLabel;
+          const cc = slotData.costCoins;
+          const costSuffix = (libForCost && libForCost.editableCost) && cc
+            ? (() => {
+                const parts = [cc.pp?`${cc.pp}pp`:'',cc.gp?`${cc.gp}gp`:'',cc.sp?`${cc.sp}sp`:'',cc.cp?`${cc.cp}cp`:''].filter(Boolean);
+                return parts.length ? ` (${parts.join(' ')})` : '';
+              })()
+            : '';
+          {
+            const qty = slotData.variables?.qty?.value ?? 1;
+            const qtyPrefix = qty > 1 ? `${qty} × ` : '';
+            const usesVar = slotData.variables?.uses ?? slotData.variables?.count;
+            const usesSuffix = usesVar !== undefined ? ` (${usesVar.value})` : '';
+            label.textContent = `${qtyPrefix}${matPfx}${dispName}${usesSuffix}${costSuffix}`;
+          }
+          if (!!(libForLabel && libForLabel.treasure) || !!slotData.treasure) {
+            label.classList.add('slot-label-treasure');
+          }
+        }
+      }
+
+      const _slotLib = getLibraryItem(slotData.name);
+      const _isTreasureSlot = !!(_slotLib && _slotLib.treasure) || !!slotData.treasure;
+      const _sv = slotData.variables || {};
+      const _isCoinPurseSlot = 'pp' in _sv && 'gp' in _sv && 'sp' in _sv && 'cp' in _sv;
+      let _infoIconClass, _infoIconHtml;
+      if (_isCoinPurseSlot) {
+        const _ac = ['pp','gp','sp','cp'].filter(k => (_sv[k]?.value || 0) > 0);
+        const _coinMod = _ac.length === 1 ? `slot-coin-${_ac[0]}` : 'slot-coin-mixed';
+        _infoIconClass = `slot-info-inline ${_coinMod}`;
+        _infoIconHtml  = '<i class="fas fa-coins"></i>';
+      } else if (_isTreasureSlot) {
+        _infoIconClass = 'slot-info-inline slot-treasure';
+        _infoIconHtml  = '<i class="fas fa-crown"></i>';
+      } else {
+        _infoIconClass = 'slot-info-inline';
+        _infoIconHtml  = '<i class="fas fa-circle-info"></i>';
+      }
+
+      if (linkedContainer) {
+        // Info/treasure icon (left:4px) — clicking the label opens the inspector
+        const infoIcon = document.createElement('span');
+        infoIcon.className = _infoIconClass + (isInspected ? ' active' : '');
+        infoIcon.innerHTML = _infoIconHtml;
+        label.appendChild(infoIcon);
+
+        // Label (name + info icon) opens inspector; stop propagation so wrap toggle doesn't fire
+        label.style.paddingLeft = '20px';
+        label.style.cursor = 'pointer';
+        label.style.pointerEvents = 'auto';
+        label.addEventListener('click', e => {
+          e.stopPropagation();
+          toggleInspectorFor(itemKey, slotData, container, r, c);
+        });
+
+        // Clicking the slot area outside the label still toggles the container
+        wrap.style.cursor = 'pointer';
+        wrap.addEventListener('click', e => {
+          if (e.target.closest('.slot-remove')) return;
+          linkedContainer.collapsed = !linkedContainer.collapsed;
+          localContainersUi.collapsed[linkedContainer.id] = linkedContainer.collapsed;
+          reportUiChange();
+          render();
+        });
+      } else {
+        // Info/treasure icon inline; clicking label (name + icon) opens inspector
+        const infoIcon = document.createElement('span');
+        infoIcon.className = _infoIconClass + (isInspected ? ' active' : '');
+        infoIcon.innerHTML = _infoIconHtml;
+        label.appendChild(infoIcon);
+
+        label.style.cursor = 'pointer';
+        label.style.pointerEvents = 'auto';
+        label.addEventListener('click', e => {
+          e.stopPropagation();
+          toggleInspectorFor(itemKey, slotData, container, r, c);
+        });
+      }
+
+      wrap.appendChild(label);
+
+      // Corner tags (bulk left, container right)
+      const _isContainerSlot = !!(slotData.isContainer || (getLibraryItem(slotData.name) || {}).containerRows);
+      const _isAmmoSlot = slotData.category === 'ammunition' || ((getLibraryItem(slotData.name) || {}).category === 'ammunition');
+      const _weaponTypeSlot = getSlotWeaponType(slotData);
+      const _showBulkTag = !_isAmmoSlot && (_bulkId === 'packable' || _bulkId === 'bulky' || _bulkId === 'verybulky');
+      if (_isContainerSlot || _showBulkTag || _isAmmoSlot || _weaponTypeSlot) {
+        const tagsWrap = document.createElement('div');
+        tagsWrap.className = 'slot-tags';
+        if (_showBulkTag) {
+          const t = document.createElement('span');
+          t.className = `slot-bulk-tag slot-bulk-tag--${_bulkId}`;
+          t.textContent = _bulkId === 'packable' ? 'Packable' : 'Bulky';
+          tagsWrap.appendChild(t);
+        }
+        if (_isContainerSlot) {
+          const t = document.createElement('span');
+          t.className = 'slot-bulk-tag slot-bulk-tag--container';
+          t.textContent = 'Container';
+          tagsWrap.appendChild(t);
+        }
+        if (_isAmmoSlot) {
+          const t = document.createElement('span');
+          t.className = 'slot-bulk-tag slot-bulk-tag--ammo';
+          t.textContent = 'Ammo';
+          tagsWrap.appendChild(t);
+        }
+        if (_weaponTypeSlot) {
+          const t = document.createElement('span');
+          t.className = `slot-bulk-tag slot-bulk-tag--${_weaponTypeSlot}`;
+          t.textContent = _weaponTypeSlot.charAt(0).toUpperCase() + _weaponTypeSlot.slice(1);
+          tagsWrap.appendChild(t);
+        }
+        wrap.appendChild(tagsWrap);
+      }
+    }
+
+    if (conflict) {
+      const warn = document.createElement('span');
+      warn.className = 'slot-warn';
+      warn.textContent = '⚠';
+      warn.title = slotData.conflictMsg || 'Slot conflict';
+      wrap.appendChild(warn);
+    }
+
+    if (slotData) {
+
+
+      // Prevent iOS from treating a touch on a filled slot as a scroll gesture —
+      // this stops the browser firing pointercancel during the long-press window.
+      // Scrolling is handled manually below whenever the user swipes instead of holds.
+      wrap.style.touchAction = 'none';
+
+      let downX, downY, downPointerId;
+
+      // Bound to `document`, not `wrap`, and explicitly detached once the
+      // gesture ends. A scroll-drag routinely carries the pointer off the
+      // slot it started on (that's the whole point of dragging to scroll) —
+      // listeners scoped to the slot itself stop receiving events the
+      // moment that happens, so pointerup/pointercancel would silently
+      // never fire, leaving manualScrolling stuck true. Since that flag is
+      // shared across every slot, the very next touch anywhere in the grid
+      // would then read it as "still scrolling" instead of starting its own
+      // long-press timer — the grid gets stuck in scroll mode until
+      // something else happens to reset it.
+      const onGridScrollMove = e => {
+        if (manualScrolling) {
+          document.getElementById('inv-scroll').scrollTop += manualScrollLastY - e.clientY;
+          manualScrollLastY = e.clientY;
+          return;
+        }
+        if (!longPressTimer) return;
+        if ((e.clientX - downX) ** 2 + (e.clientY - downY) ** 2 > 64) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+          manualScrolling  = true;
+          manualScrollLastY = e.clientY;
+        }
+      };
+      const detachGridScrollTracking = () => {
+        document.removeEventListener('pointermove', onGridScrollMove);
+        document.removeEventListener('pointerup', onGridScrollUp);
+        document.removeEventListener('pointercancel', onGridScrollUp);
+      };
+      const onGridScrollUp = () => {
+        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        manualScrolling = false;
+        detachGridScrollTracking();
       };
 
-      // Make sure bulk is a proper object (in case data.bulk is partial)
-      if (data.bulk && typeof data.bulk === "object") {
-        itemData.bulk = {
-          width: data.bulk.width ?? baseItem.bulk.width,
-          height: data.bulk.height ?? baseItem.bulk.height,
-          id: data.bulk.id ?? baseItem.bulk.id,
-        };
-      }
+      wrap.addEventListener('pointerdown', e => {
+        if (dragState || e.target.tagName === 'BUTTON') return;
+        downX = e.clientX; downY = e.clientY; downPointerId = e.pointerId;
+        manualScrolling = false;
+        document.addEventListener('pointermove', onGridScrollMove);
+        document.addEventListener('pointerup', onGridScrollUp);
+        document.addEventListener('pointercancel', onGridScrollUp);
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          manualScrolling = false;
+          detachGridScrollTracking(); // real drag confirmed — startDrag() has its own document-level tracking
+          document.documentElement.setPointerCapture(downPointerId);
+          const sr = wrap.getBoundingClientRect();
+          startDrag(slotData, container, r, c, downX, downY,
+            { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 },
+            () => { container.slots[r][c] = null; });
+        }, 380);
+      });
+    }
 
-      // Ensure variables is a proper object
-      if (data.variables && typeof data.variables === "object") {
-        itemData.variables = { ...itemData.variables, ...data.variables };
-      }
+    return wrap;
+  }
 
-      return new InventoryItem(itemData);
+
+  // ── SLOT MANAGEMENT ──────────────────────────────────────────────────────
+  function commitSlot(name, container, r, c) {
+    ignoreNextBlur = true;
+    const libItem = getLibraryItem(name);
+    if (libItem && libItem.shopHidden) return;
+    const canonName = libItem ? libItem.name : name;
+    const row = container.slots[r];
+    const existing = row[c];
+
+    const sameItem = existing && existing.name === canonName;
+    const variables = sameItem
+      ? existing.variables
+      : (libItem ? JSON.parse(JSON.stringify(libItem.variables || {}))
+                 : {});
+
+    const slotData = {
+      name: canonName,
+      variables,
+      ...(libItem ? {} : {
+        custom: true,
+        bulk: sameItem && existing.bulk ? existing.bulk : Bulk.STOCK,
+        description: sameItem ? (existing.description || '') : '',
+      }),
+    };
+
+    ensurePackableQty(slotData);
+    row[c] = slotData;
+
+    if (isContainerItem(slotData) && !slotData.containerId) {
+      createLinkedContainer(slotData, container.id, r, c);
+    }
+
+    closeDropdown();
+    if (onSound) onSound('place');
+    render();
+  }
+
+  function findEmptySlot(container, excludeRow) {
+    for (let r = 0; r < container.slots.length; r++) {
+      if (r === excludeRow) continue;
+      const [left, right] = container.slots[r];
+      if (!left)  return { r, c: 0 };
+      if (!right) return { r, c: 1 };
+    }
+    return null;
+  }
+
+  function flashBlockedContainer(slotContainerId, r, c, linkedId) {
+    const linked = state.containers.find(cnt => cnt.id === linkedId);
+    if (linked) linked.collapsed = false;
+    render();
+    const slotEl = document.querySelector(`[data-container-id="${slotContainerId}"][data-r="${r}"][data-c="${c}"]`);
+    const cardEl = document.querySelector(`.inv-card[data-container-id="${linkedId}"]`);
+    const reflow = el => { if (el) { el.classList.remove('slot-blocked-flash', 'card-blocked-flash'); void el.offsetWidth; } };
+    if (slotEl) { reflow(slotEl); slotEl.classList.add('slot-blocked-flash'); }
+    if (cardEl) { reflow(cardEl); cardEl.classList.add('card-blocked-flash'); }
+  }
+
+  // The single choke point for genuinely removing an item from a slot — the
+  // trash drop, the inspector's "Remove item" button, and clearing a slot's
+  // name field all route through here, so this is the one place a "destroy"
+  // history event needs to be logged rather than instrumenting each call site.
+  function clearSlot(container, r, c) {
+    ignoreNextBlur = true;
+    const slotData = container.slots[r][c];
+
+    if (slotData && slotData.containerId) {
+      const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+      if (linked && containerHasItems(linked)) {
+        ignoreNextBlur = false;
+        flashBlockedContainer(container.id, r, c, slotData.containerId);
+        return;
+      }
+      state.containers = state.containers.filter(cnt => cnt.id !== slotData.containerId);
+    }
+
+    container.slots[r][c] = null;
+    if (slotData && onItemDestroy) {
+      onItemDestroy({
+        name: slotData.name,
+        qty: slotData.variables?.qty?.value || 1,
+        detail: summarizeItemDetail(slotData),
+        itemData: window.compactSlotData ? window.compactSlotData(slotData) : null,
+      });
+    }
+    closeDropdown();
+    render();
+    hideInspector();
+  }
+
+  // ── AUTOCOMPLETE ─────────────────────────────────────────────────────────
+  function updateDropdown(query) {
+    query = (query || '').trim().toLowerCase();
+    if (!query) { closeDropdown(); return; }
+
+    let matches = ITEM_LIBRARY.filter(i => i.name && i.name.toLowerCase().includes(query) && !i.shopHidden);
+    if (!window._isDM) matches = matches.filter(i => !i.dmOnly);
+    if (!window._isDM && isHiddenFromPlayer) matches = matches.filter(i => !isHiddenFromPlayer(i.name));
+    matches = matches.slice(0, 10);
+    if (!matches.length) { closeDropdown(); return; }
+
+    dropdownEl.innerHTML = '';
+    matches.forEach(item => {
+      const opt = document.createElement('div');
+      opt.className = 'ac-opt';
+      const bid = item.bulk ? item.bulk.id : 'stock';
+      const isAmmoItem = item.category === 'ammunition';
+      const tag = isAmmoItem
+        ? `<span class="ac-tag ammo">Ammo</span>`
+        : bid !== 'stock' ? `<span class="ac-tag ${bid}">${bid}</span>` : '';
+      opt.innerHTML = `<span class="ac-name">${item.name}</span>${tag}`;
+
+      const pick = () => {
+        ignoreNextBlur = true;
+        if (acContainer !== null) commitSlot(item.name, acContainer, acRow, acCol);
+        closeDropdown();
+      };
+      opt.addEventListener('mousedown', e => { e.preventDefault(); pick(); });
+      opt.addEventListener('touchstart', e => { opt._touchY = e.touches[0].clientY; }, { passive: true });
+      opt.addEventListener('touchend', e => {
+        if (Math.abs(e.changedTouches[0].clientY - (opt._touchY || 0)) < 10) {
+          e.preventDefault();
+          pick();
+        }
+      }, { passive: false });
+      dropdownEl.appendChild(opt);
+    });
+
+    positionDropdown();
+    dropdownEl.hidden = false;
+  }
+
+  function positionDropdown() {
+    if (!acInput) return;
+    const rect = acInput.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    dropdownEl.style.left  = `${rect.left}px`;
+    dropdownEl.style.width = `${rect.width}px`;
+    if (spaceBelow >= 160 || spaceBelow >= window.innerHeight - rect.top) {
+      dropdownEl.style.top    = `${rect.bottom + 2}px`;
+      dropdownEl.style.bottom = 'auto';
     } else {
-      return src.getItem(data.originX, data.originY);
+      dropdownEl.style.top    = 'auto';
+      dropdownEl.style.bottom = `${window.innerHeight - rect.top + 2}px`;
     }
   }
 
-
-  function isWithinBounds(item, container, x, y) {
-    return x >= 0 && y >= 0 &&
-      x + item.size.width <= container.col &&
-      y + item.size.height <= container.row;
+  function closeDropdown() {
+    dropdownEl.hidden = true;
+    dropdownEl.innerHTML = '';
   }
 
-  function collidesWith(item, container, x, y) {
-    for (let dx = 0; dx < item.size.width; dx++) {
-      for (let dy = 0; dy < item.size.height; dy++) {
-        const existing = container.getItem(x + dx, y + dy);
-        if (existing && existing !== item) return existing;
+  ['inv-scroll', 'stats-panel', 'shop-scroll'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('scroll', () => { if (!dropdownEl.hidden) positionDropdown(); }, { passive: true });
+  });
+
+  // ── INSPECTOR ────────────────────────────────────────────────────────────
+  function showInspector(slotData, container, r, c, packIdx) {
+    _spellDetailActive = null;
+    document.getElementById('spell-insp-section').hidden = true;
+    inspectorEl.hidden = false;
+    const _panelOpen = !detailPanelEl.classList.contains('detail-collapsed');
+    const _prevH = _panelOpen ? detailPanelEl.offsetHeight : 0;
+    const lib = getLibraryItem(slotData.name);
+
+    // ── Name ──
+    const _nameEl = document.getElementById('insp-name');
+    if (lib && lib.gridSymbol) {
+      _nameEl.innerHTML = `${lib.gridSymbol}&nbsp;${lib.name}`;
+      _nameEl.classList.add('insp-name-symbol');
+    } else {
+      const _inspSilverPfx = (slotData.silvered || slotData.material === 'silvered') ? 'Silvered ' : '';
+      const _inspMetalMat  = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
+      const _inspMetalPfx  = _inspMetalMat ? _inspMetalMat.charAt(0).toUpperCase() + _inspMetalMat.slice(1) + ' ' : '';
+      _nameEl.textContent = _inspSilverPfx + _inspMetalPfx + computeDisplayName(slotData);
+      _nameEl.classList.remove('insp-name-symbol');
+    }
+
+    // ── Edit Item button (custom items only) ──
+    const prevEditBtn = document.getElementById('insp-edit-btn');
+    if (prevEditBtn) prevEditBtn.remove();
+    if (slotData.custom && container) {
+      const itemKey = `${container.id}-${r}-${c}`;
+      if (_customEditKey !== itemKey) { _customEditKey = itemKey; _customEditOpen = false; }
+      const editBtn = document.createElement('button');
+      editBtn.id = 'insp-edit-btn';
+      editBtn.className = 'insp-rename-btn' + (_customEditOpen ? ' active' : '');
+      editBtn.innerHTML = '<i class="fas fa-sliders"></i>';
+      editBtn.title = _customEditOpen ? 'Close item editor' : 'Edit item';
+      editBtn.addEventListener('click', () => {
+        _customEditOpen = !_customEditOpen;
+        showInspector(slotData, container, r, c, packIdx);
+      });
+      document.getElementById('insp-name').parentNode.insertBefore(editBtn, document.getElementById('insp-name'));
+    } else {
+      _customEditKey = null; _customEditOpen = false;
+    }
+
+    // ── Inline numeric vars (count / charges) next to the name ──
+    const inlineEl = document.getElementById('insp-inline-vars');
+    inlineEl.innerHTML = '';
+    const COIN_KEYS = new Set(['pp', 'gp', 'sp', 'cp']);
+    const _varKeys = Object.keys(slotData.variables || {});
+    const isCoinItem = _varKeys.length > 0 && _varKeys.every(k => COIN_KEYS.has(k));
+    if (isCoinItem) inlineEl.classList.add('coin-vars-layout');
+    else            inlineEl.classList.remove('coin-vars-layout');
+
+    // Always show qty stepper — except containers (always qty 1) and coin purses
+    const _isContainerItem = !!(slotData.isContainer || (lib && lib.containerRows));
+    if (!isCoinItem && !_isContainerItem && (container || slotData._shopItem)) {
+      const qtyVal = slotData.variables?.qty?.value ?? 1;
+      const qtyWrap = document.createElement('div');
+      qtyWrap.className = 'insp-inline-var insp-inline-var--compact';
+      qtyWrap.innerHTML = `
+        <span class="insp-inline-label">qty</span>
+        <button class="insp-btn-sm" data-qd="-1">−</button>
+        <input class="insp-num-sm" type="number" value="${qtyVal}" min="1" max="99" data-qinp />
+        <button class="insp-btn-sm" data-qd="1">+</button>
+      `;
+      const setQty = v => {
+        v = Math.max(1, Math.min(99, v));
+        slotData.variables = slotData.variables || {};
+        slotData.variables.qty = { value: v, control: 'both', min: 1, max: 99 };
+        qtyWrap.querySelector('[data-qinp]').value = v;
+        if (container) render();
+        else { refreshShopRow(); showInspector(slotData, container, r, c); }
+      };
+      qtyWrap.querySelectorAll('[data-qd]').forEach(btn =>
+        btn.addEventListener('click', () => setQty((slotData.variables?.qty?.value ?? 1) + parseInt(btn.dataset.qd)))
+      );
+      qtyWrap.querySelector('[data-qinp]').addEventListener('input', e => {
+        const v = parseInt(e.target.value);
+        if (!isNaN(v)) setQty(v);
+      });
+      inlineEl.appendChild(qtyWrap);
+    }
+
+    const sortedVarEntries = Object.entries(slotData.variables || {})
+      .sort(([a], [b]) => (a === 'qty' ? -1 : b === 'qty' ? 1 : 0));
+    for (const [key, meta] of sortedVarEntries) {
+      if (key === 'qty') continue; // rendered above
+      if (meta.control !== 'plusminus' && meta.control !== 'both') continue;
+      const wrap = document.createElement('div');
+      const isUsesKey = key === 'uses' || key === 'count' || key === 'charges';
+      wrap.className = 'insp-inline-var'
+        + (isCoinItem ? ' coin-inline-var' : ' insp-inline-var--compact')
+        + (isUsesKey && !isCoinItem ? ' insp-inline-var--uses' : '');
+      if (isCoinItem) {
+        wrap.innerHTML = `
+          <span class="insp-inline-label coin-label-${key}">${key.toUpperCase()}</span>
+          <div class="coin-controls">
+            <button class="insp-btn-sm" data-k="${key}" data-d="-1">−</button>
+            <input class="insp-num-sm insp-num-coin" type="number" value="${meta.value}" data-k="${key}"
+              ${typeof meta.min === 'number' ? `min="${meta.min}"` : ''}
+              ${typeof meta.max === 'number' ? `max="${meta.max}"` : ''} />
+            <button class="insp-btn-sm" data-k="${key}" data-d="1">+</button>
+          </div>
+        `;
+      } else {
+        wrap.innerHTML = `
+          <span class="insp-inline-label">${key}</span>
+          <button class="insp-btn-sm" data-k="${key}" data-d="-1">−</button>
+          <input class="insp-num-sm" type="number" value="${meta.value}" data-k="${key}"
+            ${typeof meta.min === 'number' ? `min="${meta.min}"` : ''}
+            ${typeof meta.max === 'number' ? `max="${meta.max}"` : ''} />
+          <button class="insp-btn-sm" data-k="${key}" data-d="1">+</button>
+        `;
+      }
+      inlineEl.appendChild(wrap);
+    }
+    const refreshCostDisplay = () => {
+      const _hasUses = slotData.hasUses ?? lib?.hasUses;
+      if (_hasUses !== 'coins') return;
+      const costEl = document.getElementById('insp-cost');
+      if (!costEl || costEl.hidden) return;
+      const cv = slotData.variables || {};
+      const mult = Math.max(0, cv.uses?.value ?? cv.count?.value ?? 1);
+      const cc2 = slotData.costCoins;
+      const base2 = cc2
+        ? (cc2.pp||0)*1000 + (cc2.gp||0)*100 + (cc2.sp||0)*10 + (cc2.cp||0)
+        : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
+      const costBase2 = lib && lib.costBase ? parseCostCp(lib.costBase) : 0;
+      const typeCost2 = getSlotTypeCostCp(slotData);
+      const matCost2 = getSlotMaterialCostCp(slotData, lib?.category === 'ammunition');
+      const total2 = costBase2 > 0
+        ? base2 * mult + typeCost2 + costBase2 + matCost2
+        : base2 * mult + typeCost2 + matCost2;
+      const parts2 = [];
+      let rem2 = total2;
+      const gp2 = Math.floor(rem2 / 100); rem2 %= 100;
+      const sp2 = Math.floor(rem2 / 10);  rem2 %= 10;
+      if (gp2) parts2.push(gp2 + 'gp');
+      if (sp2) parts2.push(sp2 + 'sp');
+      if (rem2) parts2.push(rem2 + 'cp');
+      const str = parts2.join(' ') || '0cp';
+      const textNode = [...costEl.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
+      if (textNode) textNode.textContent = str;
+      else costEl.appendChild(document.createTextNode(str));
+    };
+
+    inlineEl.querySelectorAll('.insp-btn-sm').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!btn.dataset.k) return;
+        const m = slotData.variables[btn.dataset.k];
+        if (!m) return;
+        let v = m.value + parseInt(btn.dataset.d);
+        if (typeof m.min === 'number') v = Math.max(m.min, v);
+        if (typeof m.max === 'number') v = Math.min(m.max, v);
+        m.value = v;
+        inlineEl.querySelector(`.insp-num-sm[data-k="${btn.dataset.k}"]`).value = v;
+        render();
+        refreshCostDisplay();
+        if (!container) refreshShopRow();
+      });
+    });
+    inlineEl.querySelectorAll('.insp-num-sm').forEach(inp => {
+      inp.addEventListener('input', () => {
+        if (!inp.dataset.k) return;
+        const m = slotData.variables[inp.dataset.k];
+        if (!m) return;
+        let v = parseInt(inp.value);
+        if (isNaN(v)) return;
+        if (typeof m.min === 'number') v = Math.max(m.min, v);
+        if (typeof m.max === 'number') v = Math.min(m.max, v);
+        m.value = v;
+        render();
+        refreshCostDisplay();
+        if (!container) refreshShopRow();
+      });
+      inp.addEventListener('blur', () => {
+        if (!inp.dataset.k) return;
+        const m = slotData.variables[inp.dataset.k];
+        if (m) inp.value = m.value;
+      });
+    });
+
+    // Coin values also get the same touch-friendly calculator popup used for
+    // HP/temp-HP/hit dice, so +/- amounts can be typed instead of tapped out.
+    inlineEl.querySelectorAll('.insp-num-coin').forEach(inp => {
+      const key  = inp.dataset.k;
+      const meta = slotData.variables[key];
+      if (!key || !meta || !calcShowCustom) return;
+      inp.addEventListener('touchstart', e => {
+        e.preventDefault();
+        inp.readOnly = true;
+      }, { passive: false });
+      inp.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse') return;
+        e.preventDefault();
+        calcShowCustom(inp, {
+          label: key.toUpperCase(),
+          min: typeof meta.min === 'number' ? meta.min : 0,
+          max: meta.max,
+          getValue: () => meta.value,
+          setValue: v => {
+            meta.value = v;
+            render();
+            refreshCostDisplay();
+            if (!container) refreshShopRow();
+          },
+        });
+      });
+    });
+
+    // ── Warning ──
+    const warnEl = document.getElementById('insp-warn');
+    warnEl.hidden = !slotData.conflict;
+    if (slotData.conflict) warnEl.textContent = '⚠ ' + (slotData.conflictMsg || 'This item is in a conflicting slot.');
+
+    // ── Description ──
+    const itemHidden = !window._isDM && !!isHiddenFromPlayer && isHiddenFromPlayer(slotData.name);
+    const descP = document.getElementById('insp-desc');
+    const descEdit = document.getElementById('insp-desc-edit');
+    const notesEl = document.getElementById('insp-notes');
+    if (slotData.custom) {
+      const customDesc = slotData.description || '';
+      descP.hidden = !customDesc || _customEditOpen; descEdit.hidden = true; notesEl.hidden = !container;
+      if (customDesc) descP.innerHTML = customDesc;
+      if (container) {
+        notesEl.value = slotData.notes || '';
+        notesEl.oninput = () => { slotData.notes = notesEl.value; };
+      }
+    } else if (itemHidden) {
+      descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
+      descP.innerHTML = '<i>Details not available.</i>';
+      if (container) {
+        notesEl.value = slotData.notes || '';
+        notesEl.oninput = () => { slotData.notes = notesEl.value; };
+      }
+    } else if (lib && (lib.linkedSpell || (slotData.variables?.spell?.control === 'select' && slotData.variables.spell.value))) {
+      const _spellName = lib.linkedSpell || slotData.variables.spell.value;
+      const _spell = (window.SPELLS_XPHB || []).find(s => s.n === _spellName);
+      descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
+      if (_spell) {
+        const _lvlNames = ['Cantrip','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
+        const _lvlLabel = _spell.l === 0 ? `${_spell.sc} Cantrip` : `${_lvlNames[_spell.l]}-Level ${_spell.sc}`;
+        const _tags = [];
+        if (_spell.conc)   _tags.push('Concentration');
+        if (_spell.ritual) _tags.push('Ritual');
+        const _sub = _lvlLabel + (_tags.length ? ` · ${_tags.join(' · ')}` : '');
+        const _rd = t => (t || '').split('\n').map(ln =>
+          ln.startsWith('• ') ? `<div class="spell-detail-bullet">${ln.slice(2)}</div>` : `<p>${ln}</p>`
+        ).join('');
+        const _hasDesc = !!lib.description;
+        let _html = _hasDesc
+          ? resolveItemDescription(lib, slotData)
+          : `<i>When casting a spell scroll, use your spell save DC and spell attack bonus, or DC 13 and +5 if yours are lower. If the spell is of a level above what you can cast, you must succeed on an Intelligence (Arcana) check with a DC equal to 10 plus the spell’s level, or the spell fails and the scroll is destroyed.</i>`;
+        _html += `<div class="scroll-spell-sub">${_sub}</div><div class="spell-detail-props">`;
+        [['Casting Time', _spell.t], ['Range', _spell.r], ['Components', _spell.c], ['Duration', _spell.d]].forEach(([lbl, val]) => {
+          if (val) _html += `<div class="spell-detail-prop"><span class="spell-detail-prop-lbl">${lbl}</span><span class="spell-detail-prop-val">${val}</span></div>`;
+        });
+        _html += `</div><div class="spell-detail-desc">${_rd(_spell.desc)}</div>`;
+        if (_spell.higher) _html += `<div class="spell-detail-higher"><div class="spell-detail-higher-lbl">At Higher Levels</div>${_rd(_spell.higher)}</div>`;
+        descP.innerHTML = _html;
+      } else {
+        descP.innerHTML = '<i>Spell data not found.</i>';
+      }
+      if (container) { notesEl.value = slotData.notes || ''; notesEl.oninput = () => { slotData.notes = notesEl.value; }; }
+    } else {
+      descP.hidden = false; descEdit.hidden = true; notesEl.hidden = !container;
+      descP.innerHTML = resolveItemDescription(lib, slotData);
+      if (container) {
+        notesEl.value = slotData.notes || '';
+        notesEl.oninput = () => { slotData.notes = notesEl.value; };
+      }
+    }
+
+    // ── Cost ──
+    const costEl = document.getElementById('insp-cost');
+    const isTreasure = !!(lib && lib.treasure) || !!slotData.treasure;
+    const cc = slotData.costCoins;
+    const ccTotalCp = cc ? (cc.pp||0)*1000 + (cc.gp||0)*100 + (cc.sp||0)*10 + (cc.cp||0) : 0;
+    const typeCostCp = getSlotTypeCostCp(slotData);
+    const materialCostCp = getSlotMaterialCostCp(slotData, lib?.category === 'ammunition');
+    const coinUsesMult = getSlotCoinUsesMultiplier(slotData);
+    const costBaseCp = lib && lib.costBase ? parseCostCp(lib.costBase) : 0;
+    let displayCostStr;
+    if (typeCostCp > 0 || materialCostCp > 0 || coinUsesMult > 1 || costBaseCp > 0) {
+      const baseCp = ccTotalCp > 0 ? ccTotalCp : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
+      const totalCp = costBaseCp > 0
+        ? baseCp * coinUsesMult + typeCostCp + costBaseCp + materialCostCp
+        : baseCp * coinUsesMult + typeCostCp + materialCostCp;
+      const parts = [];
+      let rem = totalCp;
+      const gp = Math.floor(rem / 100); rem %= 100;
+      const sp = Math.floor(rem / 10);  rem %= 10;
+      if (gp) parts.push(gp + 'gp');
+      if (sp) parts.push(sp + 'sp');
+      if (rem) parts.push(rem + 'cp');
+      displayCostStr = parts.join(' ') || '0cp';
+    } else {
+      const ccStr = cc && ccTotalCp > 0 ? [
+        cc.pp ? `${cc.pp}pp` : '', cc.gp ? `${cc.gp}gp` : '',
+        cc.sp ? `${cc.sp}sp` : '', cc.cp ? `${cc.cp}cp` : '',
+      ].filter(Boolean).join(' ') : null;
+      displayCostStr = ccStr || (lib && lib.cost) || null;
+    }
+    costEl.hidden = !displayCostStr || itemHidden;
+    if (displayCostStr && !itemHidden) {
+      costEl.innerHTML = '';
+      if (isTreasure) {
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-crown';
+        icon.title = 'Treasure — sells at full price';
+        icon.style.cssText = 'font-size:10px;margin-right:4px;color:rgba(255,205,60,0.85);';
+        costEl.appendChild(icon);
+      }
+      costEl.appendChild(document.createTextNode(displayCostStr));
+    }
+
+    // ── Copy (DM only) ──
+    const copyBtnEl = document.getElementById('insp-copy');
+    copyBtnEl.hidden = !container || !window._isDM;
+    if (container && window._isDM) {
+      copyBtnEl.onclick = () => {
+        const equipped = state.containers.find(c => c.id === 'equipped');
+        if (!equipped) return;
+        const copy = JSON.parse(JSON.stringify(slotData));
+        delete copy.conflict; delete copy.conflictMsg;
+        // Find a free slot in equipped, growing if needed
+        let placed = false;
+        for (let ri = 0; ri < equipped.slots.length; ri++) {
+          for (let ci = 0; ci < 2; ci++) {
+            if (!equipped.slots[ri][ci]) {
+              placeSlotData(copy, equipped, ri, ci);
+              placed = true; break;
+            }
+          }
+          if (placed) break;
+        }
+        if (!placed) {
+          equipped.slots.push([null, null]);
+          equipped.rows++;
+          placeSlotData(copy, equipped, equipped.slots.length - 1, 0);
+        }
+      };
+    }
+
+    // ── Remove ──
+    const removeBtnEl = document.getElementById('insp-remove');
+    removeBtnEl.hidden = !container || !window._isDM;
+    if (container) removeBtnEl.onclick = () => {
+      const lib = getLibraryItem(slotData.name);
+      if (lib && lib.warnOnRemove) {
+        const v = slotData.variables || {};
+        const coinKeys = ['pp','gp','sp','cp'];
+        const hasCoins = coinKeys.some(k => v[k] && (v[k].value || 0) > 0);
+        if (hasCoins && !confirm(lib.warnOnRemove)) return;
+      }
+      clearSlot(container, r, c);
+    };
+
+    // ── Compact props row ──
+    const propsEl = document.getElementById('insp-props');
+    propsEl.innerHTML = '';
+
+    // ── Display-only tags (compact grid) ──
+    const _inspBulkId = slotData.bulk ? slotData.bulk.id
+      : (lib?.bulk || Bulk.STOCK).id;
+    const _isAmmoInsp = slotData.category === 'ammunition' || (lib && lib.category === 'ammunition');
+    const _weaponTypeInsp = getSlotWeaponType(slotData);
+
+    const tagGrid = document.createElement('div');
+    tagGrid.className = 'insp-tag-grid';
+
+    const addTag = (cls, text) => {
+      const t = document.createElement('span');
+      t.className = `ac-tag ${cls}`;
+      t.textContent = text;
+      tagGrid.appendChild(t);
+    };
+
+    if (!_isAmmoInsp && (_inspBulkId === 'packable' || _inspBulkId === 'bulky' || _inspBulkId === 'verybulky'))
+      addTag(_inspBulkId, _inspBulkId === 'packable' ? 'Packable' : 'Bulky');
+    if (_weaponTypeInsp) addTag(_weaponTypeInsp, _weaponTypeInsp.charAt(0).toUpperCase() + _weaponTypeInsp.slice(1));
+    if (_isAmmoInsp) addTag('ammo', 'Ammo');
+    if (slotData.isContainer || (lib && lib.containerRows)) addTag('container', 'Container');
+
+    if (tagGrid.children.length) propsEl.appendChild(tagGrid);
+
+    // Editable cost fields — non-custom treasure items with variable cost (DM only)
+    const showCostInput = window._isDM && !itemHidden && container
+      && (lib && lib.editableCost) && !slotData.custom;
+    if (showCostInput) {
+      if (!slotData.costCoins) slotData.costCoins = { pp: 0, gp: 0, sp: 0, cp: 0 };
+      const coins = slotData.costCoins;
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;align-items:center;gap:4px;flex-shrink:0;';
+      [['pp','rgba(190,145,255,0.9)'], ['gp','rgba(255,205,60,0.9)'],
+       ['sp','rgba(200,200,215,0.85)'], ['cp','rgba(205,135,65,0.85)']].forEach(([key, color]) => {
+        const lbl = document.createElement('span');
+        lbl.textContent = key.toUpperCase();
+        lbl.style.cssText = `font-size:10px;font-weight:700;color:${color};`;
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.min = '0'; inp.max = '999999';
+        inp.value = coins[key] || 0;
+        inp.className = 'cost-coin-inp';
+        inp.style.cssText = 'width:48px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--text);font-size:13px;font-weight:600;text-align:center;padding:3px 4px;outline:none;';
+        inp.addEventListener('change', () => {
+          coins[key] = Math.max(0, parseInt(inp.value) || 0);
+          showInspector(slotData, container, r, c, packIdx);
+          render();
+        });
+        wrap.appendChild(lbl); wrap.appendChild(inp);
+      });
+      propsEl.appendChild(wrap);
+    }
+
+    // Material chips and type selects — always in propsEl (header row), for both inventory and shop
+    const effectiveCat = getEffectiveCategory(slotData);
+    const canSilver = ['weapon','ammunition'].includes(effectiveCat);
+    const canMetal  = ['weapon','armor','shield','ammunition'].includes(effectiveCat);
+    const ctrlTarget = propsEl;
+
+    // When modifying a shop item's properties via the inspector, refresh its row cost display
+    const refreshShopRow = () => {
+      const shopRow = document.querySelector(`.shop-item-row[data-item-name="${CSS.escape(slotData.name)}"]`);
+      if (shopRow?._applyRowState) shopRow._applyRowState();
+      // DM listings are persisted instances (unlike catalog rows, which are
+      // rebuilt fresh each time) — without this, edits like decrementing
+      // charges only live in memory and revert on the next Firebase refresh.
+      if (slotData._isDmListing && window.saveDmListings) window.saveDmListings();
+    };
+
+    const updateAmmoUnresolved = () => {
+      if (!container && slotData.name === 'Ammunition') {
+        slotData._unresolved = !slotData.silvered && !slotData.material;
+      }
+    };
+
+    const isSilvered = slotData.silvered || slotData.material === 'silvered';
+    if (canSilver && (window._isDM || isSilvered)) {
+      const btn = document.createElement('button');
+      btn.className = 'prop-chip' + (isSilvered ? ' active-silvered' : '');
+      btn.textContent = 'Silvered';
+      btn.dataset.matChip = 'true';
+      btn.onclick = () => {
+        slotData.silvered = !(slotData.silvered || slotData.material === 'silvered');
+        if (slotData.material === 'silvered') slotData.material = null;
+        updateAmmoUnresolved();
+        if (!container) refreshShopRow();
+        render(); showInspector(slotData, container, r, c, packIdx);
+      };
+      ctrlTarget.appendChild(btn);
+    }
+
+    const curMetal = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
+    if (canMetal && (window._isDM || curMetal)) {
+      const metals = [null, 'mithral', 'adamantine'];
+      const btn = document.createElement('button');
+      btn.className = 'prop-chip' + (curMetal ? ` active-${curMetal}` : '');
+      btn.textContent = curMetal ? curMetal.charAt(0).toUpperCase() + curMetal.slice(1) : 'Metal';
+      btn.dataset.matChip = 'true';
+      btn.onclick = () => {
+        const idx = metals.indexOf(curMetal);
+        slotData.material = metals[(idx + 1) % metals.length];
+        updateAmmoUnresolved();
+        if (!container) refreshShopRow();
+        render(); showInspector(slotData, container, r, c, packIdx);
+      };
+      ctrlTarget.appendChild(btn);
+    }
+
+    // Weapon / armor / element selects
+    const _addPlaceholder = (sel, label, currentVal) => {
+      if (!container) {
+        const ph = document.createElement('option');
+        ph.value = ''; ph.textContent = label;
+        if (currentVal === '') ph.selected = true;
+        sel.insertBefore(ph, sel.firstChild);
+      }
+    };
+
+    const _addLockBtn = (meta, target = ctrlTarget) => {
+      if (!window._isDM) return;
+      const lockBtn = document.createElement('button');
+      lockBtn.className = 'prop-chip insp-lock-btn' + (meta.locked ? ' active-lock' : '');
+      lockBtn.title = meta.locked ? 'Unlock' : 'Lock';
+      const lockIcon = document.createElement('i');
+      lockIcon.className = meta.locked ? 'fas fa-lock' : 'fas fa-lock-open';
+      lockBtn.appendChild(lockIcon);
+      lockBtn.onclick = () => {
+        meta.locked = !meta.locked;
+        if (onChange) onChange();
+        render();
+        showInspector(slotData, container, r, c);
+      };
+      target.appendChild(lockBtn);
+    };
+
+    // After a select changes, sync _unresolved with whether any select still holds ''
+    const _updateUnresolved = () => {
+      const v = slotData.variables || {};
+      const stillEmpty = Object.values(v).some(m => m.control === 'select' && m.value === '');
+      if (stillEmpty) slotData._unresolved = true;
+      else delete slotData._unresolved;
+    };
+
+    const weaponMeta = slotData.variables && slotData.variables.weapon;
+    if (weaponMeta && weaponMeta.control === 'select') {
+      if ((weaponMeta.options || []).length === 1 || weaponMeta.locked) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = weaponMeta.value;
+        ctrlTarget.appendChild(span);
+        _addLockBtn(weaponMeta);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        const _curatedSet = new Set(weaponMeta.options || []);
+        (weaponMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === weaponMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        if (weaponMeta.value && !_curatedSet.has(weaponMeta.value) && !window._isDM) {
+          const o = document.createElement('option');
+          o.value = weaponMeta.value; o.textContent = weaponMeta.value;
+          o.selected = true;
+          sel.insertBefore(o, sel.firstChild);
+        }
+        if (window._isDM) {
+          const _extras = (window.WEAPON_OPTIONS || []).filter(opt => !_curatedSet.has(opt));
+          if (_extras.length) {
+            const grp = document.createElement('optgroup');
+            grp.label = '─── Non-Standard ───';
+            _extras.forEach(opt => {
+              const o = document.createElement('option');
+              o.value = opt; o.textContent = opt;
+              if (opt === weaponMeta.value) o.selected = true;
+              grp.appendChild(o);
+            });
+            sel.appendChild(grp);
+          }
+        }
+        _addPlaceholder(sel, 'Weapon', weaponMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.weapon.value = sel.value;
+          const libWeapon = getLibraryItem(sel.value);
+          if (libWeapon && libWeapon.bulk) slotData.bulk = libWeapon.bulk;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+          showInspector(slotData, container, r, c);
+        });
+        ctrlTarget.appendChild(sel);
+        _addLockBtn(weaponMeta);
+      }
+    }
+
+    const armorMeta = slotData.variables && slotData.variables.armor;
+    if (armorMeta && armorMeta.control === 'select') {
+      if ((armorMeta.options || []).length === 1 || armorMeta.locked) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = armorMeta.value;
+        ctrlTarget.appendChild(span);
+        _addLockBtn(armorMeta);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (armorMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === armorMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        _addPlaceholder(sel, 'Armor', armorMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.armor.value = sel.value;
+          const libArmor = getLibraryItem(sel.value);
+          if (libArmor && libArmor.bulk) slotData.bulk = libArmor.bulk;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+          showInspector(slotData, container, r, c);
+        });
+        ctrlTarget.appendChild(sel);
+        _addLockBtn(armorMeta);
+      }
+    }
+
+    const elementMeta = slotData.variables && slotData.variables.element;
+    if (elementMeta && elementMeta.control === 'select') {
+      if ((elementMeta.options || []).length === 1 || elementMeta.locked) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = elementMeta.value;
+        ctrlTarget.appendChild(span);
+        _addLockBtn(elementMeta);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (elementMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === elementMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        _addPlaceholder(sel, 'Elemental', elementMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.element.value = sel.value;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+          showInspector(slotData, container, r, c);
+        });
+        ctrlTarget.appendChild(sel);
+        _addLockBtn(elementMeta);
+      }
+    }
+
+    const creatureMeta = slotData.variables && slotData.variables.creature;
+    if (creatureMeta && creatureMeta.control === 'select') {
+      if ((creatureMeta.options || []).length === 1 || creatureMeta.locked) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = creatureMeta.value;
+        ctrlTarget.appendChild(span);
+        _addLockBtn(creatureMeta);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (creatureMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === creatureMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        _addPlaceholder(sel, 'Creature', creatureMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.creature.value = sel.value;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+          showInspector(slotData, container, r, c);
+        });
+        ctrlTarget.appendChild(sel);
+        _addLockBtn(creatureMeta);
+      }
+    }
+
+    const spellMeta = slotData.variables && slotData.variables.spell;
+    if (spellMeta && spellMeta.control === 'select') {
+      if ((spellMeta.options || []).length === 1 || spellMeta.locked) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = spellMeta.value;
+        ctrlTarget.appendChild(span);
+        _addLockBtn(spellMeta);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (spellMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === spellMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        _addPlaceholder(sel, 'Spell', spellMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.spell.value = sel.value;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+          showInspector(slotData, container, r, c);
+        });
+        ctrlTarget.appendChild(sel);
+        _addLockBtn(spellMeta);
+      }
+    }
+
+    const variantMeta = slotData.variables && slotData.variables.variant;
+    if (variantMeta && variantMeta.control === 'select') {
+      if ((variantMeta.options || []).length === 1 || variantMeta.locked) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = variantMeta.value;
+        ctrlTarget.appendChild(span);
+        _addLockBtn(variantMeta);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (variantMeta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === variantMeta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        _addPlaceholder(sel, 'Variant', variantMeta.value);
+        sel.addEventListener('change', () => {
+          slotData.variables.variant.value = sel.value;
+          _updateUnresolved();
+          if (!container) refreshShopRow();
+          render();
+          showInspector(slotData, container, r, c);
+        });
+        ctrlTarget.appendChild(sel);
+        _addLockBtn(variantMeta);
+      }
+    }
+
+    propsEl.hidden = propsEl.children.length === 0;
+
+    // Container rows input (only when container chip is active)
+    const rowsRowEl = document.getElementById('insp-container-rows-row');
+    const rowsInput = document.getElementById('insp-container-rows');
+    rowsRowEl.hidden = !slotData.isContainer || slotData.custom;
+    if (slotData.isContainer) {
+      rowsInput.value = slotData.containerRows || 2;
+      rowsInput.onchange = () => {
+        slotData.containerRows = Math.max(1, Math.min(20, parseInt(rowsInput.value) || 2));
+        if (slotData.containerId) {
+          const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+          if (linked) {
+            const target = slotData.containerRows;
+            while (linked.slots.length < target) linked.slots.push([null, null]);
+            while (linked.slots.length > target) {
+              const last = linked.slots[linked.slots.length - 1];
+              if (last[0] === null && last[1] === null) linked.slots.pop();
+              else break;
+            }
+            linked.rows = linked.slots.length;
+            linked.maxRows = target;
+            render();
+          }
+        }
+      };
+    }
+
+    // ── Remaining variables (non-numeric, non-weapon select) ──
+    const varsEl = document.getElementById('insp-vars');
+    varsEl.innerHTML = '';
+    for (const [key, meta] of Object.entries(slotData.variables || {})) {
+      // Numeric → shown inline; weapon/armor select → shown in props row
+      if (meta.control === 'plusminus' || meta.control === 'both') continue;
+      if ((key === 'weapon' || key === 'armor' || key === 'element' || key === 'spell' || key === 'creature' || key === 'variant') && meta.control === 'select') continue;
+
+      const div = document.createElement('div');
+      div.className = 'insp-var';
+      const label = document.createElement('span');
+      label.className = 'insp-var-label';
+      label.textContent = key;
+      if ((meta.options || []).length === 1 || meta.locked) {
+        const span = document.createElement('span');
+        span.className = 'insp-select insp-select--fixed';
+        span.textContent = meta.value;
+        div.appendChild(label); div.appendChild(span);
+        _addLockBtn(meta, div);
+      } else {
+        const sel = document.createElement('select');
+        sel.className = 'insp-select';
+        (meta.options || []).forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt; o.textContent = opt;
+          if (opt === meta.value) o.selected = true;
+          sel.appendChild(o);
+        });
+        sel.addEventListener('change', () => { slotData.variables[key].value = sel.value; _updateUnresolved(); render(); showInspector(slotData, container, r, c, packIdx); });
+        div.appendChild(label); div.appendChild(sel);
+        _addLockBtn(meta, div);
+      }
+      varsEl.appendChild(div);
+    }
+
+    // ── Custom item edit panel ──
+    const prevEditPanel = document.getElementById('insp-custom-edit-panel');
+    if (prevEditPanel) prevEditPanel.remove();
+    if (slotData.custom && container && _customEditOpen) {
+      const panel = document.createElement('div');
+      panel.id = 'insp-custom-edit-panel';
+
+      const addRow = (...children) => {
+        const row = document.createElement('div');
+        row.className = 'custom-edit-row';
+        children.forEach(c => row.appendChild(c));
+        panel.appendChild(row);
+      };
+
+      const makeLabel = text => {
+        const s = document.createElement('span');
+        s.className = 'custom-edit-label';
+        s.textContent = text;
+        return s;
+      };
+
+      // Name
+      const nameInp = document.createElement('input');
+      nameInp.type = 'text'; nameInp.className = 'custom-edit-name-inp';
+      nameInp.placeholder = 'Item name'; nameInp.value = slotData.name || '';
+      nameInp.enterKeyHint = 'done';
+      const commitName = () => {
+        const v = nameInp.value.trim();
+        if (!v || v === slotData.name) return;
+        slotData.name = v;
+        document.getElementById('insp-name').textContent = v;
+        render();
+      };
+      nameInp.addEventListener('input', () => {
+        const v = nameInp.value.trim();
+        if (v) document.getElementById('insp-name').textContent = v;
+      });
+      nameInp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); commitName(); nameInp.blur(); }
+      });
+      nameInp.addEventListener('blur', commitName);
+      addRow(makeLabel('Name'), nameInp);
+
+      // Type (+ Rows if container)
+      const curCat = slotData.category || (slotData.isContainer ? 'container' : slotData.isWeapon ? 'weapon' : '');
+      const catSel = document.createElement('select'); catSel.className = 'insp-select';
+      [['','None'],['weapon','Weapon'],['armor','Armor'],['ammunition','Ammo'],
+       ['shield','Shield'],['wondrous','Wondrous'],['container','Container']
+      ].forEach(([val, lbl]) => {
+        const o = document.createElement('option');
+        o.value = val; o.textContent = lbl;
+        if (val === curCat) o.selected = true;
+        catSel.appendChild(o);
+      });
+      catSel.addEventListener('change', () => {
+        const prevCat = slotData.category || (slotData.isContainer ? 'container' : slotData.isWeapon ? 'weapon' : '');
+        const newCat = catSel.value;
+        if (prevCat === 'container' && slotData.isContainer && slotData.containerId) {
+          const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+          if (linked && containerHasItems(linked)) {
+            if (!confirm(`This will remove the ${slotData.name} container and its contents. Continue?`)) { catSel.value = 'container'; return; }
+          }
+          if (linked) state.containers = state.containers.filter(cnt => cnt !== linked);
+          slotData.containerId = null; slotData.isContainer = false;
+        }
+        slotData.category = newCat; slotData.isWeapon = (newCat === 'weapon');
+        slotData.variables = slotData.variables || {};
+        if (newCat === 'weapon') { if (!slotData.variables.weapon) slotData.variables.weapon = { control: 'select', value: WEAPON_OPTIONS[0], options: WEAPON_OPTIONS }; delete slotData.variables.armor; }
+        else if (newCat === 'armor' || newCat === 'shield') { if (!slotData.variables.armor) slotData.variables.armor = { control: 'select', value: ARMOR_OPTIONS[0], options: ARMOR_OPTIONS }; delete slotData.variables.weapon; }
+        else if (newCat === 'container') { slotData.isContainer = true; slotData.containerRows = slotData.containerRows || 2; if (!slotData.containerId) createLinkedContainer(slotData, container.id, r, c); delete slotData.variables.weapon; delete slotData.variables.armor; }
+        else { delete slotData.variables.weapon; delete slotData.variables.armor; }
+        const silverOk = ['weapon','ammunition'].includes(newCat);
+        const metalOk  = ['weapon','armor','shield','ammunition'].includes(newCat);
+        if (!silverOk) { slotData.silvered = false; if (slotData.material === 'silvered') slotData.material = null; }
+        if (!metalOk && (slotData.material === 'mithral' || slotData.material === 'adamantine')) slotData.material = null;
+        render(); showInspector(slotData, container, r, c);
+      });
+
+      if (slotData.isContainer) {
+        const rowsInp = document.createElement('input');
+        rowsInp.type = 'number'; rowsInp.min = '1'; rowsInp.max = '20';
+        rowsInp.value = slotData.containerRows || 2;
+        rowsInp.className = 'cost-coin-inp';
+        rowsInp.style.cssText = 'width:48px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--text);font-size:13px;font-weight:600;text-align:center;padding:3px 4px;outline:none;';
+        rowsInp.addEventListener('change', () => {
+          slotData.containerRows = Math.max(1, Math.min(20, parseInt(rowsInp.value) || 2));
+          const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+          if (linked) {
+            const target = slotData.containerRows;
+            while (linked.slots.length < target) linked.slots.push([null, null]);
+            while (linked.slots.length > target) {
+              const last = linked.slots[linked.slots.length - 1];
+              if (last[0] === null && last[1] === null) linked.slots.pop();
+              else break;
+            }
+            linked.rows = linked.slots.length;
+            linked.maxRows = target;
+            render();
+          }
+        });
+        addRow(makeLabel('Type'), catSel, makeLabel('Rows'), rowsInp);
+      } else {
+        addRow(makeLabel('Type'), catSel);
+      }
+
+      // Bulk + Has Uses + Treasure
+      const isAmmoCustom = slotData.category === 'ammunition';
+      const bulkStates = ['stock', 'packable', 'bulky'];
+      const getBulkId = () => slotData.bulk ? slotData.bulk.id : 'stock';
+      const bulkBtn = document.createElement('button');
+      const refreshBulkBtn = () => {
+        const s = getBulkId();
+        bulkBtn.className = 'prop-chip' + (s === 'packable' ? ' active-packable' : s === 'bulky' ? ' active-bulky' : '');
+        bulkBtn.textContent = s === 'packable' ? 'Packable' : s === 'bulky' ? 'Bulky' : 'Stock';
+      };
+      refreshBulkBtn();
+      bulkBtn.onclick = () => {
+        const next = bulkStates[(bulkStates.indexOf(getBulkId()) + 1) % bulkStates.length];
+        const newBulk = Bulk[next.toUpperCase()] || Bulk.STOCK;
+        container.slots[r][c] = null; slotData.bulk = newBulk;
+        placeSlotData(slotData, container, r, c); showInspector(slotData, container, r, c);
+      };
+
+      const vars = slotData.variables || {};
+      const isTreasureCustom = !!slotData.treasure;
+
+      const makeChip = (label, active, onclick) => {
+        const b = document.createElement('button');
+        b.className = 'prop-chip' + (active ? ' active' : '');
+        b.textContent = label; b.onclick = onclick;
+        return b;
+      };
+
+      // Three-state uses toggle: 0 = none, 1 = uses, 2 = coin-uses
+      const getUsesState = () =>
+        slotData.hasUses === 'coins' ? 2
+        : (slotData.hasUses || vars.uses || vars.count) ? 1 : 0;
+      const usesChip = document.createElement('button');
+      const refreshUsesChip = () => {
+        const s = getUsesState();
+        usesChip.className = 'prop-chip' + (s === 1 ? ' active' : s === 2 ? ' active-coins' : '');
+        usesChip.innerHTML = s === 2 ? '<i class="fas fa-coins"></i> Uses' : 'Uses';
+      };
+      refreshUsesChip();
+      usesChip.onclick = () => {
+        const next = (getUsesState() + 1) % 3;
+        if (next === 0) {
+          slotData.hasUses = false;
+          delete (slotData.variables || {}).uses;
+          delete (slotData.variables || {}).count;
+        } else {
+          slotData.hasUses = next === 2 ? 'coins' : true;
+          slotData.variables = slotData.variables || {};
+          if (!slotData.variables.uses && !slotData.variables.count)
+            slotData.variables.uses = { value: 1, control: 'both', min: 0 };
+        }
+        render(); showInspector(slotData, container, r, c);
+      };
+
+      const treasureChip = makeChip('Treasure', isTreasureCustom, () => {
+        slotData.treasure = !slotData.treasure;
+        render(); showInspector(slotData, container, r, c);
+      });
+
+      if (isAmmoCustom) addRow(usesChip, treasureChip);
+      else addRow(makeLabel('Bulk'), bulkBtn, usesChip, treasureChip);
+
+      // Cost fields
+      if (!slotData.costCoins) slotData.costCoins = { pp: 0, gp: 0, sp: 0, cp: 0 };
+      const costCoins = slotData.costCoins;
+      const costWrap = document.createElement('div');
+      costWrap.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;';
+      [['pp','rgba(190,145,255,0.9)'],['gp','rgba(255,205,60,0.9)'],['sp','rgba(200,200,215,0.85)'],['cp','rgba(205,135,65,0.85)']].forEach(([key, color]) => {
+        const lbl = document.createElement('span');
+        lbl.textContent = key.toUpperCase();
+        lbl.style.cssText = `font-size:10px;font-weight:700;color:${color};`;
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.min = '0'; inp.max = '999999';
+        inp.value = costCoins[key] || 0;
+        inp.className = 'cost-coin-inp';
+        inp.style.cssText = 'width:48px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--text);font-size:13px;font-weight:600;text-align:center;padding:3px 4px;outline:none;';
+        inp.addEventListener('change', () => { costCoins[key] = Math.max(0, parseInt(inp.value) || 0); showInspector(slotData, container, r, c, packIdx); render(); });
+        costWrap.appendChild(lbl); costWrap.appendChild(inp);
+      });
+      addRow(makeLabel('Cost'), costWrap);
+
+      // Description
+      const descTa = document.createElement('textarea');
+      descTa.className = 'custom-edit-desc';
+      descTa.placeholder = 'Description…';
+      descTa.value = slotData.description || '';
+      descTa.oninput = () => { slotData.description = descTa.value; };
+      panel.appendChild(descTa);
+
+      varsEl.parentNode.insertBefore(panel, varsEl);
+    }
+
+    detailPanelEl.classList.remove('no-transition', 'detail-collapsed');
+    if (_prevH) {
+      detailPanelEl.style.height = _prevH + 'px';
+      requestAnimationFrame(() => { detailPanelEl.style.height = detailPanelEl.scrollHeight + 'px'; });
+    }
+  }
+
+  function refreshInspectorCollapsed() {
+    if (inspectorItemKey === null) {
+      detailPanelEl.classList.add('detail-collapsed');
+    }
+  }
+
+  function hideInspector(force) {
+    if (!force) {
+      if (document.querySelector('#insp-props .insp-select.flash-required')) return;
+      if (document.querySelector('#insp-props .chip-flash-required')) return;
+    }
+    inspectorItemKey = null;
+    _customEditKey = null; _customEditOpen = false;
+    _spellDetailActive = null;
+    _metamagicDetailActive = null;
+    document.getElementById('spell-insp-section').hidden = true;
+    inspectorEl.hidden = false;
+    refreshInspectorCollapsed();
+  }
+
+  function toggleInspectorFor(key, slotData, container, r, c) {
+    if (inspectorItemKey === key && !detailPanelEl.classList.contains('detail-collapsed')) {
+      hideInspector();
+    } else {
+      showInspector(slotData, container, r, c);
+      inspectorItemKey = key;
+    }
+    render();
+  }
+
+  document.getElementById('insp-toggle').addEventListener('click', () => {
+    hideInspector();
+    render();
+  });
+
+
+  document.addEventListener('pointerdown', e => {
+    const panelOpen = !detailPanelEl.classList.contains('detail-collapsed');
+    const outsidePanel = !detailPanelEl.contains(e.target)
+        && !e.target.closest('.slot')
+        && !e.target.closest('.shop-item-row')
+        && !e.target.closest('.char-tab')
+        && !e.target.closest('#shop-tab-btn')
+        && !e.target.closest('#cs-armor-display')
+        && !e.target.closest('#cs-shield-display')
+        && !e.target.closest('.cs-attack-weapon-name')
+        && !e.target.closest('.cs-spell-link')
+        && !e.target.closest('#cs-calc-overlay')
+        && !e.target.closest('#cs-calc-backdrop');
+    if (panelOpen && outsidePanel) {
+      if (_spellDetailActive) closeSpellDetail();
+      else if (inspectorItemKey !== null) { hideInspector(); render(); }
+    }
+  });
+
+  // ── CHARACTER FIELDS ──────────────────────────────────────────────────────
+  document.getElementById('char-name').addEventListener('input', e => {
+    state.charName = e.target.value;
+    updateCsNameDisplay();
+    if (onChange) onChange();
+  });
+  document.getElementById('char-carry').addEventListener('input', e => {
+    state.carryCapacity = e.target.value;
+    updateCarryDisplay();
+  });
+
+  CS_FIELDS.forEach(([id, k]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    // While this field has focus, the history-diff debounce (see
+    // handleInventoryChange) is suppressed entirely rather than just reset —
+    // otherwise a long-enough typing pause ("2", pause, "6" to make "26")
+    // would still let the timer fire mid-edit and log the transient "2" as
+    // if it were a real value. Blur is what actually means "done here."
+    el.addEventListener('focus', () => { window.historyFieldFocused = true; });
+    el.addEventListener('blur', () => {
+      window.historyFieldFocused = false;
+      updateCsCalculations();
+      if (window.flushCharDiff) window.flushCharDiff();
+    });
+    el.addEventListener('input', e => {
+      state[k] = e.target.value;
+      if (onChange) onChange();
+      updateCsCalculations();
+    });
+  });
+
+  // When the user focuses speed, restore the base speed so they edit the real value
+  const _speedEl = document.getElementById('cs-speed');
+  if (_speedEl) {
+    _speedEl.addEventListener('focus', () => {
+      _speedEl.value = state.speed || '';
+      _speedEl.classList.remove('cs-auto');
+    });
+  }
+
+  const CS_ID_TO_KEY = Object.fromEntries(CS_FIELDS.map(([id, k]) => [id, k]));
+  ['cs-hp', 'cs-hp-max', 'cs-temp-hp', 'cs-hit-dice-remaining'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    function applyEval() {
+      const result = evalMath(el.value);
+      if (result !== null) {
+        el.value = result;
+        state[CS_ID_TO_KEY[id]] = String(result);
+        updateCsCalculations();
+        if (onChange) onChange();
+      }
+    }
+    el.addEventListener('blur', applyEval);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') { applyEval(); el.blur(); } });
+  });
+
+  // ── CALCULATOR OVERLAY (touch devices) ───────────────────────────────────
+  // calcShowCustom lets other UI (e.g. the coin purse inputs in showInspector,
+  // defined above) reuse this same popup for values that don't live in
+  // state[CS_ID_TO_KEY[el.id]] (the HP/temp-HP/hit-dice fields it was built
+  // for) by passing a { label, min, max, getValue, setValue } descriptor.
+  let calcShowCustom = null;
+  (function () {
+    const overlay   = document.getElementById('cs-calc-overlay');
+    const backdrop  = document.getElementById('cs-calc-backdrop');
+    const headerEl  = document.getElementById('cs-calc-header');
+    const mainEl    = document.getElementById('cs-calc-main');
+    const subEl     = document.getElementById('cs-calc-sub');
+    if (!overlay) return;
+
+    const CALC_FIELDS = {
+      'cs-hp':                 'Current HP',
+      'cs-temp-hp':            'Temp HP',
+      'cs-hit-dice-remaining': 'Hit Dice',
+    };
+
+    let targetEl     = null;
+    let customTarget = null; // { label, min, max, getValue, setValue } when open for a non-CS_FIELDS value
+    let baseVal  = 0;
+    let op       = '';   // '+' | '-' | ''
+    let numStr   = '';
+
+    function clampResult(v) {
+      if (customTarget) {
+        if (typeof customTarget.min === 'number') v = Math.max(customTarget.min, v);
+        if (typeof customTarget.max === 'number') v = Math.min(customTarget.max, v);
+        return v;
+      }
+      return Math.max(0, v);
+    }
+
+    function renderDisplay() {
+      if (!op) {
+        mainEl.textContent = numStr || String(baseVal);
+        subEl.textContent  = '';
+      } else {
+        const sym = op === '-' ? '−' : '+';
+        mainEl.textContent = `${baseVal} ${sym} ${numStr || '_'}`;
+        if (numStr) {
+          const res = clampResult(op === '-' ? baseVal - parseInt(numStr) : baseVal + parseInt(numStr));
+          subEl.textContent = `= ${res}`;
+        } else {
+          subEl.textContent = '';
+        }
+      }
+    }
+
+    function show(el, custom) {
+      if (!custom && document.getElementById('stats-panel')?.classList.contains('char-view-only')) return;
+      targetEl     = el;
+      customTarget = custom || null;
+      baseVal  = custom ? (custom.getValue() || 0) : (parseInt(el.value) || 0);
+      op       = '';
+      numStr   = '';
+      headerEl.textContent = custom ? custom.label : (CALC_FIELDS[el.id] || '');
+      renderDisplay();
+      overlay.classList.add('cs-calc-open');
+      backdrop.classList.add('cs-calc-open');
+      el.readOnly = true;
+      window._navCalc.open = true;
+      history.pushState({ overlay: 'calculator' }, '');
+      // If the item detail panel is open behind this (e.g. the coin purse),
+      // shift it up by the overlay's height so its contents — including the
+      // value being edited — stay visible above the keypad instead of being
+      // covered by it.
+      if (detailPanelEl && !detailPanelEl.classList.contains('detail-collapsed')) {
+        detailPanelEl.style.transform = `translateY(-${overlay.offsetHeight}px)`;
+      }
+    }
+
+    function hide() {
+      if (window._navCalc.open) {
+        window._navCalc.open = false;
+        if (!window._navCalc.handling) {
+          window._navCalc.suppress = true;
+          history.back();
+        }
+      }
+      overlay.classList.remove('cs-calc-open');
+      backdrop.classList.remove('cs-calc-open');
+      if (targetEl) { targetEl.readOnly = false; targetEl = null; }
+      if (detailPanelEl) detailPanelEl.style.transform = '';
+      customTarget = null;
+      op = ''; numStr = '';
+    }
+
+    window._navCalc.hide = hide;
+
+    function commit() {
+      if (!targetEl) return;
+      let result;
+      if (!op) {
+        result = numStr !== '' ? parseInt(numStr) : baseVal;
+      } else {
+        result = numStr !== ''
+          ? (op === '-' ? baseVal - parseInt(numStr) : baseVal + parseInt(numStr))
+          : baseVal;
+      }
+      result = clampResult(result);
+      targetEl.value = String(result);
+      if (customTarget) {
+        customTarget.setValue(result);
+      } else {
+        state[CS_ID_TO_KEY[targetEl.id]] = String(result);
+        updateCsCalculations();
+      }
+      if (onChange) onChange();
+      if (window.flushCharDiff) window.flushCharDiff();
+      hide();
+    }
+
+    overlay.addEventListener('pointerdown', e => {
+      const key = e.target.closest('[data-key]')?.dataset.key;
+      if (!key) return;
+      e.preventDefault();
+      if (key === '=') {
+        commit();
+      } else if (key === 'back') {
+        if (numStr)        numStr = numStr.slice(0, -1);
+        else if (op)       op = '';
+      } else if (key === 'clear') {
+        op = ''; numStr = '';
+      } else if (key === '+' || key === '-') {
+        if (op && !numStr) { op = key; }
+        else if (op && numStr) { commit(); return; }
+        else { op = key; numStr = ''; }
+      } else {
+        numStr += key;
+      }
+      renderDisplay();
+    });
+
+    backdrop.addEventListener('pointerdown', () => hide());
+
+    const CALC_IDS = Object.keys(CALC_FIELDS);
+    CALC_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      // touchstart preventDefault stops the focus→keyboard chain on iOS
+      el.addEventListener('touchstart', e => {
+        e.preventDefault();
+        el.readOnly = true;
+      }, { passive: false });
+      el.addEventListener('pointerdown', e => {
+        if (e.pointerType !== 'mouse') {
+          e.preventDefault();
+          show(el);
+        }
+      });
+    });
+
+    calcShowCustom = show;
+  })();
+
+  // ── FEATURES ─────────────────────────────────────────────────────────────
+
+  const METAMAGIC_OPTIONS = [
+    { id: 'careful',    name: 'Careful Spell',    cost: '1 Sorcery Point',
+      desc: 'When you cast a spell that forces other creatures to make a saving throw, you can protect some of those creatures from the spell\'s full force. To do so, spend 1 Sorcery Point and choose a number of those creatures up to your Charisma modifier (minimum of one creature). A chosen creature automatically succeeds on its saving throw against the spell, and it takes no damage if it would normally take half damage on a successful save.' },
+    { id: 'distant',    name: 'Distant Spell',    cost: '1 Sorcery Point',
+      desc: 'When you cast a spell that has a range of at least 5 feet, you can spend 1 Sorcery Point to double the spell\'s range. Or when you cast a spell that has a range of Touch, you can spend 1 Sorcery Point to make the spell\'s range 30 feet.' },
+    { id: 'empowered',  name: 'Empowered Spell',  cost: '1 Sorcery Point',
+      desc: 'When you roll damage for a spell, you can spend 1 Sorcery Point to reroll a number of the damage dice up to your Charisma modifier (minimum of one), and you must use the new rolls.\nYou can use Empowered Spell even if you\'ve already used a different Metamagic option during the casting of the spell.' },
+    { id: 'extended',   name: 'Extended Spell',   cost: '1 Sorcery Point',
+      desc: 'When you cast a spell that has a duration of 1 minute or longer, you can spend 1 Sorcery Point to double its duration to a maximum duration of 24 hours.\nIf the affected spell requires Concentration, you have Advantage on any saving throw you make to maintain that Concentration.' },
+    { id: 'heightened', name: 'Heightened Spell', cost: '2 Sorcery Points',
+      desc: 'When you cast a spell that forces a creature to make a saving throw, you can spend 2 Sorcery Points to give one target of the spell Disadvantage on saves against the spell.' },
+    { id: 'quickened',  name: 'Quickened Spell',  cost: '2 Sorcery Points',
+      desc: 'When you cast a spell that has a casting time of an action, you can spend 2 Sorcery Points to change the casting time to a Bonus Action for this casting. You can\'t modify a spell in this way if you\'ve already cast a level 1+ spell on the current turn, nor can you cast a level 1+ spell on this turn after modifying a spell in this way.' },
+    { id: 'seeking',    name: 'Seeking Spell',    cost: '1 Sorcery Point',
+      desc: 'If you make an attack roll for a spell and miss, you can spend 1 Sorcery Point to reroll the d20, and you must use the new roll.\nYou can use Seeking Spell even if you\'ve already used a different Metamagic option during the casting of the spell.' },
+    { id: 'subtle',     name: 'Subtle Spell',     cost: '1 Sorcery Point',
+      desc: 'When you cast a spell, you can spend 1 Sorcery Point to cast it without any Verbal, Somatic, or Material components, except Material components that are consumed by the spell or that have a cost specified in the spell.' },
+    { id: 'transmuted', name: 'Transmuted Spell', cost: '1 Sorcery Point',
+      desc: 'When you cast a spell that deals a type of damage from the following list, you can spend 1 Sorcery Point to change that damage type to one of the other listed types: Acid, Cold, Fire, Lightning, Poison, Thunder.' },
+    { id: 'twinned',    name: 'Twinned Spell',    cost: '1 Sorcery Point',
+      desc: 'When you cast a spell, such as Charm Person, that can be cast with a higher-level spell slot to target an additional creature, you can spend 1 Sorcery Point to increase the spell\'s effective level by 1.' },
+    { id: 'spell-strike', name: 'Spell Strike', cost: '2 Sorcery Points', subclassOnly: true,
+      desc: 'When you attack a creature with a weapon attack from your magical conduit, you can cast a sorcerer spell or cantrip with a casting time of 1 action as a bonus action. If the attack hit and the spell targets the same creature, its first spell attack automatically hits.\nYou can\'t modify a spell in this way if you\'ve already cast a level 1+ spell on the current turn, nor can you cast a level 1+ spell on this turn after modifying a spell in this way.' },
+  ];
+
+  // Sorcerer spell slots by character level (levels 1–3)
+  const SORC_SLOTS = {
+     1: { 1: 2 },
+     2: { 1: 3 },
+     3: { 1: 4, 2: 2 },
+     4: { 1: 4, 2: 3 },
+     5: { 1: 4, 2: 3, 3: 2 },
+     6: { 1: 4, 2: 3, 3: 3 },
+     7: { 1: 4, 2: 3, 3: 3, 4: 1 },
+     8: { 1: 4, 2: 3, 3: 3, 4: 2 },
+     9: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 1 },
+    10: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2 },
+    11: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1 },
+    12: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1 },
+    13: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1 },
+    14: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1 },
+    15: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1, 8: 1 },
+    16: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1, 8: 1 },
+    17: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1, 8: 1, 9: 1 },
+    18: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 3, 6: 1, 7: 1, 8: 1, 9: 1 },
+    19: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 3, 6: 2, 7: 1, 8: 1, 9: 1 },
+    20: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 3, 6: 2, 7: 2, 8: 1, 9: 1 },
+  };
+
+  const RANGER_SLOTS = {
+     1: { 1: 2 },
+     2: { 1: 2 },
+     3: { 1: 3 },
+     4: { 1: 3 },
+     5: { 1: 4, 2: 2 },
+     6: { 1: 4, 2: 2 },
+     7: { 1: 4, 2: 3 },
+     8: { 1: 4, 2: 3 },
+     9: { 1: 4, 2: 3, 3: 2 },
+    10: { 1: 4, 2: 3, 3: 2 },
+    11: { 1: 4, 2: 3, 3: 3 },
+    12: { 1: 4, 2: 3, 3: 3 },
+    13: { 1: 4, 2: 3, 3: 3, 4: 1 },
+    14: { 1: 4, 2: 3, 3: 3, 4: 1 },
+    15: { 1: 4, 2: 3, 3: 3, 4: 2 },
+    16: { 1: 4, 2: 3, 3: 3, 4: 2 },
+    17: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 1 },
+    18: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 1 },
+    19: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2 },
+    20: { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2 },
+  };
+
+  const FEATURES_LIBRARY = [
+    {
+      id: 'sorcerer-spellcasting',
+      name: 'Spellcasting',
+      class: 'Sorcerer',
+      level: 1,
+      type: 'spellcasting',
+    },
+    {
+      id: 'ranger-spellcasting',
+      name: 'Spellcasting',
+      class: 'Ranger',
+      level: 1,
+      type: 'spellcasting',
+    },
+    {
+      id: 'ranger-favored-enemy',
+      name: 'Favored Enemy',
+      class: 'Ranger',
+      level: 1,
+      type: 'text',
+      description: [
+        "You always have the Hunter's Mark spell prepared. You can cast it twice without expending a spell slot, and you regain all expended uses of this ability when you finish a Long Rest.",
+        'The number of times you can cast the spell without a spell slot increases when you reach certain Ranger levels, as shown in the Favored Enemy column of the Ranger Features table.',
+      ],
+    },
+    {
+      id: 'ranger-weapon-mastery',
+      name: 'Weapon Mastery',
+      class: 'Ranger',
+      level: 1,
+      type: 'text',
+      description: [
+        'Your training with weapons allows you to use the mastery properties of two kinds of weapons of your choice with which you have proficiency, such as Longbows and Shortswords.',
+        'Whenever you finish a Long Rest, you can change the kinds of weapons you chose. For example, you could switch to using the mastery properties of Scimitars and Longswords.',
+      ],
+    },
+    {
+      id: 'ranger-deft-explorer',
+      name: 'Deft Explorer',
+      class: 'Ranger',
+      level: 2,
+      type: 'expertise',
+      expertiseSlots: 1,
+      description: [
+        'Thanks to your travels, you gain the following benefits.',
+        { boldIntro: 'Expertise.', text: 'Choose one of your skill proficiencies with which you lack Expertise. You gain Expertise in that skill.' },
+        { insertExpertiseDropdown: true },
+        { boldIntro: 'Languages.', text: 'You know two languages of your choice.' },
+      ],
+    },
+    {
+      id: 'ranger-fighting-style',
+      name: 'Fighting Style',
+      class: 'Ranger',
+      level: 2,
+      type: 'fighting-style',
+    },
+    {
+      id: 'ranger-extra-attack',
+      name: 'Extra Attack',
+      class: 'Ranger',
+      level: 5,
+      type: 'text',
+      description: 'You can attack twice instead of once whenever you take the Attack action on your turn.',
+    },
+    {
+      id: 'ranger-roving',
+      name: 'Roving',
+      class: 'Ranger',
+      level: 6,
+      type: 'text',
+      description: "Your Speed increases by 10 feet while you aren't wearing Heavy armor. You also have a Climb Speed and a Swim Speed equal to your Speed.",
+    },
+    {
+      id: 'witch-warden-occult-insight',
+      name: 'Occult Insight',
+      class: 'Ranger',
+      subclass: 'Witch Warden',
+      level: 3,
+      type: 'text',
+      description: "When you mark a creature with hunter's mark, the DM tells you something about its kind likely relevant. This could be its movement types and senses; its resistances, immunities, or vulnerabilities; or an action or ability it is likely to use (such as a breath weapon or spellcasting). You gain this information only the first time you mark a creature of a given kind until you cast the spell again.",
+    },
+    {
+      id: 'witch-warden-witchmarks',
+      name: 'Witchmarks',
+      class: 'Ranger',
+      subclass: 'Witch Warden',
+      level: 3,
+      type: 'text',
+      description: [
+        'You learn to inscribe occult sigils called witchmarks. When you finish a short or long rest, you can inscribe a number of witchmarks on yourself or your allies from the Witchmarks table up to your proficiency bonus. Each type of witchmark can be inscribed only once.',
+        'A witchmark remains inscribed until it is used or you inscribe a new set of witchmarks.',
+        { boldIntro: 'Witching Die.', text: 'Your witching die is a d6. At 6th level it becomes a d8.' },
+        { witchingDie: true },
+        { table: {
+          title: 'Witchmarks',
+          headers: ['Witchmark', 'Effect'],
+          rows: [
+            ['Wands',    'When the bearer casts a spell that requires a creature make a saving throw and they succeed, as a reaction the bearer can expend this witchmark to subtract the witching die from the result.'],
+            ['Cups',     'When a creature hits the bearer with an attack roll, as a reaction they can expend this witchmark to subtract the witching die from that attack roll.'],
+            ['Swords',   'When the bearer hits a creature with an attack, as a reaction they can expend this witchmark to deal additional damage equal to the witching die of any damage type of their choice.'],
+            ['Pentacles','When the bearer fails a saving throw, as a reaction they can expend this witchmark to add the witching die to the roll.'],
+          ],
+        }},
+      ],
+    },
+    {
+      id: 'witch-warden-omen-tracker',
+      name: 'Omen Tracker',
+      class: 'Ranger',
+      subclass: 'Witch Warden',
+      level: 6,
+      type: 'text',
+      description: "You master hunting through omens and divination. When you uncover signs of a creature's presence (such as its tracks, a belonging, or remains) you can cast hunter's mark on that creature even if it is not within sight or range. Also, when your concentration on hunter's mark ends, the effect remains on the last creature marked for one week, but the mark cannot be moved to a new creature.",
+    },
+    {
+      id: 'sorcerer-innate-sorcery',
+      name: 'Innate Sorcery',
+      class: 'Sorcerer',
+      level: 1,
+      type: 'text',
+      description: [
+        'An event in your past left an indelible mark on you, infusing you with simmering magic. As a Bonus Action, you can unleash that magic for 1 minute, during which you gain the following benefits:',
+        { list: [
+          'The spell save DC of your Sorcerer spells increases by 1.',
+          'You have Advantage on the attack rolls of Sorcerer spells you cast.',
+        ]},
+        'You can use this feature twice, and you regain all expended uses of it when you finish a Long Rest.',
+      ],
+    },
+    {
+      id: 'sorcerer-font-of-magic',
+      name: 'Font of Magic',
+      class: 'Sorcerer',
+      level: 2,
+      type: 'sorcery-points',
+      description: [
+        'You have a number of Sorcery Points equal to your Sorcerer level. You can use your Sorcery Points to fuel the options below, along with other features, such as Metamagic, that use those points.',
+        { boldIntro: 'Converting Spell Slots to Sorcery Points.', text: "You can expend a spell slot to gain a number of Sorcery Points equal to the slot's level (no action required)." },
+        { boldIntro: 'Creating Spell Slots.', text: 'As a Bonus Action, you can transform unexpended Sorcery Points into one spell slot. The Creating Spell Slots table shows the cost of creating a spell slot of a given level, and it lists the minimum Sorcerer level you must be to create a slot. You can create a spell slot no higher than level 5.' },
+        { indent: 'Any spell slot you create with this feature vanishes when you finish a Long Rest.' },
+        { table: {
+          title: 'Creating Spell Slots',
+          headers: ['Spell Slot Level', 'Sorcery Point Cost', 'Min. Sorcerer Level'],
+          rows: [['1','2','2'],['2','3','3'],['3','5','5'],['4','6','7'],['5','7','9']],
+        }},
+      ],
+    },
+    {
+      id: 'sorcerer-sorcerous-restoration',
+      name: 'Sorcerous Restoration',
+      class: 'Sorcerer',
+      level: 5,
+      type: 'text',
+      description: "When you finish a Short Rest, you can regain expended Sorcery Points, but no more than a number equal to half your Sorcerer level (round down). Once you use this feature, you can't do so again until you finish a Long Rest.",
+    },
+    {
+      id: 'sorcerer-metamagic',
+      name: 'Metamagic',
+      class: 'Sorcerer',
+      level: 2,
+      type: 'metamagic',
+      description: 'You can alter your spells with Metamagic.',
+    },
+    {
+      id: 'spell-drinker-combat-mage',
+      name: 'Combat Mage',
+      class: 'Sorcerer',
+      subclass: 'Spell Drinker',
+      level: 3,
+      type: 'text',
+      description: 'You gain proficiency with light armor and medium armor. Also, you learn the true strike cantrip.',
+    },
+    {
+      id: 'spell-drinker-magical-conduit',
+      name: 'Magical Conduit',
+      class: 'Sorcerer',
+      subclass: 'Spell Drinker',
+      level: 3,
+      type: 'text',
+      description: 'You can spend 1 hour in meditation with a melee weapon. When you do, you gain proficiency with that weapon and it becomes your spellcasting focus for sorcerer spells. This weapon is your magical conduit. You can change your conduit by repeating this process with a different weapon.',
+    },
+    {
+      id: 'spell-drinker-draining-strike',
+      name: 'Draining Strike',
+      class: 'Sorcerer',
+      subclass: 'Spell Drinker',
+      level: 3,
+      type: 'text',
+      description: 'Once on your turn, when you hit a creature with a weapon attack from your magical conduit, you can deal the weapons damage as Necrotic damage. If you do, deal additional damage equal to your proficiency bonus, and gain temporary hit points equal twice your proficiency bonus for 1 minute.',
+    },
+    {
+      id: 'frayed-base',
+      name: 'Frayed',
+      race: 'Frayed',
+      type: 'frayed',
+      description: [
+        { boldIntro: 'Aberrant Mark.', text: 'Magic deformities warp your visage. You have the disfigured hindrance.' },
+        { boldIntro: 'Child of Misfortune.', text: 'When you are reduced to 0 hit points, you gain Heroic Inspiration if you don\'t have it.' },
+      ],
+    },
+    {
+      id: 'human-determination',
+      name: 'Human',
+      race: 'Human',
+      type: 'text',
+      description: [
+        { boldIntro: 'Skill Versatility.', text: 'You gain proficiency in two skills of your choice.' },
+        { boldIntro: 'Human Determination.', text: 'When you finish a long rest, you gain Heroic Inspiration if you don\'t have it.' },
+      ],
+    },
+    {
+      id: 'spell-drinker-precision-syphon',
+      name: 'Precision Syphon',
+      class: 'Sorcerer',
+      subclass: 'Spell Drinker',
+      level: 6,
+      type: 'text',
+      description: 'The first weapon attack you make with your magical conduit each turn has advantage.',
+    },
+    {
+      id: 'spell-drinker-metamagic',
+      name: 'Spell Drinker Metamagic',
+      class: 'Sorcerer',
+      subclass: 'Spell Drinker',
+      level: 6,
+      type: 'text',
+      description: [
+        { para: [
+          'You gain the ',
+          { metamagicLink: 'spell-strike', text: 'spell strike' },
+          ' metamagic.',
+        ]},
+      ],
+    },
+    {
+      id: 'rogue-expertise',
+      name: 'Expertise',
+      class: 'Rogue',
+      level: 1,
+      type: 'expertise',
+      expertiseSlots: 2,
+      description: 'You gain Expertise in two of your skill proficiencies of your choice.',
+    },
+    {
+      id: 'rogue-sneak-attack',
+      name: 'Sneak Attack',
+      class: 'Rogue',
+      level: 1,
+      type: 'text',
+      description: [
+        { sneakAttackDice: true },
+        'You know how to strike subtly and exploit a foe\'s distraction. Once per turn, you can deal an extra 1d6 damage to one creature you hit with an attack roll if you have Advantage on the roll and the attack uses a Finesse or a Ranged weapon. The extra damage\'s type is the same as the weapon\'s type.',
+        'You don\'t need Advantage on the attack roll if at least one of your allies is within 5 feet of the target, the ally doesn\'t have the Incapacitated condition, and you don\'t have Disadvantage on the attack roll.',
+        'The extra damage increases as you gain Rogue levels, as shown in the Sneak Attack column of the Rogue Features table.',
+      ],
+    },
+    {
+      id: 'rogue-thieves-cant',
+      name: "Thieves' Cant",
+      class: 'Rogue',
+      level: 1,
+      type: 'text',
+      description: "You picked up various languages in the communities where you plied your roguish talents. You know Thieves' Cant and one other language of your choice, which you choose from the language tables in chapter 2.",
+    },
+    {
+      id: 'rogue-weapon-mastery',
+      name: 'Weapon Mastery',
+      class: 'Rogue',
+      level: 1,
+      type: 'text',
+      description: [
+        'Your training with weapons allows you to use the mastery properties of two kinds of weapons of your choice with which you have proficiency, such as Daggers and Shortbows.',
+        'Whenever you finish a Long Rest, you can change the kinds of weapons you chose. For example, you could switch to using the mastery properties of Scimitars and Shortswords.',
+      ],
+    },
+    {
+      id: 'rogue-cunning-action',
+      name: 'Cunning Action',
+      class: 'Rogue',
+      level: 2,
+      type: 'text',
+      description: 'On your turn, you can take one of the following actions as a Bonus Action: Dash, Disengage, or Hide.',
+    },
+    {
+      id: 'rogue-steady-aim',
+      name: 'Steady Aim',
+      class: 'Rogue',
+      level: 3,
+      type: 'text',
+      description: "As a Bonus Action, you give yourself Advantage on your next attack roll on the current turn. You can use this feature only if you haven't moved during this turn, and after you use it, your Speed is 0 until the end of the current turn.",
+    },
+    {
+      id: 'rogue-cunning-strike',
+      name: 'Cunning Strike',
+      class: 'Rogue',
+      level: 5,
+      type: 'text',
+      description: [
+        "You've developed cunning ways to use your Sneak Attack. When you deal Sneak Attack damage, you can add one of the following Cunning Strike effects. Each effect has a die cost, which is the number of Sneak Attack damage dice you must forgo to add the effect. You remove the die before rolling, and the effect occurs immediately after the attack's damage is dealt. For example, if you add the Poison effect, remove 1d6 from the Sneak Attack's damage before rolling.",
+        'If a Cunning Strike effect requires a saving throw, the DC equals 8 plus your Dexterity modifier and Proficiency Bonus.',
+        { boldIntro: 'Poison (Cost: 1d6).', text: "You add a toxin to your strike, forcing the target to make a Constitution saving throw. On a failed save, the target has the Poisoned condition for 1 minute. At the end of each of its turns, the Poisoned target repeats the save, ending the effect on itself on a success. To use this effect, you must have a Poisoner's Kit on your person." },
+        { boldIntro: 'Trip (Cost: 1d6).', text: 'If the target is Large or smaller, it must succeed on a Dexterity saving throw or have the Prone condition.' },
+        { boldIntro: 'Withdraw (Cost: 1d6).', text: 'Immediately after the attack, you move up to half your Speed without provoking Opportunity Attacks.' },
+      ],
+    },
+    {
+      id: 'rogue-uncanny-dodge',
+      name: 'Uncanny Dodge',
+      class: 'Rogue',
+      level: 5,
+      type: 'text',
+      description: "When an attacker that you can see hits you with an attack roll, you can take a Reaction to halve the attack's damage against you (round down).",
+    },
+    {
+      id: 'rogue-expertise-2',
+      name: 'Expertise',
+      class: 'Rogue',
+      level: 6,
+      type: 'expertise',
+      expertiseSlots: 2,
+      description: 'You gain Expertise in two of your Skill Proficiencies of your choice.',
+    },
+    {
+      id: 'vile-fang-fangs-dripping',
+      name: 'Fangs Dripping',
+      class: 'Rogue',
+      subclass: 'Vile Fang',
+      level: 3,
+      type: 'text',
+      description: [
+        "You gain a poisoner's kit and proficiency with it.",
+        { boldIntro: 'Brewing Poisons.', text: "When you use the poisoner's kit to craft a basic poison, instead make a number of antitoxin or basic poisons equal to your proficiency bonus." },
+        "You can coat a weapon or ammunition with a strapped poison as a bonus action. When you coat a weapon or ammunition in a poison, you can transform it into any from the Exotic Poisons table. You can do this a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a short or long rest.",
+        "A creature that takes Piercing or Slashing damage from the poisoned weapon or ammunition suffers its effect. The poison remains potent for 1 minute or until it deals its damage, whichever comes first. Applying a poison to a weapon or ammunition removes any other poison already applied to it.",
+        { para: [{ bold: 'Saving Throws.' }, ' If a poison effect requires a saving throw, the DC equals 8 plus your Dexterity modifier and Proficiency Bonus.'] },
+        { saveDC: 'dex' },
+        { table: {
+          title: 'Exotic Poisons',
+          headers: ['Poison', 'Effect'],
+          rows: [
+            ["Dryad's Blight",   "The creature is dealt 1d6 poison damage. It is instead dealt 2d6 poison damage if it is a plant."],
+            ["Night Hag's Hex",  ["The creature must succeed on a Constitution saving throw or have the blinded condition until the end of its next turn.", { ingested: "The creature also has the unconscious condition for 1 hour. The creature wakes up if it takes damage or if another creature takes an action to shake it awake." }]],
+            ["Ooze's Caress",    "The creature is dealt 1d6 acid damage. It is instead dealt 2d6 acid damage if it is a construct or object."],
+            ["Succubus's Kiss",  ["The creature must succeed on a Constitution saving throw or have the charmed condition until the end of its next turn.", { ingested: "The creature is treated as having quaffed a Philter of Love." }]],
+            ["Toxin",            ["The creature must succeed on a Constitution saving throw or have the poisoned condition for 1 minute. At the end of each of its turns, the creature can repeat the saving throw. On a success, the effect ends.", { ingested: "the target is poisoned for 1 hour." }]],
+          ],
+        }},
+      ],
+    },
+    {
+      id: 'vile-fang-coiled-and-ready',
+      name: 'Coiled and Ready',
+      class: 'Rogue',
+      subclass: 'Vile Fang',
+      level: 3,
+      type: 'text',
+      description: 'You can use your Sneak Attack when you hit a creature with a weapon or ammunition coated in poison.',
+    },
+    {
+      id: 'vile-fang-my-bite-is-death',
+      name: 'My Bite is Death',
+      class: 'Rogue',
+      subclass: 'Vile Fang',
+      level: 6,
+      type: 'text',
+      description: [
+        'Your poisons ignore Resistance to Poison damage.',
+        { boldIntro: 'Potent (Cost: 1d6).', text: 'The saving throw against the poison applied by this attack is made with disadvantage.' },
+      ],
+    },
+    {
+      id: 'barbarian-rage',
+      name: 'Rage',
+      class: 'Barbarian',
+      level: 1,
+      type: 'text',
+      description: [
+        "You can imbue yourself with a primal power called Rage, a force that grants you extraordinary might and resilience. You can enter it as a Bonus Action if you aren't wearing Heavy armor.",
+        "You can enter your Rage the number of times shown for your Barbarian level in the Rages column of the Barbarian Features table. You regain one expended use when you finish a Short Rest, and you regain all expended uses when you finish a Long Rest.",
+        'While active, your Rage follows the rules below.',
+        { boldIntro: 'Damage Resistance.', text: 'You have Resistance to Bludgeoning, Piercing, and Slashing damage.' },
+        { boldIntro: 'Rage Damage.', text: 'When you make an attack using Strength—with either a weapon or an Unarmed Strike—and deal damage to the target, you gain a bonus to the damage that increases as you gain levels as a Barbarian, as shown in the Rage Damage column of the Barbarian Features table.' },
+        { boldIntro: 'Strength Advantage.', text: 'You have Advantage on Strength checks and Strength saving throws.' },
+        { boldIntro: 'No Concentration or Spells.', text: "You can't maintain Concentration, and you can't cast spells." },
+        { boldIntro: 'Duration.', text: 'The Rage lasts until the end of your next turn, and it ends early if you don Heavy armor or have the Incapacitated condition. If your Rage is still active on your next turn, you can extend the Rage for another round by doing one of the following:' },
+        { list: [
+          'Make an attack roll against an enemy.',
+          'Force an enemy to make a saving throw.',
+          'Take a Bonus Action to extend your Rage.',
+        ]},
+        'Each time the Rage is extended, it lasts until the end of your next turn. You can maintain a Rage for up to 10 minutes.',
+      ],
+    },
+    {
+      id: 'barbarian-unarmored-defense',
+      name: 'Unarmored Defense',
+      class: 'Barbarian',
+      level: 1,
+      type: 'text',
+      description: "While you aren't wearing any armor, your base Armor Class equals 10 plus your Dexterity and Constitution modifiers. You can use a Shield and still gain this benefit.",
+    },
+    {
+      id: 'barbarian-weapon-mastery',
+      name: 'Weapon Mastery',
+      class: 'Barbarian',
+      level: 1,
+      type: 'text',
+      description: [
+        'Your training with weapons allows you to use the mastery properties of two kinds of Simple or Martial Melee weapons of your choice, such as Greataxes and Handaxes. Whenever you finish a Long Rest, you can practice weapon drills and change one of those weapon choices.',
+        'When you reach certain Barbarian levels, you gain the ability to use the mastery properties of more kinds of weapons, as shown in the Weapon Mastery column of the Barbarian Features table.',
+      ],
+    },
+    {
+      id: 'barbarian-danger-sense',
+      name: 'Danger Sense',
+      class: 'Barbarian',
+      level: 2,
+      type: 'text',
+      description: "You gain an uncanny sense of when things aren't as they should be, giving you an edge when you dodge perils. You have Advantage on Dexterity saving throws unless you have the Incapacitated condition.",
+    },
+    {
+      id: 'barbarian-reckless-attack',
+      name: 'Reckless Attack',
+      class: 'Barbarian',
+      level: 2,
+      type: 'text',
+      description: 'You can throw aside all concern for defense to attack with increased ferocity. When you make your first attack roll on your turn, you can decide to attack recklessly. Doing so gives you Advantage on attack rolls using Strength until the start of your next turn, but attack rolls against you have Advantage during that time.',
+    },
+    {
+      id: 'barbarian-primal-knowledge',
+      name: 'Primal Knowledge',
+      class: 'Barbarian',
+      level: 3,
+      type: 'text',
+      description: [
+        'You gain proficiency in another skill of your choice from the skill list available to Barbarians at level 1.',
+        'In addition, while your Rage is active, you can channel primal power when you attempt certain tasks; whenever you make an ability check using one of the following skills, you can make it as a Strength check even if it normally uses a different ability: Acrobatics, Intimidation, Perception, Stealth, or Survival. When you use this ability, your Strength represents primal power coursing through you, honing your agility, bearing, and senses.',
+      ],
+    },
+    {
+      id: 'barbarian-extra-attack',
+      name: 'Extra Attack',
+      class: 'Barbarian',
+      level: 5,
+      type: 'text',
+      description: 'You can attack twice instead of once whenever you take the Attack action on your turn.',
+    },
+    {
+      id: 'barbarian-fast-movement',
+      name: 'Fast Movement',
+      class: 'Barbarian',
+      level: 5,
+      type: 'text',
+      description: "Your speed increases by 10 feet while you aren't wearing Heavy armor.",
+    },
+    {
+      id: 'cursed-dark-well',
+      name: 'Dark Well',
+      class: 'Barbarian',
+      subclass: 'Path of the Cursed',
+      level: 3,
+      type: 'text',
+      description: [
+        'You gain an additional hit die.',
+        'When you enter your rage, you can expend one hit die to feed your curse. When you do, gain temporary hit points equal to the roll of your hit die plus your Constitution modifier until your next short or long rest.',
+      ],
+    },
+    {
+      id: 'cursed-let-evil-take-hold',
+      name: 'Let Evil Take Hold',
+      class: 'Barbarian',
+      subclass: 'Path of the Cursed',
+      level: 3,
+      type: 'text',
+      description: [
+        'When you enter your rage, your curse takes hold. You gain the following:',
+        { boldIntro: 'Unholy Senses.', text: 'You gain blindsight within 10ft.' },
+        { boldIntro: 'Unholy Speed.', text: 'Your speed increases by 10ft.' },
+        { boldIntro: 'Unholy Strength.', text: 'When you use your Reckless Attack, deal 1d6 plus your proficiency bonus extra damage to the first target you hit with a Strength-based attack. The damage has the same type as the weapon or unarmed strike used for the attack.' },
+      ],
+    },
+    {
+      id: 'cursed-curses-claim',
+      name: "Curses Claim",
+      class: 'Barbarian',
+      subclass: 'Path of the Cursed',
+      level: 6,
+      type: 'text',
+      description: [
+        'You gain an additional hit die.',
+        'When your curse takes hold, you gain the following:',
+        { boldIntro: 'Unholy Survival.', text: 'When you fail a saving throw, you can expend your temporary hit points up to your Barbarian level and add the number of temporary hit points spent to your failed save, potentially turning it into a success.' },
+      ],
+    },
+    { id: 'ranger-feat-4',    name: 'Feat', class: 'Ranger',    level: 4, type: 'feat' },
+    { id: 'sorcerer-feat-4',  name: 'Feat', class: 'Sorcerer',  level: 4, type: 'feat' },
+    { id: 'rogue-feat-4',     name: 'Feat', class: 'Rogue',     level: 4, type: 'feat' },
+    { id: 'barbarian-feat-4', name: 'Feat', class: 'Barbarian', level: 4, type: 'feat' },
+  ];
+  window.FEATURES_LIBRARY = FEATURES_LIBRARY;
+
+  function getEligibleFeatures() {
+    const cls     = String(state.charClass || '').trim();
+    const sub     = String(state.subclass  || '').trim();
+    const race    = String(state.race      || '').trim();
+    const subrace = String(state.subrace   || '').trim();
+    const lvl     = parseInt(state.level)  || 0;
+    return FEATURES_LIBRARY.filter(f => {
+      if (f.class    && f.class    !== cls)     return false;
+      if (f.subclass && f.subclass !== sub)     return false;
+      if (f.race     && f.race     !== race)    return false;
+      if (f.subrace  && f.subrace  !== subrace) return false;
+      if (f.level    && f.level    >   lvl)     return false;
+      return true;
+    });
+  }
+
+  function featureDisplayName(feature, isEditing, data) {
+    let name = feature.name;
+    if (feature.type === 'feat' && data?.feat) {
+      const chosen = FEAT_OPTIONS.find(f => f.id === data.feat);
+      if (chosen) name = `Feat - ${chosen.name}`;
+    }
+    if (!isEditing) return name;
+    const source = feature.subclass || feature.subrace || feature.class || feature.race || '';
+    const level  = feature.level ? ` Level ${feature.level}` : '';
+    return `${source}${level} - ${name}`;
+  }
+
+  function syncFeatures() {
+    const eligible = getEligibleFeatures().map(f => f.id);
+    // auto-add newly eligible features not already active or hidden
+    eligible.forEach(id => {
+      if (!state.activeFeatures.includes(id) && !state.hiddenFeatures.includes(id)) {
+        state.activeFeatures.push(id);
+      }
+    });
+    // strip features no longer eligible
+    state.activeFeatures = state.activeFeatures.filter(id => eligible.includes(id));
+    state.hiddenFeatures  = state.hiddenFeatures.filter(id => eligible.includes(id));
+  }
+
+  // ── Feature drag state ────────────────────────────────────────────────────
+  let fDrag = null; // { id, el, dropLine }
+
+  function initFeatureDrag(handle, featureEl, featureId, listEl) {
+    handle.addEventListener('pointerdown', e => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      e.preventDefault();
+      featureEl.classList.add('cs-feature-dragging');
+      fDrag = { id: featureId, el: featureEl };
+
+      const dropLine = document.createElement('div');
+      dropLine.className = 'cs-feature-drop-line';
+      fDrag.dropLine = dropLine;
+
+      const onMove = ev => {
+        if (dropLine.parentNode) dropLine.remove();
+        const rows = [...listEl.querySelectorAll('.cs-feature[data-feature-id]:not(.cs-feature-dragging)')];
+        let inserted = false;
+        for (const row of rows) {
+          const rect = row.getBoundingClientRect();
+          if (ev.clientY < rect.top + rect.height / 2) {
+            listEl.insertBefore(dropLine, row);
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted) {
+          const ghost = listEl.querySelector('.cs-feature-ghost-section');
+          ghost ? listEl.insertBefore(dropLine, ghost) : listEl.appendChild(dropLine);
+        }
+      };
+
+      const onUp = () => {
+        if (dropLine.parentNode) {
+          listEl.insertBefore(featureEl, dropLine);
+          dropLine.remove();
+        }
+        featureEl.classList.remove('cs-feature-dragging');
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+
+        const newOrder = [...listEl.querySelectorAll('.cs-feature[data-feature-id]')]
+          .map(el => el.dataset.featureId);
+        localFeatureUi.order = newOrder;
+        saveLocalFeatureUi();
+        fDrag = null;
+        renderFeatures();
+      };
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  }
+
+  // ── Spell autocomplete ───────────────────────────────────────────────────
+  let _spellAcDdEl = document.getElementById('spell-ac-dropdown');
+  if (!_spellAcDdEl) {
+    _spellAcDdEl = document.createElement('div');
+    _spellAcDdEl.id = 'spell-ac-dropdown';
+    document.body.appendChild(_spellAcDdEl);
+    console.log('[SpellAC] created element dynamically, parent:', _spellAcDdEl.parentElement?.tagName);
+  }
+  _spellAcDdEl.style.display = 'none';
+  let _spellAcInp = null;
+
+  _spellAcDdEl.addEventListener('mousedown', e => e.preventDefault());
+  _spellAcDdEl.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+
+  function _positionSpellAcDd() {
+    if (!_spellAcInp || !_spellAcDdEl) return;
+    const rect = _spellAcInp.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    _spellAcDdEl.style.left  = rect.left + 'px';
+    _spellAcDdEl.style.width = Math.max(rect.width, 160) + 'px';
+    if (spaceBelow >= 160 || spaceBelow >= window.innerHeight - rect.top) {
+      _spellAcDdEl.style.top    = (rect.bottom + 2) + 'px';
+      _spellAcDdEl.style.bottom = 'auto';
+    } else {
+      _spellAcDdEl.style.top    = 'auto';
+      _spellAcDdEl.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+    }
+  }
+
+  function _closeSpellAc() {
+    _spellAcDdEl.style.display = 'none';
+    _spellAcDdEl.innerHTML = '';
+    _spellAcInp = null;
+  }
+
+  ['inv-scroll', 'stats-panel', 'shop-scroll'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('scroll', () => { if (_spellAcDdEl.style.display !== 'none') _positionSpellAcDd(); }, { passive: true });
+  });
+
+  function _showSpellAcMatches(val, level, inp, onPick) {
+    const spellDb = window.SPELLS_XPHB || [];
+    console.log('[SpellAC] show — val:', val, 'level:', level, 'db length:', spellDb.length);
+    if (!val) { _closeSpellAc(); return; }
+    const matches = spellDb
+      .filter(s => s.l === level && s.n.toLowerCase().includes(val))
+      .slice(0, 10);
+    console.log('[SpellAC] matches:', matches.length, matches.map(s => s.n));
+    if (!matches.length) { _closeSpellAc(); return; }
+    _spellAcDdEl.innerHTML = '';
+    matches.forEach(spell => {
+      const opt = document.createElement('div');
+      opt.className = 'spell-ac-option';
+      opt.textContent = spell.n;
+      const pick = () => {
+        inp.value = spell.n;
+        _closeSpellAc();
+        if (onPick) onPick(spell.n);
+        inp.blur();
+      };
+      opt.addEventListener('mousedown', e => { e.preventDefault(); pick(); });
+      opt.addEventListener('touchstart', e => { opt._touchY = e.touches[0].clientY; }, { passive: true });
+      opt.addEventListener('touchend', e => {
+        if (Math.abs(e.changedTouches[0].clientY - (opt._touchY || 0)) < 10) {
+          e.preventDefault(); pick();
+        }
+      }, { passive: false });
+      _spellAcDdEl.appendChild(opt);
+    });
+    _positionSpellAcDd();
+    _spellAcDdEl.style.display = 'block';
+  }
+
+  function attachSpellAutocomplete(inp, level, onPick) {
+    inp.addEventListener('focus', () => {
+      _spellAcInp = inp;
+      _showSpellAcMatches(inp.value.trim().toLowerCase(), level, inp, onPick);
+    });
+    inp.addEventListener('input', () => {
+      _spellAcInp = inp;
+      _showSpellAcMatches(inp.value.trim().toLowerCase(), level, inp, onPick);
+    });
+    inp.addEventListener('blur',    () => setTimeout(_closeSpellAc, 150));
+    inp.addEventListener('keydown', e => { if (e.key === 'Escape') _closeSpellAc(); });
+  }
+
+  // ── Use stepper helper (- current/max +) ─────────────────────────────────
+  function makeUseStepper(current, max, onSetCurrent, onSetMax) {
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-use-stepper';
+
+    const decBtn = document.createElement('button');
+    decBtn.type = 'button';
+    decBtn.className = 'cs-use-btn';
+    decBtn.textContent = '−';
+    decBtn.disabled = current <= 0;
+    decBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (decBtn.disabled) return;
+      decBtn.disabled = true;
+      incBtn.disabled = true;
+      onSetCurrent(Math.max(0, current - 1));
+    });
+    wrap.appendChild(decBtn);
+
+    const countEl = document.createElement('span');
+    countEl.className = 'cs-use-count' + (current <= 0 ? ' cs-use-empty' : '');
+
+    if (onSetMax) {
+      countEl.appendChild(document.createTextNode(current + '/'));
+      const maxInp = document.createElement('input');
+      maxInp.type = 'number';
+      maxInp.className = 'cs-use-max-inp';
+      maxInp.min = '0';
+      maxInp.max = '99';
+      maxInp.value = max;
+      maxInp.addEventListener('click', e => e.stopPropagation());
+      maxInp.addEventListener('input', () => onSetMax(Math.max(0, parseInt(maxInp.value) || 0)));
+      countEl.appendChild(maxInp);
+    } else {
+      countEl.textContent = `${current}/${max}`;
+    }
+
+    wrap.appendChild(countEl);
+
+    const incBtn = document.createElement('button');
+    incBtn.type = 'button';
+    incBtn.className = 'cs-use-btn';
+    incBtn.textContent = '+';
+    incBtn.disabled = current >= max;
+    incBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (incBtn.disabled) return;
+      decBtn.disabled = true;
+      incBtn.disabled = true;
+      onSetCurrent(Math.min(max, current + 1));
+    });
+    wrap.appendChild(incBtn);
+
+    return wrap;
+  }
+
+  // ── Barbarian Rage ────────────────────────────────────────────────────────
+  const RAGE_DAMAGE_BONUSES = [2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,4,4,4,4,4];
+  const RAGE_USES = [2,2,3,3,3,4,4,4,4,4,4,5,5,5,5,5,6,6,6,6];
+
+  function getRageDamageBonus() {
+    const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+    return RAGE_DAMAGE_BONUSES[lvl - 1];
+  }
+  function isRaging() {
+    return state.activeFeatures.includes('barbarian-rage')
+      && !!(state.featureData['barbarian-rage'] && state.featureData['barbarian-rage'].active);
+  }
+  // Toggle Rage on/off. Entering Rage consumes one use; ending it does not refund.
+  function makeRageToggle() {
+    const active = isRaging();
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cs-rage-panel' + (active ? ' cs-on' : '');
+    btn.innerHTML = '<i class="fa-solid fa-fire-flame-curved cs-rage-panel-icon"></i><span class="cs-rage-panel-lbl">Rage</span>';
+    btn.title = active ? 'Raging — click to end Rage' : 'Enter Rage (uses 1 Rage)';
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const data = state.featureData['barbarian-rage'] || (state.featureData['barbarian-rage'] = {});
+      const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+      const useMax = RAGE_USES[lvl - 1];
+      if (data.used == null) data.used = 0;
+      if (!data.active) {
+        data.active = true;
+        if (data.used < useMax) data.used += 1;
+      } else {
+        data.active = false;
+      }
+      if (onChange) onChange();
+      renderFeatures();
+      updateCsCalculations();
+    });
+    return btn;
+  }
+
+  // ── Feature content renderers ─────────────────────────────────────────────
+  function renderSpellcastingContent(feature, data, isEditing) {
+    const isRanger  = feature.id === 'ranger-spellcasting';
+    const lvl       = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+    const slotTable = isRanger ? RANGER_SLOTS : SORC_SLOTS;
+    const slots     = slotTable[lvl] || slotTable[20];
+    const abScore   = isRanger ? (effectiveAbScore('wis') ?? 10) : (effectiveAbScore('cha') ?? 10);
+    const abMod     = Math.floor((abScore - 10) / 2);
+    const abLabel   = isRanger ? 'WIS' : 'CHA';
+    const abClass   = isRanger ? 'cs-attr-wis' : 'cs-attr-cha';
+    const profBonus = Math.ceil(lvl / 4) + 1;
+    const atkBonus  = abMod + profBonus;
+    const saveDC    = 8 + abMod + profBonus;
+
+    if (!data.usedSlots)  data.usedSlots  = {};
+    if (!data.spellNames) data.spellNames = {};
+
+    const exhPenalty     = state.exhaustion || 0;
+    const dispAtkBonus   = atkBonus - exhPenalty;
+    const dispSaveDC     = saveDC   - exhPenalty;
+    const penClass       = exhPenalty > 0 ? ' cs-exh-penalty' : '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-spellcasting';
+
+    // Stats row (ability / atk bonus / save DC)
+    const stats = document.createElement('div');
+    stats.className = `cs-feat-spell-stats ${abClass}`;
+    stats.innerHTML = `
+      <div class="cs-feat-spell-stat"><span class="cs-feat-spell-stat-val">${abLabel}</span><span class="cs-feat-spell-stat-lbl">Ability</span></div>
+      <div class="cs-feat-spell-stat"><span class="cs-feat-spell-stat-val${penClass}">${dispAtkBonus >= 0 ? '+' : ''}${dispAtkBonus}</span><span class="cs-feat-spell-stat-lbl">Atk Bonus</span></div>
+      <div class="cs-feat-spell-stat"><span class="cs-feat-spell-stat-val${penClass}">${dispSaveDC}</span><span class="cs-feat-spell-stat-lbl">Save DC</span></div>
+    `;
+    wrap.appendChild(stats);
+
+    const ordinals = ['','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
+
+    function makeSpellSection(key, title, slotMax, slotLvl, spellLevel) {
+      if (!data.spellNames[key]) data.spellNames[key] = [];
+      const names = data.spellNames[key];
+      const filled = names.filter(n => n && n.trim());
+
+      // In view mode: hide cantrip section if empty; spell level sections keep heading for slot tracking
+      if (!isEditing && slotMax === null && filled.length === 0) return null;
+
+      const section = document.createElement('div');
+      section.className = 'cs-spell-section';
+      if (slotLvl !== null) {
+        const hue = Math.round(170 + (slotLvl - 1) * 24); // teal(170) → violet(290) across 6 levels
+        section.classList.add('cs-spell-leveled');
+        section.style.setProperty('--sh', hue);
+      }
+
+      // Heading
+      const heading = document.createElement('div');
+      heading.className = 'cs-spell-heading';
+      const rule1 = document.createElement('span');
+      rule1.className = 'cs-spell-rule';
+      heading.appendChild(rule1);
+      const titleEl = document.createElement('span');
+      titleEl.className = 'cs-spell-title';
+      titleEl.textContent = title;
+      heading.appendChild(titleEl);
+      if (slotMax !== null) {
+        if (!data.slotOverrides) data.slotOverrides = {};
+        const effectiveMax = data.slotOverrides[slotLvl] != null ? data.slotOverrides[slotLvl] : slotMax;
+        const used = data.usedSlots[slotLvl] || 0;
+        const remaining = effectiveMax - used;
+        heading.appendChild(makeUseStepper(
+          remaining,
+          effectiveMax,
+          newRemaining => {
+            const eff = data.slotOverrides?.[slotLvl] ?? slotMax;
+            data.usedSlots[slotLvl] = eff - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          isEditing ? newMax => {
+            data.slotOverrides[slotLvl] = newMax;
+            if ((data.usedSlots[slotLvl] || 0) > newMax) data.usedSlots[slotLvl] = newMax;
+            if (onChange) onChange();
+            renderFeatures();
+          } : null
+        ));
+      }
+      const rule2 = document.createElement('span');
+      rule2.className = 'cs-spell-rule';
+      heading.appendChild(rule2);
+      section.appendChild(heading);
+
+      if (isEditing) {
+        const grid = document.createElement('div');
+        grid.className = 'cs-spell-grid';
+
+        // Normalize: strip old extra trailing empties, keep exactly one trailing empty
+        while (names.length > 0 && !names[names.length - 1]?.trim()) names.pop();
+        names.push('');
+
+        function appendInput(idx) {
+          const inp = document.createElement('input');
+          inp.type = 'text';
+          inp.className = 'cs-spell-input';
+          inp.spellcheck = false;
+          inp.autocomplete = 'off';
+          inp.placeholder = 'Spell name';
+          inp.value = names[idx] || '';
+
+          attachSpellAutocomplete(inp, spellLevel, (spellName) => {
+            names[idx] = spellName;
+            if (onChange) onChange();
+            if (idx === names.length - 1) {
+              names.push('');
+              appendInput(names.length - 1);
+            }
+          });
+
+          inp.addEventListener('input', () => {
+            names[idx] = inp.value;
+            if (onChange) onChange();
+            if (idx === names.length - 1 && inp.value.trim()) {
+              names.push('');
+              appendInput(names.length - 1);
+            }
+          });
+
+          inp.addEventListener('blur', () => {
+            if (!inp.value.trim() && idx < names.length - 1) {
+              names.splice(idx, 1);
+              if (onChange) onChange();
+              renderFeatures();
+            }
+          });
+
+          grid.appendChild(inp);
+        }
+
+        names.forEach((_, idx) => appendInput(idx));
+        section.appendChild(grid);
+      } else if (filled.length > 0) {
+        const grid = document.createElement('div');
+        grid.className = 'cs-spell-grid';
+        filled.forEach(spellName => {
+          const spellData = (window.SPELLS_XPHB || []).find(s => s.n.toLowerCase() === spellName.toLowerCase());
+          const item = document.createElement('div');
+          item.className = 'cs-spell-link' + (spellData ? ' cs-spell-link-known' : '');
+          const icon = document.createElement('span');
+          icon.className = 'cs-spell-link-icon';
+          icon.innerHTML = '<i class="fas fa-circle-info"></i>';
+          const nameEl = document.createElement('span');
+          nameEl.className = 'cs-spell-link-name';
+          nameEl.textContent = spellName;
+          item.appendChild(icon);
+          item.appendChild(nameEl);
+          if (spellData) {
+            item.addEventListener('click', () => openSpellDetail(spellData, item));
+          }
+          grid.appendChild(item);
+        });
+        section.appendChild(grid);
+      }
+
+      return section;
+    }
+
+    // Cantrip section
+    const cantripSec = makeSpellSection('cantrip', 'Cantrip', null, null, 0);
+    if (cantripSec) wrap.appendChild(cantripSec);
+
+    // One section per spell level
+    Object.entries(slots).forEach(([lvlStr, max]) => {
+      const slotLvl = parseInt(lvlStr);
+      if (!data.usedSlots[slotLvl]) data.usedSlots[slotLvl] = 0;
+      const label = `${ordinals[slotLvl] || slotLvl + 'th'} Level Spells`;
+      const sec = makeSpellSection(`level-${slotLvl}`, label, max, slotLvl, slotLvl);
+      if (sec) wrap.appendChild(sec);
+    });
+
+    return wrap;
+  }
+
+  // ── Spell detail panel ───────────────────────────────────────────────────
+  let _spellDetailActive = null;
+
+  function openSpellDetail(spell) {
+    if (_spellDetailActive === spell.n) {
+      closeSpellDetail();
+      return;
+    }
+    _spellDetailActive = spell.n;
+    inspectorItemKey = null;
+
+    const section = document.getElementById('spell-insp-section');
+    inspectorEl.hidden = true;
+    section.hidden = false;
+
+    const lvlNames = ['Cantrip','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
+    const lvlLabel = spell.l === 0 ? `${spell.sc} Cantrip` : `${lvlNames[spell.l]} Level ${spell.sc}`;
+    const tags = [];
+    if (spell.conc)   tags.push('Concentration');
+    if (spell.ritual) tags.push('Ritual');
+
+    section.querySelector('.spell-detail-name').textContent = spell.n;
+    section.querySelector('.spell-detail-sub').textContent  = lvlLabel + (tags.length ? ` · ${tags.join(' · ')}` : '');
+
+    const propsEl = section.querySelector('.spell-detail-props');
+    propsEl.innerHTML = '';
+    [['Casting Time', spell.t], ['Range', spell.r], ['Components', spell.c], ['Duration', spell.d]]
+      .forEach(([label, val]) => {
+        if (!val) return;
+        const row = document.createElement('div');
+        row.className = 'spell-detail-prop';
+        row.innerHTML = `<span class="spell-detail-prop-lbl">${label}</span><span class="spell-detail-prop-val">${val}</span>`;
+        propsEl.appendChild(row);
+      });
+
+    function renderDesc(text) {
+      if (!text) return '';
+      return text.split('\n').map(line =>
+        line.startsWith('• ')
+          ? `<div class="spell-detail-bullet">${line.slice(2)}</div>`
+          : `<p>${line}</p>`
+      ).join('');
+    }
+
+    section.querySelector('.spell-detail-desc').innerHTML = renderDesc(spell.desc);
+    const higherEl = section.querySelector('.spell-detail-higher');
+    if (spell.higher) {
+      higherEl.innerHTML = '<div class="spell-detail-higher-lbl">At Higher Levels</div>' + renderDesc(spell.higher);
+      higherEl.hidden = false;
+    } else {
+      higherEl.hidden = true;
+    }
+
+    detailPanelEl.classList.remove('no-transition', 'detail-collapsed');
+    document.getElementById('spell-insp-toggle').onclick = closeSpellDetail;
+  }
+
+  function closeSpellDetail() {
+    _spellDetailActive = null;
+    document.getElementById('spell-insp-section').hidden = true;
+    detailPanelEl.classList.add('detail-collapsed');
+  }
+
+  let _metamagicDetailActive = null;
+
+  function openMetamagicDetail(opt) {
+    if (_metamagicDetailActive === opt.id) {
+      closeMetamagicDetail();
+      return;
+    }
+    _metamagicDetailActive = opt.id;
+    _spellDetailActive = null;
+    inspectorItemKey = null;
+
+    const section = document.getElementById('spell-insp-section');
+    inspectorEl.hidden = true;
+    section.hidden = false;
+
+    section.querySelector('.spell-detail-name').textContent = opt.name;
+    section.querySelector('.spell-detail-sub').textContent = 'Metamagic Option';
+
+    const propsEl = section.querySelector('.spell-detail-props');
+    propsEl.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'spell-detail-prop';
+    row.innerHTML = `<span class="spell-detail-prop-lbl">Cost</span><span class="spell-detail-prop-val">${opt.cost}</span>`;
+    propsEl.appendChild(row);
+
+    section.querySelector('.spell-detail-desc').innerHTML = opt.desc
+      .split('\n').map(line => `<p>${line}</p>`).join('');
+    section.querySelector('.spell-detail-higher').hidden = true;
+
+    detailPanelEl.classList.remove('no-transition', 'detail-collapsed');
+    document.getElementById('spell-insp-toggle').onclick = closeMetamagicDetail;
+  }
+
+  function closeMetamagicDetail() {
+    _metamagicDetailActive = null;
+    document.getElementById('spell-insp-section').hidden = true;
+    detailPanelEl.classList.add('detail-collapsed');
+  }
+
+  function renderSorceryPointsContent(data) {
+    const lvl = parseInt(state.level) || 1;
+    const max = data.fontMax ?? lvl;
+    if (data.current == null) data.current = max;
+    const current = Math.max(0, Math.min(max, data.current));
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-sorcery';
+
+    const pips = document.createElement('div');
+    pips.className = 'cs-feat-sorcery-pips';
+    for (let i = 0; i < max; i++) {
+      const pip = document.createElement('button');
+      pip.type = 'button';
+      pip.className = 'cs-feat-sorcery-pip' + (i < current ? ' cs-feat-sorcery-pip-full' : '');
+      pip.addEventListener('click', () => {
+        data.current = i < current ? current - 1 : i + 1;
+        if (onChange) onChange();
+        renderFeatures();
+      });
+      pips.appendChild(pip);
+    }
+    const pipLabel = document.createElement('div');
+    pipLabel.className = 'cs-feat-sorcery-count';
+    pipLabel.textContent = `${current} / ${max} Sorcery Points`;
+    wrap.appendChild(pips);
+    wrap.appendChild(pipLabel);
+    return wrap;
+  }
+
+  function renderMetamagicContent(data, isEditing) {
+    const lvl = parseInt(state.level) || 2;
+    const maxChoices = lvl >= 17 ? 4 : lvl >= 10 ? 3 : 2;
+    if (!data.chosen) data.chosen = [];
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-metamagic';
+
+    if (isEditing) {
+      const choiceInfo = document.createElement('div');
+      choiceInfo.className = 'cs-feat-metamagic-info';
+      choiceInfo.textContent = `${data.chosen.length} / ${maxChoices} chosen`;
+      wrap.appendChild(choiceInfo);
+    }
+
+    const grid = document.createElement('div');
+    grid.className = isEditing ? 'cs-feat-metamagic-grid' : 'cs-spell-grid';
+    METAMAGIC_OPTIONS.filter(opt => !opt.subclassOnly).forEach(opt => {
+      const chosen = data.chosen.includes(opt.id);
+      if (!isEditing && !chosen) return;
+
+      if (!isEditing) {
+        const item = document.createElement('div');
+        item.className = 'cs-spell-link cs-spell-link-known';
+        const icon = document.createElement('span');
+        icon.className = 'cs-spell-link-icon';
+        icon.innerHTML = '<i class="fas fa-circle-info"></i>';
+        const nameEl = document.createElement('span');
+        nameEl.className = 'cs-spell-link-name';
+        nameEl.textContent = opt.name;
+        item.appendChild(icon);
+        item.appendChild(nameEl);
+        item.addEventListener('click', () => openMetamagicDetail(opt));
+        grid.appendChild(item);
+        return;
+      }
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cs-feat-metamagic-opt' + (chosen ? ' cs-feat-metamagic-chosen' : '');
+      btn.textContent = opt.name;
+      btn.addEventListener('click', () => {
+        if (chosen) {
+          data.chosen = data.chosen.filter(id => id !== opt.id);
+        } else if (data.chosen.length < maxChoices) {
+          data.chosen.push(opt.id);
+        }
+        if (onChange) onChange();
+        renderFeatures();
+      });
+      grid.appendChild(btn);
+    });
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  function renderFeatureBody(feature, data, isEditing) {
+    const body = document.createElement('div');
+    body.className = 'cs-feature-body';
+
+    let descTarget = body;
+
+    if (feature.id === 'barbarian-rage') {
+      const row = document.createElement('div');
+      row.className = 'cs-rage-toggle-row';
+      row.appendChild(makeRageToggle());
+      body.appendChild(row);
+    }
+
+    // Features whose rules text can be hidden behind a small arrow. The collapsible
+    // range is [collapseStart, collapseEnd); parts outside it (e.g. a stat panel or
+    // table) stay visible. `endBefore` marks the first visible part after the text;
+    // `startAfter` marks a leading visible part the text should follow.
+    const TEXT_COLLAPSE = {
+      'barbarian-rage':           {},
+      'witch-warden-witchmarks':  { endBefore: p => p && p.witchingDie },
+      'vile-fang-fangs-dripping': { endBefore: p => p && p.saveDC },
+      'rogue-sneak-attack':       { startAfter: p => p && p.sneakAttackDice },
+    };
+    let collapseWrap = null, collapseToggle = null, collapseStart = 0, collapseEnd = 0;
+    const collapseCfg = TEXT_COLLAPSE[feature.id];
+    if (collapseCfg && feature.description) {
+      const cparts = Array.isArray(feature.description) ? feature.description : [feature.description];
+      collapseEnd = cparts.length;
+      if (collapseCfg.endBefore) {
+        const i = cparts.findIndex(collapseCfg.endBefore);
+        if (i !== -1) collapseEnd = i;
+      }
+      if (collapseCfg.startAfter) {
+        const i = cparts.findIndex(collapseCfg.startAfter);
+        if (i !== -1) collapseStart = i + 1;
+      }
+      if (collapseStart < collapseEnd) {
+        const collapsed = !!localFeatureUi.textCollapsed[feature.id];
+        collapseToggle = document.createElement('button');
+        collapseToggle.type = 'button';
+        collapseToggle.className = 'cs-feature-text-toggle' + (collapsed ? '' : ' cs-open');
+        collapseToggle.innerHTML = '<i class="fa-solid fa-chevron-down"></i><span>Details</span>';
+        collapseToggle.addEventListener('click', () => {
+          localFeatureUi.textCollapsed[feature.id] = !localFeatureUi.textCollapsed[feature.id];
+          saveLocalFeatureUi();
+          renderFeatures();
+        });
+        collapseWrap = document.createElement('div');
+        collapseWrap.className = 'cs-feature-text-collapse';
+        collapseWrap.hidden = collapsed;
+      }
+    }
+
+    let expertiseDropdownInserted = false;
+    if (feature.description) {
+      const parts = Array.isArray(feature.description) ? feature.description : [feature.description];
+      parts.forEach((part, idx) => {
+        // Insert the foldout toggle + wrapper at the point the collapsible range begins.
+        if (collapseWrap && idx === collapseStart) {
+          body.appendChild(collapseToggle);
+          body.appendChild(collapseWrap);
+        }
+        descTarget = (collapseWrap && idx >= collapseStart && idx < collapseEnd) ? collapseWrap : body;
+        if (typeof part === 'string') {
+          const p = document.createElement('p');
+          p.className = 'cs-feature-desc';
+          p.textContent = part;
+          descTarget.appendChild(p);
+        } else if (part.list) {
+          const ul = document.createElement('ul');
+          ul.className = 'cs-feature-list';
+          part.list.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = item;
+            ul.appendChild(li);
+          });
+          descTarget.appendChild(ul);
+        } else if (part.insertExpertiseDropdown) {
+          if (feature.type === 'expertise') {
+            descTarget.appendChild(renderExpertiseContent(feature, data));
+            expertiseDropdownInserted = true;
+          }
+        } else if (part.boldIntro) {
+          const p = document.createElement('p');
+          p.className = 'cs-feature-desc' + (part.indent ? ' cs-feature-desc--indent' : '');
+          const strong = document.createElement('strong');
+          strong.textContent = part.boldIntro + ' ';
+          p.appendChild(strong);
+          p.appendChild(document.createTextNode(part.text ?? ''));
+          descTarget.appendChild(p);
+        } else if (part.indent != null) {
+          const p = document.createElement('p');
+          p.className = 'cs-feature-desc cs-feature-desc--indent';
+          p.textContent = part.indent;
+          descTarget.appendChild(p);
+        } else if (part.table) {
+          const wrap = document.createElement('div');
+          wrap.className = 'cs-feature-table-wrap';
+          if (part.table.title) {
+            const title = document.createElement('div');
+            title.className = 'cs-feature-table-title';
+            title.textContent = part.table.title;
+            wrap.appendChild(title);
+          }
+          const tbl = document.createElement('table');
+          tbl.className = 'cs-feature-table';
+          const thead = document.createElement('thead');
+          const hrow = document.createElement('tr');
+          (part.table.headers ?? []).forEach(h => {
+            const th = document.createElement('th');
+            th.textContent = h;
+            hrow.appendChild(th);
+          });
+          thead.appendChild(hrow);
+          tbl.appendChild(thead);
+          const tbody = document.createElement('tbody');
+          (part.table.rows ?? []).forEach(row => {
+            const tr = document.createElement('tr');
+            row.forEach(cell => {
+              const td = document.createElement('td');
+              if (Array.isArray(cell)) {
+                cell.forEach(part => {
+                  if (typeof part === 'string') {
+                    td.appendChild(document.createTextNode(part));
+                  } else if (part.ingested != null) {
+                    const div = document.createElement('div');
+                    div.className = 'cs-table-cell-ingested';
+                    const strong = document.createElement('strong');
+                    strong.textContent = 'Ingested: ';
+                    div.appendChild(strong);
+                    div.appendChild(document.createTextNode(part.ingested));
+                    td.appendChild(div);
+                  }
+                });
+              } else {
+                td.textContent = cell;
+              }
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          });
+          tbl.appendChild(tbody);
+          wrap.appendChild(tbl);
+          descTarget.appendChild(wrap);
+        } else if (part.para) {
+          const p = document.createElement('p');
+          p.className = 'cs-feature-desc';
+          part.para.forEach(inline => {
+            if (typeof inline === 'string') {
+              p.appendChild(document.createTextNode(inline));
+            } else if (inline.metamagicLink) {
+              const opt = METAMAGIC_OPTIONS.find(m => m.id === inline.metamagicLink);
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'cs-feature-inline-link';
+              btn.textContent = inline.text;
+              if (opt) btn.addEventListener('click', e => { e.stopPropagation(); openMetamagicDetail(opt); });
+              p.appendChild(btn);
+            } else if (inline.bold) {
+              const strong = document.createElement('strong');
+              strong.textContent = inline.bold;
+              p.appendChild(strong);
+            } else if (inline.calcDC) {
+              const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+              const prof = Math.ceil(lvl / 4) + 1;
+              const abMod = Math.floor(((parseInt(state[inline.calcDC]) || 10) - 10) / 2);
+              const span = document.createElement('span');
+              span.className = `cs-attr-text cs-attr-${inline.calcDC}`;
+              span.textContent = String(8 + abMod + prof);
+              p.appendChild(span);
+            }
+          });
+          descTarget.appendChild(p);
+        } else if (part.saveDC) {
+          const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+          const prof = Math.ceil(lvl / 4) + 1;
+          const abMod = Math.floor(((parseInt(state[part.saveDC]) || 10) - 10) / 2);
+          const dc = 8 + abMod + prof;
+          const panel = document.createElement('div');
+          panel.className = `cs-feat-save-dc-panel cs-attr-${part.saveDC}`;
+          panel.innerHTML = `<span class="cs-feat-spell-stat-val">${dc}</span><span class="cs-feat-spell-stat-lbl">Save DC</span>`;
+          descTarget.appendChild(panel);
+        } else if (part.sneakAttackDice) {
+          const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+          const SNEAK_DICE = [1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10];
+          const count = SNEAK_DICE[lvl - 1];
+          const panel = document.createElement('div');
+          panel.className = 'cs-feat-save-dc-panel';
+          panel.innerHTML = `<span class="cs-feat-spell-stat-val">${count}d6</span><span class="cs-feat-spell-stat-lbl">Sneak Attack</span>`;
+          descTarget.appendChild(panel);
+        } else if (part.witchingDie) {
+          const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+          const die = lvl >= 6 ? 'd8' : 'd6';
+          const panel = document.createElement('div');
+          panel.className = 'cs-feat-save-dc-panel';
+          panel.innerHTML = `<span class="cs-feat-spell-stat-val">${die}</span><span class="cs-feat-spell-stat-lbl">Witching Die</span>`;
+          descTarget.appendChild(panel);
+        }
+      });
+    }
+
+    if (feature.type === 'spellcasting') {
+      body.appendChild(renderSpellcastingContent(feature, data, isEditing));
+    } else if (feature.type === 'metamagic') {
+      body.appendChild(renderMetamagicContent(data, isEditing));
+    } else if (feature.type === 'frayed') {
+      body.appendChild(renderFrayedContent(isEditing));
+    } else if (feature.type === 'fighting-style') {
+      body.appendChild(renderFightingStyleContent(data, isEditing));
+    } else if (feature.type === 'expertise' && !expertiseDropdownInserted) {
+      body.appendChild(renderExpertiseContent(feature, data));
+    } else if (feature.type === 'feat') {
+      body.appendChild(renderFeatContent(feature, data));
+    }
+
+    return body;
+  }
+
+  const FRAYED_SUBRACES = {
+    Abhorrent: [
+      { boldIntro: 'Abyssal Visage.', text: 'You have proficiency in Intimidation.' },
+      { boldIntro: 'Darkvision.',     text: 'You have darkvision out to 30 feet.' },
+    ],
+    Divine: [
+      { boldIntro: 'Divine Right.',   text: 'You have proficiency in Persuasion.' },
+      { boldIntro: 'Radiant Visage.', text: 'You shed dim light within a 5-foot radius. The light is considered daylight and you can supress it at will.' },
+    ],
+    Fey: [
+      { boldIntro: 'Keen Senses.',   text: 'You have proficiency in Perception.' },
+      { boldIntro: 'Fey Ancestry.',  text: 'You have Advantage on saving throws you make to avoid or end the Charmed condition.' },
+    ],
+  };
+
+  function renderFrayedContent(isEditing) {
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-subrace';
+
+    if (isEditing) {
+      const sel = document.createElement('select');
+      sel.className = 'cs-feat-subrace-sel';
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = 'Choose Sub-race…';
+      sel.appendChild(blank);
+      Object.keys(FRAYED_SUBRACES).forEach(sr => {
+        const opt = document.createElement('option');
+        opt.value = sr;
+        opt.textContent = sr;
+        if (state.subrace === sr) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', e => {
+        e.stopPropagation();
+        state.subrace = sel.value;
+        syncFeatures();
+        renderFeatures();
+        if (onChange) onChange();
+      });
+      wrap.appendChild(sel);
+    } else if (state.subrace) {
+      const label = document.createElement('div');
+      label.className = 'cs-feat-subrace-label';
+      label.textContent = state.subrace;
+      wrap.appendChild(label);
+    }
+
+    const parts = FRAYED_SUBRACES[state.subrace];
+    if (parts) {
+      const descWrap = document.createElement('div');
+      descWrap.className = 'cs-feat-subrace-desc';
+      parts.forEach(part => {
+        const p = document.createElement('p');
+        p.className = 'cs-feature-desc';
+        const strong = document.createElement('strong');
+        strong.textContent = part.boldIntro + ' ';
+        p.appendChild(strong);
+        p.appendChild(document.createTextNode(part.text));
+        descWrap.appendChild(p);
+      });
+      wrap.appendChild(descWrap);
+    }
+
+    return wrap;
+  }
+
+  const RANGER_FIGHTING_STYLES = [
+    { value: 'Archery' },
+    { value: 'Defense' },
+    { value: 'Druidic Warrior', description: 'You learn two Druid cantrips of your choice. Guidance and Starry Wisp are recommended. The chosen cantrips count as Ranger spells for you, and Wisdom is your spellcasting ability for them. Whenever you gain a Ranger level, you can replace one of these cantrips with another Druid cantrip.' },
+    { value: 'Dueling' },
+    { value: 'Two-Weapon Fighting' },
+  ];
+
+  function renderExpertiseContent(feature, data) {
+    if (!data.slots) data.slots = [];
+    const slots = feature.expertiseSlots || 2;
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-expertise';
+
+    for (let i = 0; i < slots; i++) {
+      const sel = document.createElement('select');
+      sel.className = 'cs-feat-subrace-sel';
+
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = 'None';
+      sel.appendChild(blank);
+
+      Object.keys(EXPERTISE_SKILL_NAMES).forEach(skill => {
+        if (!state[skill + 'Prof']) return;
+        const opt = document.createElement('option');
+        opt.value = skill;
+        opt.textContent = EXPERTISE_SKILL_NAMES[skill];
+        if (data.slots[i] === skill) opt.selected = true;
+        sel.appendChild(opt);
+      });
+
+      const idx = i;
+      sel.addEventListener('change', e => {
+        e.stopPropagation();
+        data.slots[idx] = sel.value;
+        updateCsCalculations();
+        if (onChange) onChange();
+        renderFeatures();
+      });
+
+      wrap.appendChild(sel);
+    }
+
+    return wrap;
+  }
+
+  // fixedAmount1: override the bonus for ab1 (use 1 for fixed +1 feats; null = default 2/1 logic)
+  function applyAsiChange(data, newAb1, newAb2, fixedAmount1 = null) {
+    // Temporarily clear this feature's existing bonuses so effectiveAbScore gives
+    // the score without this feature's own contribution when computing the new cap.
+    data.ab1 = ''; data.bonus1 = 0;
+    data.ab2 = ''; data.bonus2 = 0;
+
+    const intended1 = newAb1 ? (fixedAmount1 !== null ? fixedAmount1 : (newAb2 ? 1 : 2)) : 0;
+    const intended2 = newAb2 ? 1 : 0;
+    let bonus1 = 0, bonus2 = 0;
+    if (newAb1) {
+      const eff = effectiveAbScore(newAb1) ?? 10;
+      bonus1 = Math.min(20, eff + intended1) - eff;
+    }
+    if (newAb2) {
+      const eff = effectiveAbScore(newAb2) ?? 10;
+      bonus2 = Math.min(20, eff + intended2) - eff;
+    }
+    data.ab1 = newAb1 || '';
+    data.ab2 = newAb2 || '';
+    data.bonus1 = bonus1;
+    data.bonus2 = bonus2;
+    updateCsCalculations();
+  }
+
+  function reverseToughBonus(data) {
+    if (!data.toughBonus) return;
+    if (state.hpMax !== '' && state.hpMax != null) {
+      state.hpMax = String(Math.max(0, (parseInt(state.hpMax) || 0) - data.toughBonus));
+      const el = document.getElementById('cs-hp-max');
+      if (el && document.activeElement !== el) el.value = state.hpMax;
+    }
+    data.toughBonus = 0;
+  }
+
+  function renderFeatContent(feature, data) {
+    function descPara(content) {
+      const p = document.createElement('p');
+      p.className = 'cs-feature-desc';
+      if (typeof content === 'string') {
+        p.textContent = content;
+      } else if (content.boldIntro) {
+        const b = document.createElement('strong');
+        b.textContent = content.boldIntro + ' ';
+        p.appendChild(b);
+        p.appendChild(document.createTextNode(content.text || ''));
+      }
+      return p;
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cs-feat-choice';
+
+    const featSel = document.createElement('select');
+    featSel.className = 'cs-feat-subrace-sel';
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'Choose a feat…';
+    featSel.appendChild(blank);
+    FEAT_OPTIONS.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = f.name;
+      if (data.feat === f.id) opt.selected = true;
+      featSel.appendChild(opt);
+    });
+    featSel.addEventListener('change', e => {
+      e.stopPropagation();
+      const old = data.feat;
+      if (old === 'ability-score-improvement' || old === 'shield-master' || old === 'dual-wielder') applyAsiChange(data, '', '');
+      else if (old === 'tough') reverseToughBonus(data);
+      data.feat = featSel.value;
+      if (data.feat === 'shield-master') applyAsiChange(data, 'str', '', 1);
+      updateCsCalculations();
+      if (onChange) onChange();
+      renderFeatures();
+    });
+    wrap.appendChild(featSel);
+
+    if (data.feat === 'ability-score-improvement') {
+      const p1 = document.createElement('p');
+      p1.className = 'cs-feature-desc';
+      p1.textContent = "Increase one ability score of your choice by 2, or increase two ability scores of your choice by 1. This feat can't increase an ability score above 20.";
+      wrap.appendChild(p1);
+      const p2 = document.createElement('p');
+      p2.className = 'cs-feature-desc';
+      const rep = document.createElement('strong');
+      rep.className = 'cs-feat-repeatable';
+      rep.textContent = 'Repeatable. ';
+      p2.appendChild(rep);
+      p2.appendChild(document.createTextNode('You can take this feat more than once.'));
+      wrap.appendChild(p2);
+      const row = document.createElement('div');
+      row.className = 'cs-feat-asi-row';
+      ['ab1', 'ab2'].forEach(key => {
+        const col = document.createElement('div');
+        col.className = 'cs-feat-asi-col';
+        const lbl = document.createElement('span');
+        lbl.className = 'cs-feat-asi-label';
+        lbl.textContent = key === 'ab1' ? 'Ability 1' : 'Ability 2';
+        const sel = document.createElement('select');
+        sel.className = 'cs-feat-subrace-sel';
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = '—';
+        sel.appendChild(none);
+        Object.entries(FEAT_ABILITY_NAMES).forEach(([ab, name]) => {
+          const opt = document.createElement('option');
+          opt.value = ab;
+          opt.textContent = name;
+          if (data[key] === ab) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        sel.addEventListener('change', e => {
+          e.stopPropagation();
+          const newAb1 = key === 'ab1' ? sel.value : (data.ab1 || '');
+          const newAb2 = key === 'ab2' ? sel.value : (data.ab2 || '');
+          applyAsiChange(data, newAb1, newAb2);
+          updateCsCalculations();
+          if (onChange) onChange();
+          renderFeatures();
+        });
+        col.appendChild(lbl);
+        col.appendChild(sel);
+        row.appendChild(col);
+      });
+      wrap.appendChild(row);
+      const hint = document.createElement('p');
+      hint.className = 'cs-feature-desc cs-feat-asi-hint';
+      hint.textContent = data.ab1 && data.ab2 ? '+1 to each ability'
+        : data.ab1 ? '+2 to first ability'
+        : 'Choose one ability for +2, or two abilities for +1 each.';
+      wrap.appendChild(hint);
+
+    } else if (data.feat === 'shield-master') {
+      [
+        'You gain the following benefits.',
+        { boldIntro: 'Ability Score Increase.', text: 'Increase your Strength score by 1, to a maximum of 20.' },
+        { boldIntro: 'Shield Bash.', text: "If you attack a creature within 5 feet of you as part of the Attack action and hit with a Melee weapon, you can immediately bash the target with your Shield if it's equipped, forcing the target to make a Strength saving throw (DC 8 plus your Strength modifier and Proficiency Bonus). On a failed save, you either push the target 5 feet from you or cause it to have the Prone condition (your choice). You can use this benefit only once on each of your turns." },
+        { boldIntro: 'Interpose Shield.', text: "If you're subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you can take a Reaction to take no damage if you succeed on the saving throw and are holding a Shield." },
+      ].forEach(part => wrap.appendChild(descPara(part)));
+
+    } else if (data.feat === 'dual-wielder') {
+      wrap.appendChild(descPara('You gain the following benefits.'));
+      wrap.appendChild(descPara({ boldIntro: 'Ability Score Increase.', text: 'Increase your Strength or Dexterity by 1, to a maximum of 20.' }));
+      const col = document.createElement('div');
+      col.className = 'cs-feat-asi-col';
+      const lbl = document.createElement('span');
+      lbl.className = 'cs-feat-asi-label';
+      lbl.textContent = 'Ability (+1)';
+      const sel = document.createElement('select');
+      sel.className = 'cs-feat-subrace-sel';
+      const none = document.createElement('option');
+      none.value = '';
+      none.textContent = '—';
+      sel.appendChild(none);
+      [['str', 'Strength'], ['dex', 'Dexterity']].forEach(([ab, name]) => {
+        const opt = document.createElement('option');
+        opt.value = ab;
+        opt.textContent = name;
+        if (data.ab1 === ab) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', e => {
+        e.stopPropagation();
+        applyAsiChange(data, sel.value, '', 1);
+        updateCsCalculations();
+        if (onChange) onChange();
+        renderFeatures();
+      });
+      col.appendChild(lbl);
+      col.appendChild(sel);
+      wrap.appendChild(col);
+      wrap.appendChild(descPara({ boldIntro: 'Enhanced Dual Wielding.', text: "When you take the Attack action on your turn and attack with a weapon that has the Light property, you can make one extra attack as a Bonus Action later on the same turn with a different weapon, which must be a Melee weapon that lacks the Two-Handed property. You don't add your ability modifier to the extra attack's damage unless that modifier is negative." }));
+      wrap.appendChild(descPara({ boldIntro: 'Quick Draw.', text: 'You can draw or stow two weapons that lack the Two-Handed property when you would normally be able to draw or stow only one.' }));
+
+    } else if (data.feat === 'tough') {
+      wrap.appendChild(descPara('Your Hit Point maximum increases by an amount equal to twice your character level when you gain this feat. Whenever you gain a character level thereafter, your Hit Point maximum increases by an additional 2 Hit Points.'));
+      const lvl = parseInt(state.level) || 0;
+      const bonus = lvl >= 1 ? 2 * lvl : 0;
+      const panel = document.createElement('div');
+      panel.className = 'cs-feat-save-dc-panel';
+      panel.innerHTML = `<span class="cs-feat-spell-stat-val">+${bonus}</span><span class="cs-feat-spell-stat-lbl">HP Max</span>`;
+      wrap.appendChild(panel);
+    }
+
+    return wrap;
+  }
+
+  function renderFightingStyleContent(data, isEditing) {
+    const wrap = document.createElement('div');
+
+    const p = document.createElement('p');
+    p.className = 'cs-feature-desc';
+    p.textContent = 'You gain a Fighting Style feat of your choice. Instead of choosing one of those feats, you can choose Druidic Warrior.';
+    wrap.appendChild(p);
+
+    const sel = document.createElement('select');
+    sel.className = 'cs-feat-subrace-sel';
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'Choose a Fighting Style…';
+    sel.appendChild(blank);
+    RANGER_FIGHTING_STYLES.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.value;
+      opt.textContent = s.value;
+      if (data.style === s.value) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', e => {
+      e.stopPropagation();
+      data.style = sel.value;
+      if (onChange) onChange();
+      renderFeatures();
+    });
+    wrap.appendChild(sel);
+
+    const chosen = RANGER_FIGHTING_STYLES.find(s => s.value === data.style);
+    if (chosen?.description) {
+      const descP = document.createElement('p');
+      descP.className = 'cs-feature-desc';
+      const strong = document.createElement('strong');
+      strong.textContent = chosen.value + '. ';
+      descP.appendChild(strong);
+      descP.appendChild(document.createTextNode(chosen.description));
+      wrap.appendChild(descP);
+    }
+
+    return wrap;
+  }
+
+  function renderFeatures() {
+    const listEl = document.getElementById('cs-features');
+    if (!listEl) return;
+    const isEditing = document.getElementById('stats-panel')?.classList.contains('editing');
+    listEl.innerHTML = '';
+
+    // Active features
+    getFeatureDisplayOrder().forEach(id => {
+      const feature = FEATURES_LIBRARY.find(f => f.id === id);
+      if (!feature) return;
+
+      if (!state.featureData[id]) state.featureData[id] = {};
+      const data = state.featureData[id];
+      const collapsed = !!localFeatureUi.collapsed[id];
+
+      const el = document.createElement('div');
+      el.className = 'cs-feature';
+      el.dataset.featureId = id;
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'cs-feature-header';
+
+      const handle = document.createElement('button');
+      handle.type = 'button';
+      handle.className = 'cs-feature-drag-handle';
+      handle.innerHTML = '<i class="fa-solid fa-grip-vertical"></i>';
+      handle.title = 'Drag to reorder';
+      header.appendChild(handle);
+
+      const toggle = document.createElement('div');
+      toggle.className = 'cs-feature-toggle' + (collapsed ? '' : ' cs-feature-open');
+      toggle.addEventListener('click', () => {
+        localFeatureUi.collapsed[id] = !localFeatureUi.collapsed[id];
+        saveLocalFeatureUi();
+        renderFeatures();
+      });
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'cs-feature-name';
+      nameSpan.textContent = featureDisplayName(feature, isEditing, data);
+      toggle.appendChild(nameSpan);
+
+      if (id === 'sorcerer-innate-sorcery') {
+        if (typeof data.innateSorceryUsed !== 'number')
+          data.innateSorceryUsed = data.innateSorceryUsed ? 1 : 0;
+        if (data.innateSorceryMax == null) data.innateSorceryMax = 2;
+        const usedCount = data.innateSorceryUsed;
+        const maxCount = data.innateSorceryMax;
+        toggle.appendChild(makeUseStepper(
+          maxCount - usedCount,
+          maxCount,
+          newRemaining => {
+            data.innateSorceryUsed = maxCount - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          isEditing ? newMax => {
+            data.innateSorceryMax = newMax;
+            if (data.innateSorceryUsed > newMax) data.innateSorceryUsed = newMax;
+            if (onChange) onChange();
+            renderFeatures();
+          } : null
+        ));
+      } else if (id === 'sorcerer-sorcerous-restoration') {
+        if (data.used == null) data.used = 0;
+        toggle.appendChild(makeUseStepper(
+          1 - data.used,
+          1,
+          newRemaining => {
+            data.used = 1 - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          null
+        ));
+      } else if (id === 'barbarian-rage') {
+        const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+        const useMax = RAGE_USES[lvl - 1];
+        if (data.used == null) data.used = 0;
+        const used = Math.min(data.used, useMax);
+        toggle.appendChild(makeUseStepper(
+          useMax - used,
+          useMax,
+          newRemaining => {
+            data.used = useMax - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          null
+        ));
+      } else if (id === 'ranger-favored-enemy') {
+        const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+        const FAVORED_ENEMY_USES = [2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6];
+        const useMax = FAVORED_ENEMY_USES[lvl - 1];
+        if (data.used == null) data.used = 0;
+        const used = Math.min(data.used, useMax);
+        toggle.appendChild(makeUseStepper(
+          useMax - used,
+          useMax,
+          newRemaining => {
+            data.used = useMax - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          null
+        ));
+      } else if (id === 'witch-warden-witchmarks') {
+        const lvl = Math.max(1, Math.min(parseInt(state.level) || 1, 20));
+        const profMax = Math.ceil(lvl / 4) + 1;
+        if (data.used == null) data.used = 0;
+        const used = Math.min(data.used, profMax);
+        toggle.appendChild(makeUseStepper(
+          profMax - used,
+          profMax,
+          newRemaining => {
+            data.used = profMax - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          null
+        ));
+      } else if (id === 'vile-fang-fangs-dripping') {
+        const lvl = parseInt(state.level) || 1;
+        const profMax = Math.ceil(lvl / 4) + 1;
+        if (data.used == null) data.used = 0;
+        const used = Math.min(data.used, profMax);
+        toggle.appendChild(makeUseStepper(
+          profMax - used,
+          profMax,
+          newRemaining => {
+            data.used = profMax - newRemaining;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          null
+        ));
+      } else if (id === 'sorcerer-font-of-magic') {
+        const lvl = parseInt(state.level) || 1;
+        if (data.current == null) data.current = lvl;
+        if (data.fontMax == null) data.fontMax = lvl;
+        const fontMax = data.fontMax;
+        const current = Math.max(0, Math.min(fontMax, data.current));
+        toggle.appendChild(makeUseStepper(
+          current,
+          fontMax,
+          newCurrent => {
+            data.current = newCurrent;
+            if (onChange) onChange();
+            renderFeatures();
+          },
+          isEditing ? newMax => {
+            data.fontMax = newMax;
+            if (data.current > newMax) data.current = newMax;
+            if (onChange) onChange();
+            renderFeatures();
+          } : null
+        ));
+      }
+
+      const chevronEl = document.createElement('i');
+      chevronEl.className = 'fa-solid fa-chevron-down cs-feature-chevron';
+      toggle.appendChild(chevronEl);
+
+      header.appendChild(toggle);
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'cs-feature-del cs-edit-only';
+      delBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      delBtn.title = 'Remove feature';
+      delBtn.addEventListener('click', () => {
+        state.activeFeatures = state.activeFeatures.filter(fid => fid !== id);
+        state.hiddenFeatures.push(id);
+        if (onChange) onChange();
+        renderFeatures();
+      });
+      header.appendChild(delBtn);
+
+      el.appendChild(header);
+
+      if (!collapsed) {
+        el.appendChild(renderFeatureBody(feature, data, isEditing));
+      }
+
+      listEl.appendChild(el);
+      initFeatureDrag(handle, el, id, listEl);
+    });
+
+    // Ghost features (hidden but eligible) — only visible in edit mode
+    if (isEditing) {
+      const ghostIds = state.hiddenFeatures.filter(id => FEATURES_LIBRARY.find(f => f.id === id));
+      if (ghostIds.length) {
+        const section = document.createElement('div');
+        section.className = 'cs-feature-ghost-section';
+        const sectionLabel = document.createElement('div');
+        sectionLabel.className = 'cs-feature-ghost-label';
+        sectionLabel.textContent = 'Available Features';
+        section.appendChild(sectionLabel);
+        ghostIds.forEach(id => {
+          const feature = FEATURES_LIBRARY.find(f => f.id === id);
+          if (!feature) return;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'cs-feature-ghost-btn';
+          btn.innerHTML = `<i class="fa-solid fa-plus"></i> ${featureDisplayName(feature)}`;
+          btn.addEventListener('click', () => {
+            state.hiddenFeatures = state.hiddenFeatures.filter(fid => fid !== id);
+            state.activeFeatures.push(id);
+            if (onChange) onChange();
+            renderFeatures();
+          });
+          section.appendChild(btn);
+        });
+        listEl.appendChild(section);
+      }
+    }
+  }
+
+  // Hook renderFeatures into edit mode toggle
+  const _featureEditObserver = new MutationObserver(() => renderFeatures());
+  const _statsPanelEl = document.getElementById('stats-panel');
+  if (_statsPanelEl) _featureEditObserver.observe(_statsPanelEl, { attributes: true, attributeFilter: ['class'] });
+
+  // ── ATTACKS ───────────────────────────────────────────────────────────────
+  const attacksList = document.getElementById('cs-attacks-list');
+  const attacksAddBtn = document.getElementById('cs-attacks-add');
+
+  function getInventoryWeapons() {
+    const containers = state.containers.filter(c => c.id === 'equipped' || c.id === 'strapped');
+    const seen = new Set();
+    const weapons = [];
+    for (const container of containers) {
+      for (let r = 0; r < container.slots.length; r++) {
+        for (let c = 0; c < container.slots[r].length; c++) {
+          const slot = container.slots[r][c];
+          if (!slot) continue;
+          if (getEffectiveCategory(slot) !== 'weapon') continue;
+          const displayName = computeDisplayName(slot);
+          if (seen.has(displayName)) continue;
+          seen.add(displayName);
+          weapons.push({ slotData: slot, container, r, c, key: `${container.id}-${r}-${c}`, displayName });
+        }
+      }
+    }
+    return weapons;
+  }
+
+  const WEAPON_STAT_ALIASES = { "Staff": "Quarterstaff" };
+  function getWeaponBaseInfo(slotData) {
+    const wv = slotData.variables && slotData.variables.weapon;
+    const baseName = (wv && wv.value) ? wv.value : slotData.name;
+    const lib = getLibraryItem(WEAPON_STAT_ALIASES[baseName] || baseName);
+    if (!lib || !lib.description) return null;
+    const desc = lib.description;
+    const isRanged  = /Simple Ranged|Martial Ranged/i.test(desc);
+    const isFinesse = /Finesse/i.test(desc);
+    const afterBr   = desc.split('<br>')[1] || desc;
+    const diceMatch = afterBr.match(/^(\d+d\d+|\d+)/);
+    const damageDice = diceMatch ? diceMatch[1] : null;
+    const typeMatch  = afterBr.match(/^(?:\d+d\d+|\d+)\s+(\w+)/);
+    const damageType = typeMatch ? typeMatch[1] : null;
+    const rangeMatch = afterBr.match(/(?:Thrown|Ammunition)\s*\((\d+\/\d+)\)/i);
+    const range = rangeMatch ? rangeMatch[1] : 'Melee';
+    const isThrown = /Thrown\s*\(/i.test(afterBr);
+    const rangeType = isThrown ? 'Thrown' : isRanged ? 'Ranged' : null;
+    return { isRanged, isFinesse, damageDice, damageType, range, rangeType };
+  }
+
+  function computeWeaponAutoStats(slotData) {
+    const info = getWeaponBaseInfo(slotData);
+    if (!info || !info.damageDice) return null;
+    const level = parseInt(state.level);
+    const profBonus = (!isNaN(level) && level >= 1)
+      ? Math.ceil(level / 4) + 1
+      : (parseInt(state.proficiency) || 2);
+    const strScore = effectiveAbScore('str');
+    const dexScore = effectiveAbScore('dex');
+    const strMod = strScore !== null ? Math.floor((strScore - 10) / 2) : 0;
+    const dexMod = dexScore !== null ? Math.floor((dexScore - 10) / 2) : 0;
+    let mod, usesStr;
+    if (info.isRanged)       { mod = dexMod; usesStr = false; }
+    else if (info.isFinesse) { mod = Math.max(strMod, dexMod); usesStr = strMod >= dexMod; }
+    else                     { mod = strMod; usesStr = true; }
+    const toHitVal = mod + profBonus - (state.exhaustion || 0);
+    const toHit  = toHitVal >= 0 ? `+${toHitVal}` : `${toHitVal}`;
+    // Rage adds its damage bonus to Strength-based melee attacks while active.
+    const rageApplied = usesStr && isRaging();
+    const dmgMod = mod + (rageApplied ? getRageDamageBonus() : 0);
+    const modStr = dmgMod > 0 ? `+${dmgMod}` : dmgMod < 0 ? `${dmgMod}` : '';
+    const damage = `${info.damageDice}${modStr}`;
+    return { toHit, damage, damageType: info.damageType, range: info.range, rangeType: info.rangeType, rageApplied };
+  }
+
+  function computeUnarmedStrike() {
+    const level = parseInt(state.level);
+    const profBonus = (!isNaN(level) && level >= 1)
+      ? Math.ceil(level / 4) + 1
+      : (parseInt(state.proficiency) || 2);
+    const strScore = effectiveAbScore('str');
+    const strMod = strScore !== null ? Math.floor((strScore - 10) / 2) : 0;
+    const toHitVal = strMod + profBonus - (state.exhaustion || 0);
+    const toHit = toHitVal >= 0 ? `+${toHitVal}` : `${toHitVal}`;
+    const rageApplied = isRaging();
+    const damage = String(Math.max(1, 1 + strMod + (rageApplied ? getRageDamageBonus() : 0)));
+    return { toHit, damage, range: 'Melee', rageApplied };
+  }
+
+  function syncEquippedContainer() {
+    const containers = state.containers.filter(c => c.id === 'equipped' || c.id === 'strapped');
+    if (!containers.length) return;
+    let foundArmor = null;
+    let foundShield = null;
+    for (const container of containers) {
+      for (const row of container.slots) {
+        for (const slot of row) {
+          if (!slot) continue;
+          const cat = getEffectiveCategory(slot);
+          if (!foundArmor && cat === 'armor') foundArmor = computeDisplayName(slot);
+          if (!foundShield && cat === 'shield') foundShield = computeDisplayName(slot);
+        }
+      }
+    }
+    let changed = false;
+    const newArmor = foundArmor || '';
+    if (state.equippedArmor !== newArmor) {
+      state.equippedArmor = newArmor;
+      if (newArmor) state.armorActive = true;
+      state.ac = '';
+      if (armorSelectEl) armorSelectEl.value = state.equippedArmor;
+      updateArmorDisplay();
+      changed = true;
+    }
+    const newShield = foundShield || '';
+    if (state.equippedShield !== newShield) {
+      state.equippedShield = newShield;
+      state.shieldActive = !!newShield;
+      state.ac = '';
+      if (shieldSelectEl) shieldSelectEl.value = state.equippedShield;
+      updateShieldDisplay();
+      changed = true;
+    }
+    if (changed) updateCsCalculations();
+  }
+
+  function initAttackDrag(handle, rowEl, listEl) {
+    handle.addEventListener('pointerdown', e => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      e.preventDefault();
+      rowEl.classList.add('cs-attack-dragging');
+
+      const onMove = ev => {
+        const allRows = [...listEl.querySelectorAll('[data-attack-key]')];
+        let inserted = false;
+        for (let i = 0; i < allRows.length; i++) {
+          if (allRows[i] === rowEl) continue;
+          const rect = allRows[i].getBoundingClientRect();
+          if (ev.clientY < rect.top + rect.height / 2) {
+            listEl.insertBefore(rowEl, allRows[i]);
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted) listEl.appendChild(rowEl);
+      };
+
+      const onUp = () => {
+        rowEl.classList.remove('cs-attack-dragging');
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        const allRows = [...listEl.querySelectorAll('[data-attack-key]')];
+        state.attackOrder = allRows.map(r => r.dataset.attackKey);
+        if (onChange) onChange();
+      };
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  }
+
+  function makeAttackInput(placeholder, savedObj, field, auto, boostClass) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = placeholder;
+    input.autocomplete = 'off';
+    const saved = savedObj[field] || '';
+    const isAuto = !saved && !!auto;
+    input.value = isAuto ? auto : saved;
+    input.classList.toggle('cs-auto', isAuto);
+    if (field === 'toHit' && isAuto && state.exhaustion > 0) input.classList.add('cs-exh-penalty');
+    if (isAuto && boostClass) input.classList.add(boostClass);
+    input.addEventListener('input', () => {
+      savedObj[field] = input.value;
+      input.classList.remove('cs-auto', 'cs-exh-penalty');
+      if (boostClass) input.classList.remove(boostClass);
+      if (onChange) onChange();
+    });
+    input.addEventListener('blur', () => {
+      if (!input.value.trim() && auto) {
+        savedObj[field] = '';
+        input.value = auto;
+        input.classList.add('cs-auto');
+        if (state.exhaustion > 0) input.classList.add('cs-exh-penalty');
+        if (boostClass) input.classList.add(boostClass);
+      }
+    });
+    return input;
+  }
+
+  function makeRangeCell(savedObj, rangeVal, rangeType) {
+    const cell = document.createElement('div');
+    cell.className = 'cs-attack-range-cell';
+    cell.appendChild(makeAttackInput('Melee', savedObj, 'range', rangeVal));
+    if (rangeType) {
+      const badge = document.createElement('span');
+      badge.className = 'cs-attack-dmg-type-badge';
+      badge.textContent = rangeType;
+      cell.appendChild(badge);
+    }
+    return cell;
+  }
+
+  function makeInvDamageCell(placeholder, savedObj, field, autoVal, damageType, boostClass) {
+    const cell = document.createElement('div');
+    cell.className = 'cs-attack-dmg-cell';
+    cell.appendChild(makeAttackInput(placeholder, savedObj, field, autoVal, boostClass));
+    if (damageType) {
+      const badge = document.createElement('span');
+      badge.className = 'cs-attack-dmg-type-badge';
+      badge.textContent = damageType;
+      cell.appendChild(badge);
+    }
+    return cell;
+  }
+
+  function renderAttacks() {
+    if (!attacksList) return;
+    attacksList.innerHTML = '';
+
+    // ── Unarmed Strike (permanent, always first) ──────────────────
+    const unarmedStats = computeUnarmedStrike();
+    if (!state.weaponAttackData['__unarmed__']) state.weaponAttackData['__unarmed__'] = {};
+    const unarmedData = state.weaponAttackData['__unarmed__'];
+    const unarmedRow = document.createElement('div');
+    unarmedRow.className = 'cs-attack-inv-row cs-attack-unarmed';
+    unarmedRow.appendChild(document.createElement('span'));
+    const unarmedNameCell = document.createElement('div');
+    unarmedNameCell.className = 'cs-attack-name-cell';
+    const unarmedLbl = document.createElement('span');
+    unarmedLbl.className = 'cs-attack-unarmed-name';
+    unarmedLbl.textContent = 'Unarmed Strike';
+    unarmedNameCell.appendChild(unarmedLbl);
+    unarmedRow.appendChild(unarmedNameCell);
+    unarmedRow.appendChild(makeRangeCell(unarmedData, unarmedStats.range, null));
+    unarmedRow.appendChild(makeAttackInput('+0', unarmedData, 'toHit', unarmedStats.toHit));
+    unarmedRow.appendChild(makeInvDamageCell('1', unarmedData, 'damage', unarmedStats.damage, 'Bludgeoning', unarmedStats.rageApplied ? 'cs-rage-boost' : ''));
+    unarmedRow.appendChild(document.createElement('span'));
+    attacksList.appendChild(unarmedRow);
+
+    // ── Sortable attacks ──────────────────────────────────────────
+    const invWeapons = getInventoryWeapons();
+    if (!invWeapons.length && !state.attacks.length) return;
+
+    const allItems = [
+      ...invWeapons.map(w => ({ type: 'inv', key: 'inv:' + w.displayName, weapon: w })),
+      ...state.attacks.map(atk => ({ type: 'manual', key: 'manual:' + atk.id, atk })),
+    ];
+    const orderMap = new Map(state.attackOrder.map((k, i) => [k, i]));
+    allItems.sort((a, b) => {
+      const ia = orderMap.has(a.key) ? orderMap.get(a.key) : Infinity;
+      const ib = orderMap.has(b.key) ? orderMap.get(b.key) : Infinity;
+      return ia - ib;
+    });
+
+    allItems.forEach(item => {
+      const row = document.createElement('div');
+      row.dataset.attackKey = item.key;
+
+      const handle = document.createElement('button');
+      handle.type = 'button';
+      handle.className = 'cs-attack-drag-handle';
+      handle.innerHTML = '<i class="fa-solid fa-grip-vertical"></i>';
+      handle.title = 'Drag to reorder';
+      row.appendChild(handle);
+      initAttackDrag(handle, row, attacksList);
+
+      if (item.type === 'inv') {
+        const weapon = item.weapon;
+        row.className = 'cs-attack-inv-row';
+        row.dataset.attackKey = item.key;
+
+        const nameCell = document.createElement('div');
+        nameCell.className = 'cs-attack-name-cell';
+        const nameBtn = document.createElement('button');
+        nameBtn.type = 'button';
+        nameBtn.className = 'cs-attack-weapon-name';
+        nameBtn.textContent = weapon.displayName;
+        nameBtn.addEventListener('click', () => {
+          toggleInspectorFor(weapon.key, weapon.slotData, weapon.container, weapon.r, weapon.c);
+        });
+        nameCell.appendChild(nameBtn);
+        const nameLabel = document.createElement('span');
+        nameLabel.className = 'cs-attack-weapon-label';
+        nameLabel.textContent = weapon.displayName;
+        nameCell.appendChild(nameLabel);
+        row.appendChild(nameCell);
+
+        if (!state.weaponAttackData[weapon.displayName]) state.weaponAttackData[weapon.displayName] = {};
+        const wepData = state.weaponAttackData[weapon.displayName];
+        const autoStats = computeWeaponAutoStats(weapon.slotData);
+        row.appendChild(makeRangeCell(wepData, autoStats ? autoStats.range : 'Melee', autoStats ? autoStats.rangeType : null));
+        row.appendChild(makeAttackInput('+0', wepData, 'toHit', autoStats ? autoStats.toHit : ''));
+        row.appendChild(makeInvDamageCell('1d6', wepData, 'damage', autoStats ? autoStats.damage : '', autoStats ? autoStats.damageType : null, (autoStats && autoStats.rageApplied) ? 'cs-rage-boost' : ''));
+        row.appendChild(document.createElement('span'));
+
+      } else {
+        const atk = item.atk;
+        const i = state.attacks.indexOf(atk);
+        row.className = 'cs-attack-row';
+        row.dataset.attackKey = item.key;
+
+        ['name', 'range', 'toHit'].forEach(field => {
+          const ph = field === 'name' ? 'Attack name' : field === 'range' ? 'Range' : '+0';
+          const input = document.createElement('input');
+          input.type = 'text'; input.placeholder = ph; input.autocomplete = 'off';
+          input.value = atk[field] || '';
+          input.addEventListener('input', () => { state.attacks[i][field] = input.value; if (onChange) onChange(); });
+          row.appendChild(input);
+        });
+
+        const dmgInput = document.createElement('input');
+        dmgInput.type = 'text'; dmgInput.placeholder = '1d6'; dmgInput.autocomplete = 'off';
+        dmgInput.value = atk.damage || '';
+        dmgInput.addEventListener('input', () => { state.attacks[i].damage = dmgInput.value; if (onChange) onChange(); });
+        row.appendChild(dmgInput);
+        const del = document.createElement('button');
+        del.className = 'cs-attack-del';
+        del.title = 'Remove';
+        del.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        del.addEventListener('click', () => {
+          state.attacks.splice(i, 1);
+          state.attackOrder = state.attackOrder.filter(k => k !== item.key);
+          renderAttacks();
+          if (onChange) onChange();
+        });
+        row.appendChild(del);
+      }
+
+      attacksList.appendChild(row);
+    });
+  }
+
+  if (attacksAddBtn) {
+    attacksAddBtn.addEventListener('click', () => {
+      state.attacks.push({ id: Date.now(), name: '', range: '', toHit: '', damage: '' });
+      renderAttacks();
+      if (onChange) onChange();
+      const inputs = attacksList.querySelectorAll('.cs-attack-row input');
+      if (inputs.length) inputs[inputs.length - 4].focus();
+    });
+  }
+
+  renderAttacks();
+
+  // ── SHARED HELPERS ────────────────────────────────────────────────────────
+  function findSlotByDisplayName(displayName) {
+    for (const container of state.containers) {
+      for (let r = 0; r < container.slots.length; r++) {
+        for (let c = 0; c < container.slots[r].length; c++) {
+          const slot = container.slots[r][c];
+          if (!slot) continue;
+          if (computeDisplayName(slot) === displayName) {
+            return { slotData: slot, container, r, c, key: `${container.id}-${r}-${c}` };
+          }
+        }
       }
     }
     return null;
   }
 
-  function handlePouchDrop(item, dst, data, x, y) {
-    if (!isContainerPouch(dst)) return false;
-    if (!item.isPackable()) return true;
-
-    const success = dst.addItem(item, x, y);
-    if (success && !data.fromSearch) {
-      const src = getContainerById(data.sourceContainerId);
-      src.removeItem(item);
-    }
-
-    return true;
-  }
-
-  function handlePackableAutoPouch(item, dst, src, data, x, y) {
-    if (!item.isPackable()) return false;
-
-    const pouch = createPouch();
-    pouch.displayText = containerDisplayText;
-
-    if (collidesWith(pouch, dst, x, y)) return true;
-
-    dst.addItem(pouch, x, y);
-    pouch.innerContainer.addItem(item, 0, 0);
-
-    if (!data.fromSearch)
-      src.removeItem(item);
-    
-    return true;
-  }
-
-  function cleanupEmptyPouches() {
-    const allContainers = { ...inventory.containers, ...dynamicContainers };
-    for (const container of Object.values(allContainers)) {
-      for (const key in container.items) {
-        const item = container.items[key];
-        if (item?.name === "Pouch" && item.innerContainer && Object.keys(item.innerContainer.items).length === 0) {
-          container.removeItem(item);
-          itemDivCache.delete(item);
-          delete dynamicContainers[item.id];
-          break;
+  function populateCategoryDatalist(datalist, category) {
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    const seen = new Set();
+    for (const container of state.containers) {
+      for (const row of container.slots) {
+        for (const slot of row) {
+          if (!slot) continue;
+          if (getEffectiveCategory(slot) !== category) continue;
+          const displayName = computeDisplayName(slot);
+          if (seen.has(displayName)) continue;
+          seen.add(displayName);
+          const opt = document.createElement('option');
+          opt.value = displayName;
+          datalist.appendChild(opt);
         }
       }
     }
   }
 
-  function isContainerPouch(container) {
-    if (!container.ownerId) return false;
-    const pouchItem = findItemById(container.ownerId);
-    return pouchItem?.name === "Pouch";
+  // ── SHIELD SELECTOR ───────────────────────────────────────────────────────
+  const shieldSelectEl  = document.getElementById('cs-shield-select');
+  const shieldDatalist  = document.getElementById('cs-shield-options');
+  const shieldViewEl    = document.getElementById('cs-shield-view') || document.querySelector('.cs-shield-view');
+  const shieldToggleBtn = document.getElementById('cs-shield-toggle');
+  const shieldDisplayBtn = document.getElementById('cs-shield-display');
+
+  function populateShieldDatalist() { populateCategoryDatalist(shieldDatalist, 'shield'); }
+
+  function updateShieldDisplay() {
+    if (!shieldViewEl) return;
+    if (state.equippedShield) {
+      shieldViewEl.hidden = false;
+      if (shieldDisplayBtn) {
+        shieldDisplayBtn.textContent = state.equippedShield;
+        shieldDisplayBtn.classList.remove('cs-empty');
+        const found = !!findSlotByDisplayName(state.equippedShield);
+        shieldDisplayBtn.classList.toggle('cs-item-missing', !found);
+        shieldDisplayBtn.classList.toggle('cs-disabled', !state.shieldActive);
+      }
+      if (shieldToggleBtn) {
+        shieldToggleBtn.textContent = state.shieldActive ? '●' : '○';
+        shieldToggleBtn.classList.toggle('cs-shield-on', !!state.shieldActive);
+      }
+    } else {
+      shieldViewEl.hidden = true;
+    }
   }
 
-  function findItemById(id) {
-    const allContainers = { ...inventory.containers, ...dynamicContainers };
-    for (const container of Object.values(allContainers)) {
-      for (const item of Object.values(container.items)) {
-        if (item.id === id) return item;
+  function applyEquippedShield(name) {
+    state.equippedShield = name || '';
+    if (shieldSelectEl) shieldSelectEl.value = state.equippedShield;
+    if (state.equippedShield && !state.shieldActive) state.shieldActive = true;
+    if (!state.equippedShield) state.shieldActive = false;
+    updateShieldDisplay();
+    state.ac = '';
+    updateCsCalculations();
+    if (onChange) onChange();
+  }
+
+  if (shieldSelectEl) {
+    shieldSelectEl.value = state.equippedShield || '';
+    shieldSelectEl.addEventListener('change', () => applyEquippedShield(shieldSelectEl.value.trim()));
+    shieldSelectEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { shieldSelectEl.blur(); applyEquippedShield(shieldSelectEl.value.trim()); }
+    });
+    shieldSelectEl.addEventListener('blur', () => {
+      if (shieldSelectEl.value.trim() === '') applyEquippedShield('');
+    });
+  }
+
+  if (shieldToggleBtn) {
+    shieldToggleBtn.addEventListener('click', () => {
+      state.shieldActive = !state.shieldActive;
+      updateShieldDisplay();
+      state.ac = '';
+      updateCsCalculations();
+      if (onChange) onChange();
+    });
+  }
+
+  if (shieldDisplayBtn) {
+    shieldDisplayBtn.addEventListener('click', () => {
+      const found = findSlotByDisplayName(state.equippedShield);
+      if (!found) return;
+      toggleInspectorFor(found.key, found.slotData, found.container, found.r, found.c);
+    });
+  }
+
+  updateShieldDisplay();
+  populateShieldDatalist();
+
+  // ── ARMOR SELECTOR ────────────────────────────────────────────────────────
+  const armorSelectEl = document.getElementById('cs-armor-select');
+  const armorDatalist = document.getElementById('cs-armor-options');
+
+  function populateArmorDatalist() { populateCategoryDatalist(armorDatalist, 'armor'); }
+
+  const armorToggleBtn  = document.getElementById('cs-armor-toggle');
+  const armorDisplayBtn = document.getElementById('cs-armor-display');
+
+  function updateArmorDisplay() {
+    if (!armorDisplayBtn) return;
+    if (state.equippedArmor) {
+      if (armorToggleBtn) {
+        armorToggleBtn.hidden = false;
+        armorToggleBtn.textContent = state.armorActive ? '●' : '○';
+        armorToggleBtn.classList.toggle('cs-armor-on', !!state.armorActive);
       }
+      armorDisplayBtn.textContent = state.equippedArmor;
+      const found = !!findSlotByDisplayName(state.equippedArmor);
+      armorDisplayBtn.classList.remove('cs-empty');
+      armorDisplayBtn.classList.toggle('cs-item-missing', !found);
+      armorDisplayBtn.classList.toggle('cs-disabled', !state.armorActive);
+    } else {
+      if (armorToggleBtn) armorToggleBtn.hidden = true;
+      armorDisplayBtn.textContent = '—';
+      armorDisplayBtn.classList.remove('cs-item-missing', 'cs-disabled');
+      armorDisplayBtn.classList.add('cs-empty');
+    }
+  }
+
+  function applyEquippedArmor(name) {
+    state.equippedArmor = name || '';
+    if (state.equippedArmor) state.armorActive = true;
+    if (armorSelectEl) armorSelectEl.value = state.equippedArmor;
+    updateArmorDisplay();
+    state.ac = '';
+    updateCsCalculations();
+    if (onChange) onChange();
+  }
+
+  if (armorSelectEl) {
+    armorSelectEl.value = state.equippedArmor || '';
+    armorSelectEl.addEventListener('change', () => applyEquippedArmor(armorSelectEl.value.trim()));
+    armorSelectEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { armorSelectEl.blur(); applyEquippedArmor(armorSelectEl.value.trim()); }
+    });
+    armorSelectEl.addEventListener('blur', () => {
+      if (armorSelectEl.value.trim() === '') applyEquippedArmor('');
+    });
+  }
+
+  if (armorToggleBtn) {
+    armorToggleBtn.addEventListener('click', () => {
+      state.armorActive = !state.armorActive;
+      updateArmorDisplay();
+      state.ac = '';
+      updateCsCalculations();
+      if (onChange) onChange();
+    });
+  }
+
+  if (armorDisplayBtn) {
+    updateArmorDisplay();
+    armorDisplayBtn.addEventListener('click', () => {
+      const found = findSlotByDisplayName(state.equippedArmor);
+      if (!found) return;
+      toggleInspectorFor(found.key, found.slotData, found.container, found.r, found.c);
+    });
+  }
+
+  populateArmorDatalist();
+
+  const attacksToggle = document.getElementById('cs-attacks-toggle');
+  const attacksBody   = document.getElementById('cs-attacks-body');
+  if (attacksToggle && attacksBody) {
+    attacksToggle.addEventListener('click', () => {
+      const open = attacksBody.hidden;
+      attacksBody.hidden = !open;
+      attacksToggle.setAttribute('aria-expanded', String(open));
+      attacksToggle.classList.toggle('cs-attacks-open', open);
+    });
+  }
+
+  const otherProfsToggle = document.getElementById('cs-other-profs-toggle');
+  const otherProfsBody   = document.getElementById('cs-other-profs-body');
+  if (otherProfsToggle && otherProfsBody) {
+    otherProfsToggle.addEventListener('click', () => {
+      const open = otherProfsBody.hidden;
+      localSectionsUi.otherProfs = open;
+      applySectionOpen(otherProfsToggle, otherProfsBody, open);
+      reportUiChange();
+    });
+  }
+
+  // ── NOTES ─────────────────────────────────────────────────────
+  const notesToggle = document.getElementById('cs-notes-toggle');
+  const notesBody   = document.getElementById('cs-notes-body');
+  const notesList   = document.getElementById('cs-notes-list');
+
+  let dragSrcIdx = -1;
+
+  function renderNotes() {
+    if (!notesList) return;
+    notesList.innerHTML = '';
+    state.notes.forEach((note, i) => {
+      const row = document.createElement('div');
+      row.className = 'cs-notes-entry-row';
+      row.draggable = true;
+      row.dataset.idx = i;
+
+      // ── header ──────────────────────────────────────
+      const header = document.createElement('div');
+      header.className = 'cs-notes-entry-header';
+
+      const handle = document.createElement('span');
+      handle.className = 'cs-notes-drag-handle';
+      handle.innerHTML = '<i class="fa-solid fa-grip-vertical"></i>';
+      handle.title = 'Drag to reorder';
+
+      const chevron = document.createElement('button');
+      chevron.type = 'button';
+      chevron.className = 'cs-notes-chevron';
+      chevron.tabIndex = -1;
+      chevron.innerHTML = isNoteOpen(note)
+        ? '<i class="fa-solid fa-chevron-down"></i>'
+        : '<i class="fa-solid fa-chevron-right"></i>';
+      chevron.addEventListener('click', () => {
+        localNotesUi.open[note.id] = !isNoteOpen(note);
+        saveLocalNotesUi();
+        renderNotes();
+      });
+
+      const titleInput = document.createElement('input');
+      titleInput.type = 'text';
+      titleInput.className = 'cs-notes-title';
+      titleInput.placeholder = 'Title…';
+      titleInput.autocomplete = 'off';
+      titleInput.value = note.title;
+      titleInput.addEventListener('input', () => {
+        state.notes[i].title = titleInput.value;
+        if (onChange) onChange();
+      });
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'cs-notes-remove-btn';
+      removeBtn.tabIndex = -1;
+      removeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      removeBtn.addEventListener('click', () => {
+        const hasContent = note.title.trim() || note.body.trim();
+        if (hasContent && !confirm('Delete this note?')) return;
+        state.notes.splice(i, 1);
+        renderNotes();
+        if (onChange) onChange();
+      });
+
+      header.appendChild(handle);
+      header.appendChild(chevron);
+      header.appendChild(titleInput);
+      header.appendChild(removeBtn);
+
+      // ── body ────────────────────────────────────────
+      const bodyDiv = document.createElement('div');
+      bodyDiv.className = 'cs-notes-entry-body';
+      bodyDiv.hidden = !isNoteOpen(note);
+
+      const ta = document.createElement('textarea');
+      ta.className = 'cs-notes-entry';
+      ta.autocomplete = 'off';
+      ta.rows = 1;
+      ta.value = note.body;
+      ta.addEventListener('input', () => {
+        autoResizeTextarea(ta);
+        state.notes[i].body = ta.value;
+        if (onChange) onChange();
+      });
+      setTimeout(() => autoResizeTextarea(ta), 0);
+
+      ta.addEventListener('blur', (e) => {
+        if (e.relatedTarget === removeBtn) return;
+        if (!ta.value.trim() && !note.title.trim()) {
+          state.notes.splice(i, 1);
+          renderNotes();
+          if (onChange) onChange();
+        }
+      });
+
+      bodyDiv.appendChild(ta);
+
+      // ── drag events ──────────────────────────────────
+      row.addEventListener('dragstart', (e) => {
+        dragSrcIdx = i;
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => row.classList.add('cs-notes-dragging'), 0);
+      });
+      row.addEventListener('dragend', () => {
+        row.classList.remove('cs-notes-dragging');
+        notesList.querySelectorAll('.cs-notes-entry-row').forEach(r => r.classList.remove('cs-notes-drag-over'));
+      });
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        notesList.querySelectorAll('.cs-notes-entry-row').forEach(r => r.classList.remove('cs-notes-drag-over'));
+        if (i !== dragSrcIdx) row.classList.add('cs-notes-drag-over');
+      });
+      row.addEventListener('dragleave', () => {
+        row.classList.remove('cs-notes-drag-over');
+      });
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        row.classList.remove('cs-notes-drag-over');
+        if (dragSrcIdx === -1 || dragSrcIdx === i) return;
+        const moved = state.notes.splice(dragSrcIdx, 1)[0];
+        state.notes.splice(i, 0, moved);
+        dragSrcIdx = -1;
+        renderNotes();
+        if (onChange) onChange();
+      });
+
+      row.appendChild(header);
+      row.appendChild(bodyDiv);
+      notesList.appendChild(row);
+    });
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'cs-notes-add-btn';
+    addBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+    addBtn.addEventListener('click', () => {
+      state.notes.push({ id: genNoteId(), title: '', body: '' });
+      renderNotes();
+      notesList.querySelectorAll('.cs-notes-title').item(state.notes.length - 1)?.focus();
+      if (onChange) onChange();
+    });
+    notesList.appendChild(addBtn);
+  }
+
+  if (notesToggle && notesBody) {
+    notesToggle.addEventListener('click', () => {
+      const open = notesBody.hidden;
+      localSectionsUi.notes = open;
+      applySectionOpen(notesToggle, notesBody, open);
+      reportUiChange();
+    });
+  }
+
+  // ── INSPIRATION ───────────────────────────────────────────────
+  function updateInspirationDisplay() {
+    const btn = document.getElementById('cs-inspiration-toggle');
+    if (btn) btn.classList.toggle('cs-on', state.inspiration);
+  }
+  const inspirationBtn = document.getElementById('cs-inspiration-toggle');
+  if (inspirationBtn) {
+    inspirationBtn.addEventListener('click', () => {
+      state.inspiration = !state.inspiration;
+      updateInspirationDisplay();
+      if (onChange) onChange();
+    });
+  }
+  updateInspirationDisplay();
+
+  // ── DEATH SAVES ───────────────────────────────────────────────
+  function updateDeathSavesDisplay() {
+    document.querySelectorAll('.cs-death-save-dot').forEach(dot => {
+      const isSuccess = dot.dataset.type === 'success';
+      const filled = +dot.dataset.level <= (isSuccess ? state.deathSaves.successes : state.deathSaves.failures);
+      dot.classList.toggle('cs-on-success', isSuccess && filled);
+      dot.classList.toggle('cs-on-failure',  !isSuccess && filled);
+      const icon = dot.querySelector('i');
+      if (icon) {
+        icon.classList.toggle('fa-regular', !filled);
+        icon.classList.toggle('fa-solid',    filled);
+      }
+    });
+    const anyActive = state.deathSaves.successes > 0 || state.deathSaves.failures > 0;
+    const skull = document.querySelector('.cs-ds-skull');
+    if (skull) skull.classList.toggle('cs-ds-active', anyActive);
+    document.querySelector('.cs-death-saves')?.classList.toggle('cs-ds-active', anyActive);
+  }
+  document.querySelectorAll('.cs-death-save-dot').forEach(dot => {
+    dot.addEventListener('click', () => {
+      const isSuccess = dot.dataset.type === 'success';
+      const key = isSuccess ? 'successes' : 'failures';
+      const lvl = +dot.dataset.level;
+      state.deathSaves[key] = state.deathSaves[key] === lvl ? lvl - 1 : lvl;
+      updateDeathSavesDisplay();
+      if (onChange) onChange();
+    });
+  });
+  updateDeathSavesDisplay();
+
+  // ── EXHAUSTION ────────────────────────────────────────────────
+  function updateExhaustionDisplay() {
+    const exh = state.exhaustion;
+    const countEl = document.getElementById('cs-exh-count');
+    if (countEl) countEl.textContent = exh;
+    document.getElementById('cs-exh-minus')?.toggleAttribute('disabled', exh <= 0);
+    document.getElementById('cs-exh-plus') ?.toggleAttribute('disabled', exh >= 6);
+    document.querySelector('.cs-exhaustion')?.classList.toggle('cs-exh-warning', exh > 0);
+  }
+  document.getElementById('cs-exh-minus')?.addEventListener('click', () => {
+    if (state.exhaustion > 0) { state.exhaustion--; updateExhaustionDisplay(); updateCsCalculations(); if (onChange) onChange(); }
+  });
+  document.getElementById('cs-exh-plus')?.addEventListener('click', () => {
+    if (state.exhaustion < 6) { state.exhaustion++; updateExhaustionDisplay(); updateCsCalculations(); if (onChange) onChange(); }
+  });
+  updateExhaustionDisplay();
+
+  // ── FULL REST / SHORT REST ────────────────────────────────────────────────
+  function lockRestBtn(btn) {
+    if (!btn || btn.classList.contains('cs-rest-done')) return false;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+    btn.classList.add('cs-rest-done');
+    setTimeout(() => {
+      btn.innerHTML = orig;
+      btn.classList.remove('cs-rest-done');
+    }, 1000);
+    return true;
+  }
+
+  document.getElementById('cs-long-rest-btn')?.addEventListener('click', () => {
+    if (!lockRestBtn(document.getElementById('cs-long-rest-btn'))) return;
+    const hpMaxEl = document.getElementById('cs-hp-max');
+    const hpMax = parseInt(hpMaxEl?.value) || 0;
+    if (hpMax > 0) {
+      state.hp = String(hpMax);
+      const hpEl = document.getElementById('cs-hp');
+      if (hpEl) hpEl.value = state.hp;
+    }
+    state.tempHp = '';
+    const tempEl = document.getElementById('cs-temp-hp');
+    if (tempEl) tempEl.value = '';
+    state.deathSaves = { successes: 0, failures: 0 };
+    updateDeathSavesDisplay();
+    if (state.exhaustion > 0) { state.exhaustion--; updateExhaustionDisplay(); }
+    const hdCountEl = document.getElementById('cs-hit-dice-count');
+    const totalDice = parseInt(hdCountEl?.value) || parseInt(state.hitDiceCount) || 1;
+    const currentDice = parseInt(state.hitDiceRemaining) || 0;
+    state.hitDiceRemaining = String(totalDice);
+    const hdEl = document.getElementById('cs-hit-dice-remaining');
+    if (hdEl) hdEl.value = state.hitDiceRemaining;
+    if (state.featureData['sorcerer-spellcasting']) {
+      state.featureData['sorcerer-spellcasting'].usedSlots = {};
+    }
+    if (state.featureData['ranger-spellcasting']) {
+      state.featureData['ranger-spellcasting'].usedSlots = {};
+    }
+    if (state.featureData['ranger-favored-enemy']) {
+      state.featureData['ranger-favored-enemy'].used = 0;
+    }
+    if (state.featureData['vile-fang-fangs-dripping']) {
+      state.featureData['vile-fang-fangs-dripping'].used = 0;
+    }
+    if (state.featureData['witch-warden-witchmarks']) {
+      state.featureData['witch-warden-witchmarks'].used = 0;
+    }
+    if (state.featureData['barbarian-rage']) {
+      state.featureData['barbarian-rage'].used = 0;
+      state.featureData['barbarian-rage'].active = false;
+    }
+    if (state.featureData['sorcerer-innate-sorcery']) {
+      state.featureData['sorcerer-innate-sorcery'].innateSorceryUsed = 0;
+    }
+    if (state.featureData['sorcerer-sorcerous-restoration']) {
+      state.featureData['sorcerer-sorcerous-restoration'].used = 0;
+    }
+    if (state.featureData['sorcerer-font-of-magic']) {
+      const fd = state.featureData['sorcerer-font-of-magic'];
+      fd.current = fd.fontMax ?? (parseInt(state.level) || 1);
+    }
+    if (state.activeFeatures.includes('human-determination') && !state.inspiration) {
+      state.inspiration = true;
+      updateInspirationDisplay();
+    }
+    updateCsCalculations();
+    renderFeatures();
+    if (onChange) onChange();
+    if (window.flushCharDiff) window.flushCharDiff();
+    if (window.logCharRest) window.logCharRest('long');
+  });
+
+  document.getElementById('cs-short-rest-btn')?.addEventListener('click', () => {
+    if (!lockRestBtn(document.getElementById('cs-short-rest-btn'))) return;
+    state.deathSaves = { successes: 0, failures: 0 };
+    updateDeathSavesDisplay();
+    if (state.featureData['vile-fang-fangs-dripping']) {
+      state.featureData['vile-fang-fangs-dripping'].used = 0;
+    }
+    if (state.featureData['witch-warden-witchmarks']) {
+      state.featureData['witch-warden-witchmarks'].used = 0;
+    }
+    if (state.featureData['barbarian-rage']) {
+      const fd = state.featureData['barbarian-rage'];
+      fd.used = Math.max(0, (fd.used || 0) - 1);
+    }
+    updateCsCalculations();
+    renderFeatures();
+    if (onChange) onChange();
+    if (window.flushCharDiff) window.flushCharDiff();
+    if (window.logCharRest) window.logCharRest('short');
+  });
+
+  function autoResizeTextarea(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+  }
+  ['cs-languages','cs-tools-prof','cs-weapons-prof','cs-armor-prof'].forEach(id => {
+    const ta = document.getElementById(id);
+    if (!ta) return;
+    ta.addEventListener('input', () => autoResizeTextarea(ta));
+  });
+
+  const SUBCLASS_MAP = {
+    'Barbarian': ['Path of the Cursed'],
+    'Sorcerer':  ['Spell Drinker'],
+    'Rogue':     ['Vile Fang'],
+    'Ranger':    ['Witch Warden'],
+  };
+
+  const subclassEl   = document.getElementById('cs-subclass');
+  const subclassDl   = document.getElementById('cs-subclass-list');
+
+  function syncSubclassOptions() {
+    if (!subclassEl || !subclassDl) return;
+    const cls      = String(state.charClass || '').trim();
+    const options  = SUBCLASS_MAP[cls] || [];
+    subclassDl.innerHTML = options.map(o => `<option value="${o}">`).join('');
+    if (options.length === 1 && !state.subclass) {
+      subclassEl.value = options[0];
+      state.subclass   = options[0];
+    } else if (!options.includes(state.subclass || '')) {
+      subclassEl.value = '';
+      state.subclass   = '';
+    }
+  }
+
+  const classEl = document.getElementById('cs-class');
+  if (classEl) {
+    classEl.addEventListener('input', () => {
+      const classKey = String(state.charClass || '').toLowerCase().trim();
+      const profs = CLASS_SAVE_PROFS[classKey];
+      if (profs) {
+        ['str','dex','con','int','wis','cha'].forEach(ab => {
+          state[`${ab}SaveProf`] = profs.includes(ab);
+        });
+        updateProfButtons();
+        updateCsCalculations();
+      }
+      syncSubclassOptions();
+      syncFeatures();
+      renderFeatures();
+      if (onChange) onChange();
+    });
+  }
+
+  syncSubclassOptions();
+
+  // Re-sync features when subclass or level changes
+  ['cs-subclass', 'cs-level', 'cs-race'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', () => {
+      syncFeatures(); renderFeatures();
+    });
+  });
+
+  ['str','dex','con','int','wis','cha'].forEach(ab => {
+    const scoreEl = document.getElementById(`cs-${ab}`);
+    const modEl   = document.getElementById(`cs-${ab}-mod`);
+    if (!scoreEl || !modEl) return;
+    scoreEl.addEventListener('input', () => {
+      // state[ab] is already updated by the CS_FIELDS handler above
+      modEl.textContent = abilityMod(effectiveAbScore(ab));
+      updateCsCalculations();
+    });
+  });
+  document.querySelectorAll('.cs-skill-dot[data-prof-key]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!document.getElementById('stats-panel').classList.contains('editing')) return;
+      const key = btn.dataset.profKey;
+      state[key] = !state[key];
+      updateProfButtons();
+      updateCsCalculations();
+      if (onChange) onChange();
+    });
+  });
+
+  // ── DRAG & DROP ───────────────────────────────────────────────────────────
+  const _shopTabBtn  = document.getElementById('shop-tab-btn');
+  const _trashBtn    = document.getElementById('drag-trash-btn');
+
+  function activateTrash() {
+    _trashBtn.hidden = false;
+    _shopTabBtn.classList.add('shop-tab-sell-zone');
+    [_trashBtn, _shopTabBtn].forEach(el => {
+      el.classList.remove('drag-jiggle');
+      void el.offsetWidth; // force reflow so animation restarts
+      el.classList.add('drag-jiggle');
+    });
+  }
+  function deactivateTrash() {
+    _trashBtn.hidden = true;
+    _trashBtn.classList.remove('drag-trash-hover', 'drag-jiggle');
+    _shopTabBtn.classList.remove('shop-tab-sell-zone', 'shop-tab-sell-hover', 'drag-jiggle');
+    document.querySelectorAll('.char-tab.drag-target').forEach(tab => {
+      tab.classList.remove('drag-target');
+    });
+  }
+
+  function getSlotWeaponType(slotData) {
+    const wt = window.WEAPON_TYPES;
+    if (!wt) return null;
+    const weaponVal = slotData.variables?.weapon?.value;
+    if (weaponVal) return wt[weaponVal] || null;
+    const lib = getLibraryItem(slotData.name);
+    if (lib) return wt[lib.name] || null;
+    return null;
+  }
+
+  function getSlotTypeCostCp(slotData) {
+    const typeName = slotData.variables?.weapon?.value || slotData.variables?.armor?.value;
+    if (typeName) {
+      const lib = getLibraryItem(typeName);
+      return lib?.cost ? parseCostCp(lib.cost) : 0;
+    }
+    const spellName = slotData.variables?.spell?.value;
+    if (spellName) return window.SPELL_STORING_COSTS?.[spellName] || 0;
+    return 0;
+  }
+
+
+  function getSlotMaterialCostCp(slotData, isAmmo) {
+    const silverCp = isAmmo ? 1000  : 10000;
+    const metalCp  = isAmmo ? 5000  : 50000;
+    return ((slotData.silvered || slotData.material === 'silvered') ? silverCp : 0)
+         + ((slotData.material === 'mithral' || slotData.material === 'adamantine') ? metalCp : 0);
+  }
+
+  function getSlotCoinUsesMultiplier(slotData) {
+    const hasUses = slotData.hasUses ?? getLibraryItem(slotData.name)?.hasUses;
+    if (hasUses !== 'coins') return 1;
+    const v = slotData.variables || {};
+    return Math.max(0, v.uses?.value ?? v.count?.value ?? 1);
+  }
+
+  function parseCostCp(costStr) {
+    if (!costStr || /^free$/i.test(costStr.trim())) return 0;
+    let total = 0;
+    const pp = costStr.match(/(\d+(?:\.\d+)?)\s*pp/i);
+    const gp = costStr.match(/(\d+(?:\.\d+)?)\s*gp/i);
+    const sp = costStr.match(/(\d+(?:\.\d+)?)\s*sp/i);
+    const cp = costStr.match(/(\d+(?:\.\d+)?)\s*cp/i);
+    if (pp) total += Math.round(parseFloat(pp[1]) * 1000);
+    if (gp) total += Math.round(parseFloat(gp[1]) * 100);
+    if (sp) total += Math.round(parseFloat(sp[1]) * 10);
+    if (cp) total += Math.round(parseFloat(cp[1]));
+    return total;
+  }
+
+  function cpToCoins(totalCp) {
+    // Never produce PP — cap at GP denomination
+    const gp = Math.floor(totalCp / 100); totalCp %= 100;
+    const sp = Math.floor(totalCp / 10);  totalCp %= 10;
+    return { pp: 0, gp, sp, cp: totalCp };
+  }
+
+  function deductCostCp(costCp) {
+    if (costCp <= 0) return;
+
+    const purses = [];
+    for (const container of state.containers) {
+      for (const row of container.slots) {
+        for (const slot of row) {
+          if (!slot?.variables) continue;
+          const v = slot.variables;
+          if ('gp' in v && 'sp' in v && 'cp' in v) purses.push(v);
+        }
+      }
+    }
+    if (!purses.length) return;
+
+    let totalCp = 0;
+    for (const v of purses)
+      totalCp += (v.pp?.value || 0) * 1000 + (v.gp?.value || 0) * 100
+               + (v.sp?.value || 0) * 10   + (v.cp?.value  || 0);
+    if (totalCp < costCp) return;
+
+    for (const v of purses) {
+      if (v.pp) v.pp.value = 0;
+      if (v.gp) v.gp.value = 0;
+      if (v.sp) v.sp.value = 0;
+      if (v.cp) v.cp.value = 0;
+    }
+    let rem = totalCp - costCp;
+    const f  = purses[0];
+    if (f.pp) f.pp.value = 0;
+    if (f.gp) { f.gp.value = Math.floor(rem / 100);  rem %= 100; }
+    if (f.sp) { f.sp.value = Math.floor(rem / 10);   rem %= 10; }
+    if (f.cp) { f.cp.value = rem; }
+
+    render();
+  }
+
+  function deductCost(costStr) { deductCostCp(parseCostCp(costStr)); }
+
+  function addItemLocal(slotData) {
+    const targets = state.containers.filter(c => c.id === 'equipped' || c.id === 'strapped');
+    for (const container of targets) {
+      for (let r = 0; r < container.slots.length; r++) {
+        if (!container.slots[r][0]) {
+          placeSlotData(slotData, container, r, 0);
+          return { container, r, c: 0 };
+        }
+        if (!container.slots[r][1]) {
+          placeSlotData(slotData, container, r, 1);
+          return { container, r, c: 1 };
+        }
+      }
+    }
+    const strapped = state.containers.find(c => c.id === 'strapped');
+    if (strapped) {
+      strapped.slots.push([null, null]);
+      strapped.rows++;
+      const r = strapped.slots.length - 1;
+      placeSlotData(slotData, strapped, r, 0);
+      return { container: strapped, r, c: 0 };
     }
     return null;
   }
 
-  function drawContainer(container, containerId) {
-    const containerDiv = document.createElement("div");
-    containerDiv.classList.add("container");
-    containerDiv.dataset.containerId = containerId;
-    containerDiv.style.position = "relative";
+  // removeFromSource: called only when a drop is committed, to extract the item from its origin.
+  function startDrag(slotData, container, r, c, x, y, srcCenter, removeFromSource) {
+    dragState = { slotData, srcContainer: container, srcR: r, srcC: c, srcCenter: srcCenter || null, removeFromSource };
+    resetDragScrollZone();
 
-    if (isContainerPouch(container)) {
-      containerDiv.classList.add("pouch-container");
-    }
-    
+    ghostEl = document.createElement('div');
+    ghostEl.className = 'drag-ghost';
+    ghostEl.textContent = slotData.name || '';
+    document.body.appendChild(ghostEl);
+    document.body.classList.add('is-dragging');
 
-    for (let y = 0; y < container.row; y++) {
-      const rowDiv = document.createElement("div");
-      rowDiv.classList.add("row");
-      for (let x = 0; x < container.col; x++) {
-        const cellDiv = document.createElement("div");
-        cellDiv.classList.add("cell");
-        cellDiv.dataset.x = x;
-        cellDiv.dataset.y = y;
-        cellDiv.addEventListener("dragover", e => e.preventDefault());
-        cellDiv.addEventListener("drop", e => {
-          handleDrop(e, x, y, containerId);
-          drawInventory(inventory);
-        });
-        rowDiv.appendChild(cellDiv);
-      }
-      containerDiv.appendChild(rowDiv);
-    }
+    if (container !== null) activateTrash();
 
-    const added = new Set();
-    for (const key in container.items) {
-      const item = container.items[key];
-      if (!added.has(item)) {
-        const [ox, oy] = container.getItemOrigin(item);
-        const div = drawItem(item, ox, oy, containerId);
-        itemDivCache.set(item, div);
-        containerDiv.appendChild(div);
-        added.add(item);
-      }
-    }
-
-    return containerDiv;
-  }
-
-  function updateItemPositions(container, containerDiv) {
-    for (const [item, div] of itemDivCache.entries()) {
-      const origin = container.getItemOrigin(item);
-      if (!origin) continue;
-      const [x, y] = origin;
-      div.style.top = `${y * CELL_HEIGHT}px`;
-      div.style.left = `${x * CELL_WIDTH}px`;
-      if (div.parentElement !== containerDiv) containerDiv.appendChild(div);
-    }
-  }
-
-  function drawItem(item, x, y, containerId, staticMode = false) {
-    const div = document.createElement("div");
-    div.classList.add("item");
-
-    if (item.isContainer()) div.classList.add("container");
-
-    if (item.isPackable()) div.classList.add("packable");
-
-    // Use the displayText function if it exists, otherwise fallback to name
-    div.innerHTML = item.getDisplayText();
-
-    div.draggable = true;
-
-    if (item._isOpen) {
-      div.classList.add("open-container");
-    } else {
-      div.classList.remove("open-container");
-    }
-
-    div.style.setProperty("--item-width", item.size.width);
-    div.style.setProperty("--item-height", item.size.height);
-
-    if (staticMode) {
-      div.style.position = "relative";
-    } else {
-      div.style.position = "absolute";
-      div.style.top = `${y * CELL_HEIGHT}px`;
-      div.style.left = `${x * CELL_WIDTH}px`;
-    }
-
-    div.addEventListener("dragstart", e => {
-      if (item.isContainer() && item._isOpen) {
-        toggleContainerView(item);
-      }
-    
-      let slotX = 0, slotY = 0, originX = 0, originY = 0;
-    
-      if (!staticMode) {
-        slotX = Math.floor(e.offsetX / CELL_WIDTH);
-        slotY = Math.floor(e.offsetY / CELL_HEIGHT);
-        originX = Math.round(parseInt(div.style.left, 10) / CELL_WIDTH);
-        originY = Math.round(parseInt(div.style.top, 10) / CELL_HEIGHT);
-      }
-    
-      e.dataTransfer.setData("text/plain", JSON.stringify({
-        originX,
-        originY,
-        offsetX: slotX,
-        offsetY: slotY,
-        sourceContainerId: containerId,
-        fromSearch: staticMode,
-        name: item.name,
-        bulk: item.size,
-        container: item.innerContainer ? { col: item.innerContainer.col, row: item.innerContainer.row } : null
-      }));
+    document.querySelectorAll('.char-tab').forEach(tab => {
+      tab.classList.add('drag-target');
     });
 
-    if (!staticMode && item.isContainer()) {
-      div.addEventListener("click", () => toggleContainerView(item));
-    } 
-      
-    div.addEventListener("click", () => updateInspector(item));
-
-    return div;
+    moveGhost(x, y);
+    closeDropdown();
+    if (document.activeElement) document.activeElement.blur();
   }
 
-  function toggleContainerView(item) {
-    if (item._isOpen) {
-      const stack = [item];
-      while (stack.length > 0) {
-        const current = stack.pop();
-        current._isOpen = false;
-        delete dynamicContainers[current.id];
-        if (current.innerContainer) {
-          for (const key in current.innerContainer.items) {
-            const child = current.innerContainer.items[key];
-            if (child?.isContainer && child.isContainer()) {
-              stack.push(child);
+  function moveGhost(x, y) {
+    if (!ghostEl) return;
+    ghostEl.style.left = `${x}px`;
+    ghostEl.style.top  = `${y}px`;
+  }
+
+  function endDrag(x, y) {
+    if (!dragState) return;
+    dragScrollVel = 0;
+    resetDragScrollZone();
+    dragScrollRaf = null;
+
+    // Capture trash position BEFORE deactivateTrash() hides the button (display:none
+    // makes getBoundingClientRect return zeros and elementFromPoint skip it).
+    const _trashRect = _trashBtn.getBoundingClientRect();
+    const _overTrash = !_trashBtn.hidden
+      && x >= _trashRect.left && x <= _trashRect.right
+      && y >= _trashRect.top  && y <= _trashRect.bottom;
+
+    deactivateTrash();
+
+    ghostEl.style.visibility = 'hidden';
+    const el = document.elementFromPoint(x, y);
+    const ghost = ghostEl;
+    ghostEl = null;
+    document.body.classList.remove('is-dragging');
+
+    // Cursor ghost just fades — slot-to-slot clones handle the position animation
+    ghost.style.visibility = 'visible';
+    requestAnimationFrame(() => {
+      ghost.style.transition = 'opacity 0.12s';
+      ghost.style.opacity = '0';
+      setTimeout(() => ghost.remove(), 160);
+    });
+
+    const wrap = el && el.closest('[data-container-id]');
+    const targetContainer = wrap && state.containers.find(c => c.id === wrap.dataset.containerId);
+    const isShopDrag   = !!dragState._shopDrag;
+    const isDmListing  = !!dragState._isDmListing;
+    const _randRemove  = dragState._randRemove || null;
+    const { slotData, srcContainer, srcR, srcC, srcCenter, removeFromSource } = dragState;
+    dragState = null;
+
+    if (_overTrash && srcContainer) {
+      const trashLib = getLibraryItem(slotData.name);
+      if (trashLib && trashLib.warnOnRemove) {
+        const v = slotData.variables || {};
+        const hasCoins = ['pp','gp','sp','cp'].some(k => v[k] && (v[k].value || 0) > 0);
+        if (hasCoins && !confirm(trashLib.warnOnRemove)) { render(); return; }
+      }
+      clearSlot(srcContainer, srcR, srcC);
+      if (onSound) onSound('bin');
+      return;
+    }
+
+    // Drag a "For Sale" listing onto the trash to delete it outright
+    if (_overTrash && isDmListing) {
+      const trashLib = getLibraryItem(slotData.name);
+      if (trashLib && trashLib.warnOnRemove) {
+        const v = slotData.variables || {};
+        const hasCoins = ['pp','gp','sp','cp'].some(k => v[k] && (v[k].value || 0) > 0);
+        if (hasCoins && !confirm(trashLib.warnOnRemove)) { render(); return; }
+      }
+      removeFromSource();
+      if (onSound) onSound('bin');
+      render();
+      return;
+    }
+
+    // Sell / list for sale: dropped on shop tab button
+    if (el && (el === _shopTabBtn || _shopTabBtn.contains(el)) && srcContainer) {
+      // Block if container still has items
+      if (slotData.containerId) {
+        const linked = state.containers.find(c => c.id === slotData.containerId);
+        if (linked && containerHasItems(linked)) {
+          flashBlockedContainer(srcContainer.id, srcR, srcC, slotData.containerId);
+          return;
+        }
+      }
+
+      // In DM mode: list for sale and remove from inventory
+      if (window._isDM) {
+        if (slotData.containerId)
+          state.containers = state.containers.filter(c => c.id !== slotData.containerId);
+        removeFromSource();
+        if (onDmListingDrop) onDmListingDrop(slotData);
+        if (onSound) onSound('place');
+        render();
+        return;
+      }
+
+      const lib = getLibraryItem(slotData.name);
+      const isTreasure = !!(lib && lib.treasure) || !!slotData.treasure;
+      const sc = slotData.costCoins;
+      const qty = slotData.variables?.qty?.value || 1;
+      const _matCp = getSlotMaterialCostCp(slotData, lib?.category === 'ammunition');
+      const _costBaseCp = lib && lib.costBase ? parseCostCp(lib.costBase) : 0;
+      const _typeCp = getSlotTypeCostCp(slotData);
+      const _baseCp = sc
+        ? (sc.pp||0)*1000 + (sc.gp||0)*100 + (sc.sp||0)*10 + (sc.cp||0)
+        : (lib && lib.cost ? parseCostCp(lib.cost) : 0);
+      const unitCp = _costBaseCp > 0
+        ? _baseCp * getSlotCoinUsesMultiplier(slotData) + _typeCp + _costBaseCp + _matCp
+        : _baseCp * getSlotCoinUsesMultiplier(slotData) + _typeCp + _matCp;
+      const fullCp = unitCp * qty;
+      const halfCp = fullCp > 0 ? (isTreasure ? fullCp : Math.floor(fullCp / 2)) : 0;
+      if (halfCp > 0) {
+        if (slotData.containerId)
+          state.containers = state.containers.filter(c => c.id !== slotData.containerId);
+        removeFromSource();
+        if (onItemSell) onItemSell({ name: slotData.name, qty, valueCp: halfCp, detail: summarizeItemDetail(slotData), itemData: window.compactSlotData ? window.compactSlotData(slotData) : null });
+        const coins = cpToCoins(halfCp);
+        const purseLib = getLibraryItem('Coin Purse');
+        const purseVars = JSON.parse(JSON.stringify(
+          purseLib ? purseLib.variables
+                   : { pp: { value: 0, control: 'both', min: 0, max: 999999 },
+                       gp: { value: 0, control: 'both', min: 0, max: 999999 },
+                       sp: { value: 0, control: 'both', min: 0, max: 999999 },
+                       cp: { value: 0, control: 'both', min: 0, max: 999999 } }
+        ));
+        purseVars.pp.value = coins.pp;
+        purseVars.gp.value = coins.gp;
+        purseVars.sp.value = coins.sp;
+        purseVars.cp.value = coins.cp;
+        const placed = addItemLocal({ name: 'Coin Purse', variables: purseVars });
+        if (onSound) onSound('coin');
+        if (placed) {
+          const purseData = placed.container.slots[placed.r][placed.c];
+          inspectorItemKey = `${placed.container.id}-${placed.r}-${placed.c}`;
+          showInspector(purseData, placed.container, placed.r, placed.c);
+        } else {
+          hideInspector();
+        }
+      } else {
+        render();
+      }
+      return;
+    }
+
+    // Cross-character tab drop
+    const charTab = el && el.closest('[data-char-id]');
+    if (charTab && charTab.dataset.charId) {
+      document.querySelectorAll('[data-char-id]').forEach(t => t.classList.remove('tab-drag-over'));
+      if (onCrossCharDrop) {
+        // Capture linked container before removing from source
+        let linkedContainer = null;
+        if (slotData.containerId) {
+          const linked = state.containers.find(c => c.id === slotData.containerId);
+          if (linked) {
+            linkedContainer = JSON.parse(JSON.stringify(linked));
+            state.containers = state.containers.filter(c => c.id !== slotData.containerId);
+          }
+        }
+        removeFromSource();
+        render();
+        onCrossCharDrop(slotData, charTab.dataset.charId, linkedContainer);
+      }
+      // else: no handler — item stays in slot, nothing to do
+      return;
+    }
+
+    // Drop into DM Listings zone
+    const dmListingsZone = el && el.closest('[data-dm-listings-drop]');
+    if (dmListingsZone && window._isDM && !isDmListing) {
+      if (onDmListingDrop) onDmListingDrop(slotData);
+      if (_randRemove) _randRemove();
+      render();
+      return;
+    }
+
+    if (targetContainer) {
+      const tR = parseInt(wrap.dataset.r);
+      const tC = parseInt(wrap.dataset.c);
+
+      // Reject dropping a container into itself
+      if (slotData.containerId && slotData.containerId === targetContainer.id) {
+        render();
+        return;
+      }
+
+      // Same slot — no-op
+      if (targetContainer === srcContainer && tR === srcR && tC === srcC) {
+        render();
+        return;
+      }
+
+      const targetItem = targetContainer.slots[tR][tC];
+
+      // Capture dest rect before render() rebuilds the DOM
+      const destRect = wrap.getBoundingClientRect();
+      const destCenter = { x: destRect.left + destRect.width / 2, y: destRect.top + destRect.height / 2 };
+
+      // Coin Purse merge: drop one onto another of the same name that has coin variables
+      if (targetItem && targetItem.name === slotData.name) {
+        const COIN_KEYS = ['pp', 'gp', 'sp', 'cp'];
+        const sv = slotData.variables || {};
+        const tv = targetItem.variables || {};
+        if (COIN_KEYS.some(k => k in sv && k in tv)) {
+          COIN_KEYS.forEach(k => {
+            if (sv[k] && tv[k]) tv[k].value = (tv[k].value || 0) + (sv[k].value || 0);
+          });
+          removeFromSource();
+          render();
+          return;
+        }
+      }
+
+      // Smart drop into container: if target slot holds a container item, try placing inside it
+      if (targetItem && targetItem.containerId) {
+        const linked = state.containers.find(c => c.id === targetItem.containerId);
+        if (linked) {
+          growContainer(linked);
+          const freeSlot = findEmptySlot(linked, -1);
+          if (freeSlot) {
+            removeFromSource();
+            if (placeSlotData(slotData, linked, freeSlot.r, freeSlot.c) && !slotData._unresolved && isShopDrag && onShopPurchase) onShopPurchase(slotData);
+            if (onSound) onSound(isShopDrag ? 'coin' : 'place');
+            return;
+          }
+        }
+      }
+
+      // Commit: remove item from source now that we know the drop is valid
+      removeFromSource();
+
+      if (targetItem && srcContainer) {
+        // Swap — fly both items between their old and new slots (only for inventory→inventory)
+        const swapName = targetItem.name || '';
+        targetContainer.slots[tR][tC] = null;
+        srcContainer.slots[srcR][srcC] = targetItem;
+        placeSlotData(slotData, targetContainer, tR, tC);
+        const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
+        if (srcCenter) spawnFlightClone(slotData.name || '', srcCenter, actualDest);
+        const actualSwapDest = postRenderCenter(srcContainer.id, srcR, srcC, targetItem);
+        if (actualSwapDest) spawnFlightClone(swapName, destCenter, actualSwapDest);
+        if (onSound) onSound('place');
+        return;
+      }
+
+      const _placed = placeSlotData(slotData, targetContainer, tR, tC);
+      if (_placed && !slotData._unresolved && isShopDrag && onShopPurchase) onShopPurchase(slotData);
+      if (_placed && onSound) onSound(isShopDrag ? 'coin' : 'place');
+      if (_placed && isDmListing && shopOpen) buildShop();
+      const actualDest = postRenderCenter(targetContainer.id, tR, tC, slotData) || destCenter;
+      if (srcCenter) spawnFlightClone(slotData.name || '', srcCenter, actualDest);
+    } else {
+      // Dropped outside any container — item stays in slot
+      render();
+    }
+  }
+
+  function postRenderCenter(containerId, r, c, item) {
+    const el = document.querySelector(
+      `[data-container-id="${containerId}"][data-r="${r}"][data-c="${c}"]`
+    );
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }
+
+  function spawnFlightClone(name, from, to) {
+    const clone = document.createElement('div');
+    clone.className = 'drag-ghost';
+    clone.textContent = name;
+    clone.style.left      = `${from.x}px`;
+    clone.style.top       = `${from.y}px`;
+    clone.style.transform = 'translate(-50%, -50%)';
+    clone.style.opacity   = '1';
+    document.body.appendChild(clone);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      // Phase 1: fly to destination (0 – 350ms)
+      clone.style.transition = 'left 0.35s cubic-bezier(0.4,0,0.2,1), top 0.35s cubic-bezier(0.4,0,0.2,1)';
+      clone.style.left = `${to.x}px`;
+      clone.style.top  = `${to.y}px`;
+      // Phase 2: scale up on arrival (350 – 490ms)
+      setTimeout(() => {
+        clone.style.transition = 'transform 0.14s ease-out';
+        clone.style.transform  = 'translate(-50%, -50%) scale(1.18)';
+        // Phase 3: scale down and fade out (490 – 760ms)
+        setTimeout(() => {
+          clone.style.transition = 'transform 0.27s ease-in, opacity 0.27s ease-in';
+          clone.style.transform  = 'translate(-50%, -50%) scale(0.75)';
+          clone.style.opacity    = '0';
+          setTimeout(() => clone.remove(), 300);
+        }, 140);
+      }, 370);
+    }));
+  }
+
+  function placeSlotData(slotData, container, r, c) {
+    if (slotData._unresolved) {
+      if (slotData._shopItem) {
+        const key = `shop-${slotData.name}`;
+        if (inspectorItemKey !== key || detailPanelEl.classList.contains('detail-collapsed')) {
+          showInspector(slotData, null, -1, -1);
+          inspectorItemKey = key;
+        }
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
+            if (sel.value !== '') return;
+            sel.classList.remove('flash-required');
+            void sel.offsetWidth;
+            sel.classList.add('flash-required');
+            setTimeout(() => sel.classList.remove('flash-required'), 900);
+          });
+          document.querySelectorAll('#insp-props [data-mat-chip]').forEach(btn => {
+            btn.classList.remove('chip-flash-required');
+            void btn.offsetWidth;
+            btn.classList.add('chip-flash-required');
+            setTimeout(() => btn.classList.remove('chip-flash-required'), 900);
+          });
+        }));
+      }
+      render();
+      return false;
+    }
+    slotData.conflict = false;
+    ensurePackableQty(slotData);
+    container.slots[r][c] = slotData;
+
+    if (slotData.containerId) {
+      const linked = state.containers.find(cnt => cnt.id === slotData.containerId);
+      if (linked) linked.linkedTo = { containerId: container.id, r, c };
+    } else if (isContainerItem(slotData)) {
+      createLinkedContainer(slotData, container.id, r, c);
+    }
+
+    render();
+    return true;
+  }
+
+  document.addEventListener('pointermove', e => {
+    if (!dragState) return;
+    moveGhost(e.clientX, e.clientY);
+
+    // Highlight trash when hovering over it
+    if (!_trashBtn.hidden) {
+      const tr = _trashBtn.getBoundingClientRect();
+      const over = e.clientX >= tr.left && e.clientX <= tr.right && e.clientY >= tr.top && e.clientY <= tr.bottom;
+      _trashBtn.classList.toggle('drag-trash-hover', over);
+    }
+
+    // Highlight shop tab as sell zone when hovering
+    if (_shopTabBtn.classList.contains('shop-tab-sell-zone')) {
+      const str = _shopTabBtn.getBoundingClientRect();
+      const overShop = e.clientX >= str.left && e.clientX <= str.right
+                    && e.clientY >= str.top  && e.clientY <= str.bottom;
+      _shopTabBtn.classList.toggle('shop-tab-sell-hover', overShop);
+    }
+
+    // Highlight DM listings drop zone when DM is dragging over it
+    if (window._isDM && !dragState._isDmListing) {
+      const listZone = document.querySelector('[data-dm-listings-drop]');
+      if (listZone) {
+        const lz = listZone.getBoundingClientRect();
+        const overList = e.clientX >= lz.left && e.clientX <= lz.right
+                      && e.clientY >= lz.top  && e.clientY <= lz.bottom;
+        listZone.classList.toggle('dm-listings-drag-over', overList);
+      }
+    }
+
+    dragScrollVel = computeDragScrollVel(e.clientX, e.clientY);
+    if (dragScrollVel !== 0 && dragScrollRaf === null) {
+      dragScrollRaf = requestAnimationFrame(dragScrollStep);
+    }
+  });
+
+  document.addEventListener('pointerup', e => {
+    if (dragState) endDrag(e.clientX, e.clientY);
+  });
+
+  document.addEventListener('pointercancel', () => {
+    if (!dragState) return;
+    dragScrollVel = 0;
+    resetDragScrollZone();
+    dragScrollRaf = null;
+    deactivateTrash();
+    if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+    document.body.classList.remove('is-dragging');
+    dragState = null;
+    render();
+  });
+
+  // ── CONTAINER REORDER ────────────────────────────────────────────────────
+  const cDropLine = document.createElement('div');
+  cDropLine.className = 'container-drop-line';
+
+  let cDrag = null; // { id, el }
+  let cDropBeforeId = undefined; // undefined = not dragging, null = append at end, string = insert before this id
+
+  function startContainerDrag(containerId, cardEl, pointerId, startY) {
+    cDrag = { id: containerId, el: cardEl };
+    cDropBeforeId = null;
+    cardEl.classList.add('container-dragging');
+    document.documentElement.setPointerCapture(pointerId);
+  }
+
+  function updateContainerDrop(clientY) {
+    if (!cDrag) return;
+    if (cDropLine.parentNode) cDropLine.remove();
+
+    // All non-permanent, non-dragged cards in DOM order
+    const candidates = [...containersEl.querySelectorAll('.inv-card:not(.container-dragging)')]
+      .filter(el => {
+        const c = state.containers.find(c => c.id === el.dataset.containerId);
+        return c && !c.permanent;
+      });
+
+    let beforeCard = null;
+    for (const card of candidates) {
+      const rect = card.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) { beforeCard = card; break; }
+    }
+
+    if (beforeCard) {
+      containersEl.insertBefore(cDropLine, beforeCard);
+      cDropBeforeId = beforeCard.dataset.containerId;
+    } else {
+      containersEl.appendChild(cDropLine);
+      cDropBeforeId = null;
+    }
+  }
+
+  function commitContainerDrop() {
+    if (!cDrag) return;
+    cDrag.el.classList.remove('container-dragging');
+    if (cDropLine.parentNode) cDropLine.remove();
+
+    const dragId    = cDrag.id;
+    const beforeId  = cDropBeforeId;
+    cDrag = null; cDropBeforeId = undefined;
+
+    const dragIdx = state.containers.findIndex(c => c.id === dragId);
+    if (dragIdx === -1) { render(); return; }
+    const [dragged] = state.containers.splice(dragIdx, 1);
+    if (beforeId) {
+      const targetIdx = state.containers.findIndex(c => c.id === beforeId);
+      state.containers.splice(targetIdx === -1 ? state.containers.length : targetIdx, 0, dragged);
+    } else {
+      state.containers.push(dragged);
+    }
+    render();
+  }
+
+  document.addEventListener('pointermove', e => {
+    if (!cDrag) return;
+    updateContainerDrop(e.clientY);
+  });
+
+  document.addEventListener('pointerup', e => {
+    if (cDrag) commitContainerDrop();
+  });
+
+  document.addEventListener('pointercancel', () => {
+    if (!cDrag) return;
+    cDrag.el.classList.remove('container-dragging');
+    if (cDropLine.parentNode) cDropLine.remove();
+    cDrag = null; cDropBeforeId = undefined;
+    render();
+  });
+
+  // ── INIT ──────────────────────────────────────────────────────────────────
+  render();
+
+  return {
+    getState() {
+      const csState   = Object.fromEntries(CS_FIELDS.map(([, k]) => [k, state[k] || '']));
+      const profState = Object.fromEntries(PROF_KEYS.map(k => [k, !!state[k]]));
+      return JSON.parse(JSON.stringify({
+        charName:         state.charName,
+        abScoreBaseFormat: true,
+        carryCapacity: state.carryCapacity,
+        containers:    state.containers.map(({ collapsed, ...rest }) => rest),
+        attacks:          state.attacks,
+        attackOrder:      state.attackOrder,
+        weaponAttackData: state.weaponAttackData,
+        equippedArmor:    state.equippedArmor,
+        armorActive:    state.armorActive,
+        equippedShield: state.equippedShield,
+        shieldActive:   state.shieldActive,
+        inspiration:  state.inspiration,
+        deathSaves:   state.deathSaves,
+        exhaustion:   state.exhaustion,
+        subrace:          state.subrace,
+        activeFeatures:   state.activeFeatures,
+        hiddenFeatures:   state.hiddenFeatures,
+        featureData:      state.featureData,
+        notes:            state.notes,
+        ...csState,
+        ...profState,
+      }));
+    },
+    flattenGroups(containers) { flattenPackableGroups(containers); },
+    updateCs() { updateCsCalculations(); },
+
+
+    // ── SHOP API ────────────────────────────────────────────────
+    computeDisplayName(slotData) { return computeDisplayName(slotData); },
+    getSlotTypeCostCp(slotData) { return getSlotTypeCostCp(slotData); },
+    getSlotMaterialCostCp(slotData, isAmmo) { return getSlotMaterialCostCp(slotData, isAmmo); },
+    getSlotCoinUsesMultiplier(slotData) { return getSlotCoinUsesMultiplier(slotData); },
+    toggleShopItem(slotData, key) {
+      toggleInspectorFor(key, slotData, null, -1, -1);
+    },
+    showShopItem(slotData, key) {
+      showInspector(slotData, null, -1, -1);
+      inspectorItemKey = key;
+      render();
+    },
+    startShopDrag(slotData, x, y) {
+      startDrag(slotData, null, -1, -1, x, y, null, () => {});
+      dragState._shopDrag = true;
+    },
+    startRandItemDrag(slotData, x, y, randRemove) {
+      startDrag(slotData, null, -1, -1, x, y, null, () => {});
+      dragState._shopDrag = true;
+      if (randRemove) dragState._randRemove = randRemove;
+    },
+    startDmListingDrag(slotData, x, y, removeCallback) {
+      startDrag(slotData, null, -1, -1, x, y, null, removeCallback || (() => {}));
+      dragState._shopDrag = true;
+      dragState._isDmListing = true;
+      // startDrag only shows the trash bin when dragging out of a real
+      // container (container !== null) — a listing has no container, so it
+      // needs to opt in explicitly to let the DM drop it there to delete it.
+      activateTrash();
+    },
+    addItem(slotData) {
+      addItemLocal(slotData);
+    },
+    removeItem(slotData) {
+      for (const container of state.containers) {
+        for (let r = 0; r < container.slots.length; r++) {
+          for (let c = 0; c < 2; c++) {
+            if (container.slots[r][c] === slotData) {
+              if (slotData.containerId) {
+                state.containers = state.containers.filter(ct => ct.id !== slotData.containerId);
+              }
+              container.slots[r][c] = null;
+              render();
+              return;
             }
           }
         }
       }
-    } else {
-      item._isOpen = true;
-      if (item.innerContainer) {
-        dynamicContainers[item.id] = item.innerContainer;
-      }
-    }
+    },
+    deductCost(costStr)   { deductCost(costStr); },
+    deductCostCp(costCp) { deductCostCp(costCp); },
 
-    drawInventory(inventory);
+    closeInspector() {
+      hideInspector(true);
+      render();
+    },
+    collapsePanelInstant() {
+      detailPanelEl.classList.add('no-transition', 'detail-collapsed');
+      detailPanelEl.style.height = '';
+    },
+    cancelDrag() {
+      if (!dragState) return;
+      dragScrollVel = 0;
+      resetDragScrollZone();
+      dragScrollRaf = null;
+      deactivateTrash();
+      if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+      document.body.classList.remove('is-dragging');
+      dragState = null;
+      render();
+    },
+    loadState(newState, opts) {
+      if (dragState) {
+        // cancelDrag() should have been called before loadState; just clean up UI
+        if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+        document.body.classList.remove('is-dragging');
+        dragState = null;
+      }
+      if (!(opts && opts.keepInspector)) hideInspector(true);
+      closeDropdown();
+      state.charName      = newState.charName      || '';
+      state.carryCapacity = newState.carryCapacity || '';
+      state.containers    = (newState.containers && newState.containers.length)
+                            ? newState.containers : createDefaultContainers();
+      // Fold state is per-viewer (see applyLocalUi below) — never trust
+      // whatever collapsed value happens to be baked into synced data.
+      state.containers.forEach(c => { c.collapsed = false; });
+      flattenPackableGroups(state.containers);
+      for (const c of state.containers)
+        for (const row of c.slots)
+          for (const slot of row) ensurePackableQty(slot);
+      document.getElementById('char-name').value  = state.charName;
+      document.getElementById('char-carry').value = state.carryCapacity;
+      if (newState.hitDice && !newState.hitDiceCount) {
+        const match = String(newState.hitDice).match(/^(\d+)(d\d+)$/i);
+        if (match) { newState = { ...newState, hitDiceCount: match[1], hitDiceType: match[2].toLowerCase() }; }
+      }
+      CS_FIELDS.forEach(([id, k]) => {
+        state[k] = newState[k] || '';
+        const el = document.getElementById(id);
+        if (el) {
+          el.value = state[k];
+          if (el.tagName === 'TEXTAREA') autoResizeTextarea(el);
+        }
+      });
+      state.attacks = Array.isArray(newState.attacks) ? newState.attacks : [];
+      state.attacks.forEach(atk => { if (!atk.id) atk.id = Date.now() + Math.floor(Math.random() * 1e6); });
+      state.attackOrder = Array.isArray(newState.attackOrder) ? newState.attackOrder : [];
+      state.weaponAttackData = (newState.weaponAttackData && typeof newState.weaponAttackData === 'object') ? newState.weaponAttackData : {};
+      state.equippedArmor  = newState.equippedArmor  || '';
+      state.armorActive    = newState.armorActive != null ? !!newState.armorActive : true;
+      state.equippedShield = newState.equippedShield || '';
+      state.shieldActive   = !!newState.shieldActive;
+      state.inspiration = !!newState.inspiration;
+      const _ds = newState.deathSaves;
+      const _toCount = v => Array.isArray(v) ? v.filter(Boolean).length : (typeof v === 'number' ? Math.max(0, Math.min(3, v)) : 0);
+      state.deathSaves = _ds && typeof _ds === 'object'
+        ? { successes: _toCount(_ds.successes), failures: _toCount(_ds.failures) }
+        : { successes: 0, failures: 0 };
+      state.exhaustion      = typeof newState.exhaustion === 'number' ? Math.max(0, Math.min(6, newState.exhaustion)) : 0;
+      state.subrace         = newState.subrace || '';
+      state.activeFeatures  = Array.isArray(newState.activeFeatures)  ? newState.activeFeatures  : [];
+      state.hiddenFeatures  = Array.isArray(newState.hiddenFeatures)   ? newState.hiddenFeatures  : [];
+      state.featureData     = (newState.featureData && typeof newState.featureData === 'object') ? newState.featureData : {};
+      // Reset to defaults; the caller (CharacterManager) follows loadState()
+      // with applyLocalUi() once it has looked up this character's saved
+      // per-viewer fold/order prefs.
+      localFeatureUi    = { collapsed: {}, order: null, textCollapsed: {} };
+      localNotesUi      = { open: {} };
+      localSectionsUi   = { notes: false, otherProfs: false };
+      localContainersUi = { collapsed: {} };
+      state.notes = Array.isArray(newState.notes)
+        ? newState.notes.map((n, i) => typeof n === 'string'
+            ? { id: `legacy-${i}`, title: '', body: n }
+            : { id: n.id || `legacy-${i}`, title: n.title || '', body: n.body || '' })
+        : [];
+      renderNotes();
+      updateInspirationDisplay();
+      updateDeathSavesDisplay();
+      updateExhaustionDisplay();
+      if (armorSelectEl)  armorSelectEl.value  = state.equippedArmor;
+      if (shieldSelectEl) shieldSelectEl.value = state.equippedShield;
+      updateArmorDisplay();
+      updateShieldDisplay();
+      PROF_KEYS.forEach(k => { state[k] = !!newState[k]; });
+      // Migration: old saves had feature bonuses baked into the stored score.
+      // Recover the base score by subtracting out the bonuses recorded in featureData.
+      if (!newState.abScoreBaseFormat) {
+        ['str','dex','con','int','wis','cha'].forEach(ab => {
+          let score = parseInt(state[ab]);
+          if (isNaN(score)) return;
+          state.activeFeatures.forEach(fid => {
+            const fd = state.featureData[fid];
+            if (!fd) return;
+            if (fd.ab1 === ab && fd.bonus1) score -= fd.bonus1;
+            if (fd.ab2 === ab && fd.bonus2) score -= fd.bonus2;
+          });
+          state[ab] = String(score);
+          const el = document.getElementById(CS_ID_MAP[ab]);
+          if (el) el.value = state[ab];
+        });
+      }
+      ['str','dex','con','int','wis','cha'].forEach(ab => {
+        const modEl = document.getElementById(`cs-${ab}-mod`);
+        if (modEl) modEl.textContent = abilityMod(effectiveAbScore(ab));
+      });
+      updateProfButtons();
+      updateCsCalculations();
+      updateCsNameDisplay();
+      renderAttacks();
+      syncFeatures();
+      renderFeatures();
+      populateArmorDatalist();
+      // state.containers was just replaced wholesale above. Every control in
+      // an open item inspector (coin +/-, qty, uses, silvered/material,
+      // notes, custom name/description) closes directly over the *old* slot
+      // object from when the panel was opened — attacks/features get torn
+      // down and rebuilt fresh every loadState() (see calls just above), but
+      // the inspector is deliberately kept open (opts.keepInspector) across a
+      // remote sync, so its bindings would otherwise go stale: further edits
+      // would mutate a detached copy that render() never looks at, silently
+      // discarding them. Re-open the panel against the freshly loaded object
+      // at the same position so it keeps editing the live data; if that item
+      // no longer exists there (moved/removed by whoever's edit this was),
+      // there's nothing valid left to keep showing.
+      //
+      // Only applies to keys that actually reference a real container slot
+      // (containerId-r-c). Every "shop-style" inspector — regular catalog
+      // items, DM-randomizer results, DM listings — opens with container:
+      // null via toggleShopItem/showShopItem and has no slot to re-locate,
+      // so it must be excluded here too or this code tries to parse its key
+      // as containerId-r-c, fails to find a match, and — wrongly reading
+      // that failure as "the item was removed" — closes the panel the
+      // instant it opens. INSPECTOR_KEY_NON_SLOT_PREFIXES lists every
+      // prefix those two functions are called with; add any new one there.
+      if (opts && opts.keepInspector && inspectorItemKey
+          && !INSPECTOR_KEY_NON_SLOT_PREFIXES.some(p => inspectorItemKey.startsWith(p))
+          && !detailPanelEl.classList.contains('detail-collapsed')) {
+        const lastH = inspectorItemKey.lastIndexOf('-');
+        const prevH = inspectorItemKey.lastIndexOf('-', lastH - 1);
+        const cid = inspectorItemKey.substring(0, prevH);
+        const ir  = parseInt(inspectorItemKey.substring(prevH + 1, lastH));
+        const ic  = parseInt(inspectorItemKey.substring(lastH + 1));
+        const cnt = state.containers.find(c => c.id === cid);
+        const sd  = cnt && cnt.slots[ir] && cnt.slots[ir][ic];
+        if (sd) showInspector(sd, cnt, ir, ic);
+        else    hideInspector(true);
+      }
+      render();
+    },
+    // Per-viewer fold/order prefs for the character just loaded via
+    // loadState(). Called by CharacterManager once it has looked them up
+    // from /inventory_user_ui/{uid}/{charId} (or {} if there's nothing saved
+    // yet / no signed-in user).
+    applyLocalUi(blob) {
+      localFeatureUi    = normalizeFeatureUi(blob || {});
+      localNotesUi      = normalizeNotesUi(blob || {});
+      localSectionsUi   = normalizeSectionsUi(blob || {});
+      localContainersUi = normalizeContainersUi(blob || {});
+      state.containers.forEach(c => { c.collapsed = !!localContainersUi.collapsed[c.id]; });
+      applySectionOpen(otherProfsToggle, otherProfsBody, localSectionsUi.otherProfs);
+      applySectionOpen(notesToggle, notesBody, localSectionsUi.notes);
+      renderFeatures();
+      renderNotes();
+      renderContainers();
+    },
+    // Used to suppress the character/inventory swipe gesture while any drag
+    // (item, feature reorder, container reorder, note reorder) is in progress.
+    isDragging() {
+      return !!dragState || !!fDrag || !!cDrag || dragSrcIdx !== -1;
+    },
+  };
+};
+
+
+// ── CHARACTER MANAGER ──────────────────────────────────────────────────────
+window.CharacterManager = ({ auth, database }) => {
+  let currentUser  = null;
+  let currentCharId = null;
+  let allChars     = {};   // id → { ownerUid, ownerName, state, createdAt, sortOrder }
+  let suppressSave       = false;
+  // Baseline for the character-level history diff (HP/hit dice/exhaustion/feature
+  // charges). Reset (not diffed) whenever a state is loaded from outside the
+  // local user's own edits — see resetCharSnapshot().
+  let charSnapshot   = null;
+  let charSnapshotId = null;
+  let charDiffTimer  = null;
+  let dirty              = false;   // true while local edits haven't been flushed to Firebase yet
+  let localWriteInFlight = false;   // true briefly after a save to suppress our own Firebase echo
+  let saveDebounceTimer  = null;    // pending non-immediate saveChar() call, see saveChar()
+  const SAVE_DEBOUNCE_MS = 500;
+  // Raw (pre-parse) state JSON last known to be in sync for each character —
+  // lets the /inventory_characters listener tell "someone else's edit fired
+  // this snapshot" apart from "this snapshot happens to include our own char,
+  // unchanged" so it doesn't reload (and orphan an open inspector's slot
+  // reference) on every other player's write, only on ones that actually
+  // touched the currently-selected character.
+  let lastSyncedStateJson = {};
+  let pendingNewChar     = null;    // char created locally but not yet confirmed by Firebase
+  const pendingDeletes   = new Set(); // char IDs removed locally but not yet confirmed by Firebase
+  let inv                = null;
+
+  // ── SOUND ────────────────────────────────────────────────────────────────
+  const playSound = (() => {
+    const audios = {};
+    ['bin', 'coin', 'place'].forEach(name => {
+      const a = new Audio(`sounds/${name}.ogg`);
+      a.preload = 'auto';
+      audios[name] = a;
+    });
+    return name => {
+      try {
+        const a = audios[name];
+        if (!a) return;
+        a.currentTime = 0;
+        a.play().catch(() => {});
+      } catch (e) {}
+    };
+  })();
+
+  // ── HISTORY / BACK-BUTTON NAVIGATION ─────────────────────────────────────
+  // _navCalc bridges calculator state (inside InventorySystem scope) to here.
+  window._navCalc = { open: false, suppress: false, handling: false, hide: null };
+  let _suppressPopstate = false;
+  let _handlingPopstate = false;
+
+  // ── INVENTORY SYSTEM ────────────────────────────────────────────────────
+  inv = window.InventorySystem({
+    database: null,
+    auth: { onAuthStateChanged: () => {} },
+    onChange:            handleInventoryChange,
+    onCrossCharDrop:     handleCrossCharDrop,
+    onShopPurchase:      handleShopPurchase,
+    onDmListingDrop:     handleDmListingDrop,
+    onItemSell:          handleItemSell,
+    onItemDestroy:       handleItemDestroy,
+    isHiddenFromPlayer:  (itemName) => !isItemVisible(itemName, getItemSection(itemName)),
+    onSound:             playSound,
+    onUiChange:          saveUserUiBlob,
+  });
+
+  // ── CLOSE / LOGOUT ──────────────────────────────────────────────────────
+  // ── VIEW TOGGLE (hexmap ↔ inventory) ────────────────────────────────────
+  let _hexmapMode = true;
+  let _shopFromHexmap = false;
+
+  // ── RULES PAGE (empty placeholder for now — navigation only) ────────────
+  let rulesOpen = false;
+  // Remembers whichever character was selected when Rules opened, so
+  // returning from it (back button, or picking Character/Inventory from the
+  // hamburger) restores that exact character instead of falling back to an
+  // arbitrary one. Cleared once consumed.
+  let charIdBeforeRules = null;
+  const rulesBackBtn = document.getElementById('rules-back-btn');
+
+  // State/CSS only — no history side effects, so other navigation (map,
+  // character, inventory, shop, tabs) can call this to stay exclusive
+  // without fighting over the history stack.
+  function setRulesMode(on) {
+    rulesOpen = on;
+    document.getElementById('app').classList.toggle('rules-mode', on);
+    updateHamburgerMenu();
   }
 
-  function getCellCoordinatesFromMouseEvent(e) {
-    const containers = document.querySelectorAll(".container");
-    for (const el of containers) {
-      if (el.contains(e.target)) {
-        const rect = el.getBoundingClientRect();
-        const offsetX = e.clientX - rect.left;
-        const offsetY = e.clientY - rect.top;
-        return {
-          x: Math.floor(offsetX / CELL_WIDTH),
-          y: Math.floor(offsetY / CELL_HEIGHT)
-        };
+  // Prefer restoring whichever character was selected before Rules opened
+  // (if it still exists); otherwise fall back to the normal auto-select.
+  // One-shot: the remembered id is consumed (cleared) either way, so a
+  // later Rules session always starts from a fresh currentCharId snapshot.
+  function restoreCharSelection() {
+    const restoreId = charIdBeforeRules;
+    charIdBeforeRules = null;
+    if (currentCharId) return;
+    if (restoreId && allChars[restoreId]) {
+      switchToChar(restoreId, true);
+    } else {
+      ensureCharSelected();
+    }
+  }
+
+  function openRules() {
+    closeHamburgerMenu();
+    closeHistoryPanel(); // stay exclusive with the DM history panel
+    charIdBeforeRules = currentCharId;
+    deselectChar();
+    setRulesMode(true);
+    history.pushState({ view: 'rules' }, '');
+  }
+
+  // Safe to call unconditionally from any other navigation action (map,
+  // character, inventory, shop, tab clicks, Escape) to keep Rules exclusive:
+  // no-ops if Rules isn't open, otherwise pops the history entry it pushed
+  // so the stack stays in sync with whatever's shown next.
+  function closeRules() {
+    if (!rulesOpen) return;
+    setRulesMode(false);
+    if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
+  }
+
+  // Used specifically for "just leave Rules, nothing else decides what's
+  // next" triggers (its own back button, the hardware/browser back button).
+  // Other navigation (goToMap, goToCharView, openShop, tab clicks) calls
+  // closeRules() directly since they already decide what to show next.
+  function goBackFromRules() {
+    closeRules();
+    restoreCharSelection();
+  }
+
+  rulesBackBtn.addEventListener('click', goBackFromRules);
+
+  // ── HISTORY PANEL (DM-only audit log — sells/destroys/moves + HP/hit dice/
+  // exhaustion/feature-charge changes — and a Backups tab for rolling
+  // per-character snapshots). Mirrors the Rules page mechanics exactly (own
+  // mode class, own history-stack entry) so it stays exclusive with every
+  // other view without fighting over the back-button stack. Log and Backups
+  // are two tabs on this one page/mode, not separate panels.
+  let historyOpen = false;
+  let historyRef  = null;
+  let historyActiveTab = 'log'; // 'log' | 'backups'
+  const historyBackBtn      = document.getElementById('history-back-btn');
+  const historyClearBtn     = document.getElementById('history-clear-btn');
+  const historyListEl       = document.getElementById('history-list');
+  const historyEmptyEl      = document.getElementById('history-empty');
+  const historyFilterCharEl = document.getElementById('history-filter-char');
+  const historyFilterTypeEl = document.getElementById('history-filter-type');
+  const historyTabButtons   = document.querySelectorAll('.history-tab-btn');
+  const historyTabLogEl     = document.getElementById('history-tab-log');
+  const historyTabBackupsEl = document.getElementById('history-tab-backups');
+  let historyEntriesCache   = [];
+
+  function setHistoryMode(on) {
+    historyOpen = on;
+    document.getElementById('app').classList.toggle('history-mode', on);
+    updateHamburgerMenu();
+  }
+
+  function setHistoryTab(tab) {
+    historyActiveTab = tab;
+    historyTabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+    historyTabLogEl.hidden     = tab !== 'log';
+    historyTabBackupsEl.hidden = tab !== 'backups';
+    if (tab === 'backups') {
+      populateBackupsCharSelect();
+      loadBackupsForChar(backupsCharSelect.value);
+    }
+  }
+  historyTabButtons.forEach(btn => btn.addEventListener('click', () => setHistoryTab(btn.dataset.tab)));
+
+  // ── RESTORE-FROM-HISTORY DRAG ─────────────────────────────────────────
+  // Sell/destroy entries carry the item's full compact state (itemData),
+  // so a DM can long-press-drag one of those rows onto a character tab to
+  // re-materialize that exact item (a manual undo/duplicate tool — the item
+  // was removed from play by the sell/destroy, so restoring it can't create
+  // a duplicate that's still in circulation the way a "move" row would).
+  let historyDragGhost = null;
+  let historyDragItem  = null; // { itemData, label } while a restore-drag is active
+
+  function startHistoryDrag(itemData, label, x, y) {
+    historyDragItem = { itemData, label };
+    historyDragGhost = document.createElement('div');
+    historyDragGhost.className = 'drag-ghost';
+    historyDragGhost.textContent = label;
+    document.body.appendChild(historyDragGhost);
+    document.body.classList.add('is-dragging');
+    moveHistoryGhost(x, y);
+    document.querySelectorAll('.char-tab').forEach(tab => tab.classList.add('drag-target'));
+  }
+
+  function moveHistoryGhost(x, y) {
+    if (!historyDragGhost) return;
+    historyDragGhost.style.left = `${x}px`;
+    historyDragGhost.style.top  = `${y}px`;
+  }
+
+  function endHistoryDrag(x, y) {
+    if (!historyDragItem) return;
+    const { itemData } = historyDragItem;
+    historyDragItem = null;
+    document.body.classList.remove('is-dragging');
+    if (historyDragGhost) { historyDragGhost.remove(); historyDragGhost = null; }
+    document.querySelectorAll('.char-tab').forEach(tab => tab.classList.remove('drag-target', 'tab-drag-over'));
+
+    const el  = document.elementFromPoint(x, y);
+    const tab = el && el.closest('.char-tab[data-char-id]');
+    if (!tab) return;
+    const resolved = window.resolveSlotData && window.resolveSlotData(JSON.parse(JSON.stringify(itemData)));
+    if (!resolved) return;
+    handleCrossCharDrop(resolved, tab.dataset.charId, null);
+    tab.classList.add('tab-received');
+    setTimeout(() => tab.classList.remove('tab-received'), 1200);
+  }
+
+  document.addEventListener('pointermove', e => {
+    if (historyDragItem) moveHistoryGhost(e.clientX, e.clientY);
+  });
+  document.addEventListener('pointerup', e => {
+    if (historyDragItem) endHistoryDrag(e.clientX, e.clientY);
+  });
+
+  // Long-press (matches the inventory's own drag threshold) so scrolling the
+  // history list with touch doesn't accidentally start a restore-drag.
+  function wireHistoryDrag(row, itemData, label) {
+    let downX, downY, timer, pointerId;
+    row.addEventListener('pointerdown', e => {
+      if (historyDragItem) return;
+      downX = e.clientX; downY = e.clientY; pointerId = e.pointerId;
+      timer = setTimeout(() => {
+        timer = null;
+        document.documentElement.setPointerCapture(pointerId);
+        startHistoryDrag(itemData, label, downX, downY);
+      }, 380);
+    });
+    row.addEventListener('pointermove', e => {
+      if (!timer) return;
+      if (Math.abs(e.clientX - downX) > 8 || Math.abs(e.clientY - downY) > 8) {
+        clearTimeout(timer);
+        timer = null;
       }
+    });
+    const cancelTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    row.addEventListener('pointerup', cancelTimer);
+    row.addEventListener('pointercancel', cancelTimer);
+  }
+
+  // Character/actor/item names are free-text the players control (custom
+  // item names, character names, Google display names) — escape before
+  // interpolating into innerHTML so this DM panel can't be used for stored XSS.
+  function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  function formatHistoryRow(entry) {
+    const time = entry.ts ? new Date(entry.ts).toLocaleString() : '';
+    const row = document.createElement('div');
+    row.className = 'history-row history-' + (entry.type || 'unknown');
+
+    const top = document.createElement('div');
+    top.className = 'history-row-top';
+    top.innerHTML = `<span>${escHtml(entry.type || 'event')}</span>`;
+    const right = document.createElement('span');
+    right.className = 'history-row-top-right';
+    const timeEl = document.createElement('span');
+    timeEl.textContent = time;
+    right.appendChild(timeEl);
+    if (entry._key) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'history-row-del';
+      delBtn.title = 'Delete this log entry';
+      delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      delBtn.addEventListener('pointerdown', e => e.stopPropagation());
+      delBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!confirm('Delete this log entry? This cannot be undone.')) return;
+        database.ref(`/inventory_history/${entry._key}`).remove();
+      });
+      right.appendChild(delBtn);
+    }
+    top.appendChild(right);
+    row.appendChild(top);
+
+    const body = document.createElement('div');
+    body.className = 'history-row-body';
+    const charLabel = `<span class="history-char">${escHtml(entry.charName || 'Unknown')}</span>`;
+    const actor = escHtml(entry.actorName || 'Unknown');
+    const itemName = escHtml(entry.itemName || '');
+
+    if (entry.type === 'sell') {
+      const gp = ((entry.valueCp || 0) / 100).toFixed(2).replace(/\.?0+$/, '');
+      body.innerHTML = `${actor} sold <strong>${entry.qty > 1 ? entry.qty + '× ' : ''}${itemName}</strong> from ${charLabel} for ${gp} gp`;
+    } else if (entry.type === 'destroy') {
+      body.innerHTML = `${actor} destroyed <strong>${entry.qty > 1 ? entry.qty + '× ' : ''}${itemName}</strong> from ${charLabel}`;
+    } else if (entry.type === 'move') {
+      body.innerHTML = `${actor} moved <strong>${entry.qty > 1 ? entry.qty + '× ' : ''}${itemName}</strong> from ${charLabel} to <span class="history-char">${escHtml(entry.toCharName || 'Unknown')}</span>`;
+    } else if (entry.type === 'buy') {
+      const gp = ((entry.valueCp || 0) / 100).toFixed(2).replace(/\.?0+$/, '');
+      const cost = entry.valueCp > 0 ? ` (${gp} gp)` : '';
+      body.innerHTML = `${actor} bought <strong>${entry.qty > 1 ? entry.qty + '× ' : ''}${itemName}</strong> from the shop for ${charLabel}${cost}`;
+    } else if (entry.type === 'list') {
+      body.innerHTML = `${actor} listed <strong>${entry.qty > 1 ? entry.qty + '× ' : ''}${itemName}</strong> from ${charLabel} for sale`;
+    } else if (entry.type === 'rest') {
+      body.innerHTML = `${actor} gave ${charLabel} a <strong>${entry.restType === 'long' ? 'Long Rest' : 'Short Rest'}</strong>`;
+    } else if (entry.type === 'character') {
+      const fmt = v => typeof v === 'boolean' ? (v ? 'on' : 'off') : (v ?? '—');
+      const parts = (entry.changes || []).map(c => c.kind === 'stat'
+        ? `${escHtml(c.label)}: ${escHtml(fmt(c.from))} → ${escHtml(fmt(c.to))}`
+        : escHtml(c.summary));
+      body.innerHTML = `${actor} changed ${charLabel} — ${parts.join(', ')}`;
+    } else {
+      body.textContent = JSON.stringify(entry);
+    }
+    row.appendChild(body);
+
+    if (entry.detail && ['sell', 'destroy', 'move', 'buy', 'list'].includes(entry.type)) {
+      const detail = document.createElement('div');
+      detail.className = 'history-row-detail';
+      detail.textContent = entry.detail;
+      row.appendChild(detail);
+    }
+
+    if (entry.itemData && (entry.type === 'sell' || entry.type === 'destroy')) {
+      row.classList.add('history-row-restorable');
+      row.title = 'Drag onto a character tab to restore this item';
+      const hint = document.createElement('div');
+      hint.className = 'history-row-restore-hint';
+      hint.innerHTML = '<i class="fa-solid fa-hand"></i> Drag to restore';
+      row.appendChild(hint);
+      wireHistoryDrag(row, entry.itemData, entry.itemName || 'Item');
+    }
+
+    return row;
+  }
+
+  // Rebuilds the character filter's options from every known character (not
+  // just ones with history so far), keeping the current selection if it's
+  // still a valid option.
+  function populateHistoryCharFilter() {
+    const prev = historyFilterCharEl.value;
+    historyFilterCharEl.innerHTML = '<option value="">All characters</option>';
+    Object.values(allChars)
+      .sort((a, b) => (a.state?.charName || '').localeCompare(b.state?.charName || ''))
+      .forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.state?.charName || 'Unnamed';
+        historyFilterCharEl.appendChild(opt);
+      });
+    if ([...historyFilterCharEl.options].some(o => o.value === prev)) historyFilterCharEl.value = prev;
+  }
+
+  const HISTORY_ITEM_TYPES      = ['sell', 'destroy', 'move', 'buy', 'list'];
+  const HISTORY_CHARACTER_TYPES = ['character', 'rest'];
+
+  function renderHistoryList() {
+    const charFilter = historyFilterCharEl.value;
+    const typeFilter  = historyFilterTypeEl.value;
+    const filtered = historyEntriesCache.filter(entry => {
+      if (typeFilter === 'item' && !HISTORY_ITEM_TYPES.includes(entry.type)) return false;
+      if (typeFilter === 'character' && !HISTORY_CHARACTER_TYPES.includes(entry.type)) return false;
+      if (charFilter && entry.charId !== charFilter && entry.toCharId !== charFilter) return false;
+      return true;
+    });
+    historyListEl.innerHTML = '';
+    historyEmptyEl.hidden = filtered.length > 0;
+    historyEmptyEl.textContent = historyEntriesCache.length
+      ? 'No entries match the current filters.'
+      : 'No activity logged yet.';
+    filtered.forEach(entry => historyListEl.appendChild(formatHistoryRow(entry)));
+  }
+
+  historyFilterCharEl.addEventListener('change', renderHistoryList);
+  historyFilterTypeEl.addEventListener('change', renderHistoryList);
+
+  function loadHistoryEntries() {
+    if (historyRef) historyRef.off('value');
+    historyRef = database.ref('/inventory_history').limitToLast(200);
+    historyRef.on('value', snap => {
+      const raw = snap.val() || {};
+      // _key (the Firebase push id) is what the per-row delete button targets —
+      // keep it off the entry's own persisted shape, it's read-side only.
+      historyEntriesCache = Object.entries(raw)
+        .map(([key, entry]) => Object.assign({ _key: key }, entry))
+        .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      renderHistoryList();
+    });
+  }
+
+  function openHistoryPanel() {
+    if (!window._isDM) return;
+    closeHamburgerMenu();
+    closeRules(); // stay exclusive with the Rules page
+    charIdBeforeRules = currentCharId;
+    deselectChar();
+    setHistoryMode(true);
+    history.pushState({ view: 'history' }, '');
+    setHistoryTab('log'); // always land on Log; Backups is opt-in via the tab
+    populateHistoryCharFilter();
+    loadHistoryEntries();
+  }
+
+  // Same contract as closeRules(): safe to call unconditionally from any
+  // other navigation action; no-ops if History isn't open.
+  function closeHistoryPanel() {
+    if (!historyOpen) return;
+    setHistoryMode(false);
+    if (historyRef) { historyRef.off('value'); historyRef = null; }
+    if (backupsRef) { backupsRef.off('value'); backupsRef = null; }
+    if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
+  }
+
+  function goBackFromHistory() {
+    closeHistoryPanel();
+    restoreCharSelection();
+  }
+
+  historyBackBtn.addEventListener('click', goBackFromHistory);
+
+  historyClearBtn.addEventListener('click', () => {
+    if (!window._isDM) return;
+    if (!confirm('Clear the entire history log? This deletes every sale, destroy, move, and character-change entry for every character and cannot be undone.')) return;
+    database.ref('/inventory_history').remove();
+  });
+
+  // ── BACKUPS TAB (DM-only rolling per-character snapshots) ────────────────
+  // Lives inside the same History page/mode as the Log tab (see
+  // setHistoryTab above) rather than being its own panel.
+  let backupsRef  = null;
+  const backupsCharSelect = document.getElementById('backups-char-select');
+  const backupsListEl    = document.getElementById('backups-list');
+  const backupsEmptyEl   = document.getElementById('backups-empty');
+
+  function populateBackupsCharSelect() {
+    const prev = backupsCharSelect.value;
+    backupsCharSelect.innerHTML = '<option value="">Select a character…</option>';
+    Object.values(allChars)
+      .sort((a, b) => (a.state?.charName || '').localeCompare(b.state?.charName || ''))
+      .forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.state?.charName || 'Unnamed';
+        backupsCharSelect.appendChild(opt);
+      });
+    if ([...backupsCharSelect.options].some(o => o.value === prev)) backupsCharSelect.value = prev;
+  }
+
+  function formatRelativeTime(ts) {
+    if (!ts) return '';
+    const diffMs = Date.now() - ts;
+    const mins = Math.round(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.round(hours / 24)}d ago`;
+  }
+
+  function formatBackupRow(key, entry) {
+    const row = document.createElement('div');
+    row.className = 'backup-row';
+    row.classList.toggle('backup-row-starred', !!entry.starred);
+
+    const label = document.createElement('div');
+    const timeStr = entry.ts ? new Date(entry.ts).toLocaleString() : 'Unknown time';
+    label.innerHTML = `<span class="backup-row-time">${escHtml(timeStr)}</span>`
+      + `<span class="backup-row-relative">${escHtml(formatRelativeTime(entry.ts))}</span>`;
+    row.appendChild(label);
+
+    const actions = document.createElement('div');
+    actions.className = 'backup-row-actions';
+
+    // Starring exempts a snapshot from trimOldBackups' retention-count
+    // pruning entirely (see that function) — the only way a backup is ever
+    // removed, so starring is what "protect this one" means here.
+    const starBtn = document.createElement('button');
+    starBtn.className = 'backup-star-btn';
+    starBtn.classList.toggle('active', !!entry.starred);
+    starBtn.title = entry.starred ? 'Starred — protected from automatic cleanup' : 'Star to protect from automatic cleanup';
+    starBtn.innerHTML = `<i class="fa-${entry.starred ? 'solid' : 'regular'} fa-star"></i>`;
+    starBtn.addEventListener('click', () => {
+      if (backupsRef) backupsRef.child(key).child('starred').set(!entry.starred ? true : null);
+    });
+    actions.appendChild(starBtn);
+
+    const restoreBtn = document.createElement('button');
+    restoreBtn.className = 'backup-restore-btn';
+    restoreBtn.innerHTML = '<i class="fa-solid fa-clock-rotate-left"></i> Restore as New';
+    restoreBtn.addEventListener('click', () => {
+      if (!confirm(`Restore this snapshot from ${timeStr} as a brand-new character? The original character is left untouched.`)) return;
+      restoreBackupAsNewChar(entry.state, entry.ts);
+    });
+    actions.appendChild(restoreBtn);
+
+    row.appendChild(actions);
+    return row;
+  }
+
+  function loadBackupsForChar(charId) {
+    if (backupsRef) { backupsRef.off('value'); backupsRef = null; }
+    backupsListEl.innerHTML = '';
+    if (!charId) {
+      backupsEmptyEl.textContent = 'Select a character to view its backups.';
+      backupsEmptyEl.hidden = false;
+      return;
+    }
+    backupsEmptyEl.textContent = 'No backups yet for this character.';
+    backupsRef = database.ref(`/inventory_backups/${charId}`);
+    backupsRef.on('value', snap => {
+      const entries = [];
+      snap.forEach(child => { entries.push([child.key, child.val()]); }); // oldest-first
+      entries.reverse(); // newest-first for display
+      // Starred entries surface to the top (still newest-first among
+      // themselves) — that's the "highlight which are important" half of
+      // starring; trimOldBackups is the "protect from deletion" half.
+      entries.sort((a, b) => (b[1].starred ? 1 : 0) - (a[1].starred ? 1 : 0));
+      backupsListEl.innerHTML = '';
+      backupsEmptyEl.hidden = entries.length > 0;
+      entries.forEach(([key, entry]) => backupsListEl.appendChild(formatBackupRow(key, entry)));
+    });
+  }
+
+  backupsCharSelect.addEventListener('change', () => loadBackupsForChar(backupsCharSelect.value));
+
+  // ── HAMBURGER MENU (replaces the old char/inventory toggle button) ──────
+  // Holds the low-frequency navigation actions: leaving to the map, opening
+  // the rules page, and signing out. Character ↔ inventory switching is now
+  // a swipe gesture (see below) since it's used far more often.
+  const hamburgerBtn    = document.getElementById('hamburger-btn');
+  const hamburgerMenu   = document.getElementById('hamburger-menu');
+  const menuMapBtn      = document.getElementById('menu-map-btn');
+  const menuCharacterBtn = document.getElementById('menu-character-btn');
+  const menuInventoryBtn = document.getElementById('menu-inventory-btn');
+  const menuRulesBtn    = document.getElementById('menu-rules-btn');
+  const menuHistoryBtn  = document.getElementById('menu-history-btn');
+  const menuSignoutBtn  = document.getElementById('menu-signout-btn');
+
+  function openHamburgerMenu()  { hamburgerMenu.hidden = false; }
+  function closeHamburgerMenu() { hamburgerMenu.hidden = true; }
+
+  // All nav items always show; the one matching where you already are is
+  // just disabled instead of hidden. Called from _applyViewMode, openStats/
+  // closeStats, openRules/closeRules, and openShop/closeShop.
+  function updateHamburgerMenu() {
+    // While rules-mode is on top, none of the pages underneath count as
+    // "current" — Map/Character/Inventory should stay clickable so they can
+    // be used to navigate away from Rules, not just Rules' own back button.
+    const inCharView = !rulesOpen && !_hexmapMode && !shopOpen;
+    menuMapBtn.disabled       = !rulesOpen && _hexmapMode;
+    menuCharacterBtn.disabled = inCharView && statsOpen;
+    menuInventoryBtn.disabled = inCharView && !statsOpen;
+    menuRulesBtn.disabled     = rulesOpen;
+    menuHistoryBtn.disabled   = historyOpen;
+  }
+
+  hamburgerBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (hamburgerMenu.hidden) openHamburgerMenu(); else closeHamburgerMenu();
+  });
+  document.addEventListener('pointerdown', e => {
+    if (!hamburgerMenu.hidden && !e.target.closest('#tab-bar-left')) closeHamburgerMenu();
+  });
+
+  // Leave the character/inventory/shop view for the hex map. The menu item
+  // is hidden while already on the map (see _applyViewMode below).
+  function goToMap() {
+    closeHamburgerMenu();
+    closeRules(); // pops its history entry first, if it was open
+    closeHistoryPanel(); // ditto for the DM history panel
+    if (shopOpen) { _shopFromHexmap = true; closeShop(); return; }
+    // Only pop history for the map transition itself if we actually needed
+    // one (i.e. we weren't already on the map — closeRules already popped
+    // its own entry above, so doing this unconditionally would over-pop).
+    const wasAway = !_hexmapMode;
+    _hexmapMode = true;
+    inv.collapsePanelInstant();
+    _applyViewMode();
+    window.hexOnGoToHexmap && window.hexOnGoToHexmap();
+    deselectChar();
+    if (wasAway && !_handlingPopstate) { _suppressPopstate = true; history.back(); }
+  }
+  menuMapBtn.addEventListener('click', goToMap);
+
+  // Land on the character sheet (showStats true) or inventory (false),
+  // getting there from the map/shop first if needed — the explicit,
+  // discoverable equivalent of the character/inventory swipe.
+  function goToCharView(showStats) {
+    closeHamburgerMenu();
+    closeRules(); // pops its history entry first, if it was open
+    closeHistoryPanel(); // ditto for the DM history panel
+    if (shopOpen) {
+      _shopFromHexmap = false;
+      closeShop();
+    } else if (_hexmapMode) {
+      _hexmapMode = false;
+      inv.collapsePanelInstant();
+      _applyViewMode();
+      window.hexOnGoToInventory && window.hexOnGoToInventory();
+      if (!_handlingPopstate) history.pushState({ view: 'inventory' }, '');
+    }
+    // Not just the hexmap-transition case: Rules also leaves currentCharId
+    // null, and that can be reached here without ever passing through the
+    // branch above.
+    restoreCharSelection();
+    if (showStats && canOpenStats()) openStats(); else if (!showStats) closeStats();
+  }
+  menuCharacterBtn.addEventListener('click', () => goToCharView(true));
+  menuInventoryBtn.addEventListener('click', () => goToCharView(false));
+
+  menuRulesBtn.addEventListener('click', openRules);
+  menuHistoryBtn.addEventListener('click', openHistoryPanel);
+  menuSignoutBtn.addEventListener('click', () => {
+    closeHamburgerMenu();
+    auth.signOut().catch(() => {});
+  });
+
+  // Hoisted above _applyViewMode so the initial _applyViewMode() call doesn't
+  // hit a temporal-dead-zone.
+  let statsOpen = true;
+  let shopOpen  = false;
+
+  function _applyViewMode() {
+    document.getElementById('app').classList.toggle('hexmap-mode', _hexmapMode);
+    updateHamburgerMenu();
+  }
+
+  // ── HEXMAP TOOLBAR ──────────────────────────────────────────────────────
+  const _hexToolBtn    = document.getElementById('hex-tool-btn');
+  const _hexOverlayBtn = document.getElementById('hex-overlay-btn');
+  const _hexClearBtn   = document.getElementById('hex-clear-btn');
+
+  _hexToolBtn.addEventListener('click',    () => window.hexAction && window.hexAction('toolToggle'));
+  _hexOverlayBtn.addEventListener('click', () => window.hexAction && window.hexAction('overlayToggle'));
+  _hexClearBtn.addEventListener('click',   () => window.hexAction && window.hexAction('clearHexes'));
+
+  document.getElementById('hex-erase-btn').addEventListener('click', () => {
+    window.hexAction && window.hexAction('eraseToggle');
+  });
+  document.querySelectorAll('.hex-color-btn[data-color]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      window.hexAction && window.hexAction('colorSelect', btn.dataset.color);
+    });
+  });
+
+  // Start in hexmap-mode
+  history.replaceState({ view: 'hexmap' }, '');
+  _applyViewMode();
+
+  // Converts a plain username to a Firebase-compatible email by appending a
+  // fixed domain. If the value already contains '@' it is returned unchanged.
+  function toFirebaseEmail(username) {
+    const s = (username || '').trim();
+    return s.includes('@') ? s : `${s}@bytespritegames.com`;
+  }
+
+  // Receive messages from the parent page
+  window.addEventListener('message', e => {
+    if (!e.data) return;
+    if (e.data.type === 'hexState') {
+      if (e.data.toolIcon)    _hexToolBtn.querySelector('i').className    = `fa-solid fa-fw ${e.data.toolIcon}`;
+      if (e.data.overlayIcon) _hexOverlayBtn.querySelector('i').className = e.data.overlayIcon;
+      _hexToolBtn.classList.toggle('active', !!e.data.toolActive);
+      document.getElementById('hexmap-toolbar').classList.toggle('tool-active', !!e.data.toolActive);
+      document.getElementById('hexmap-toolbar').classList.toggle('show-colors', !!e.data.showColors);
+      const eraseActive = !!e.data.eraseMode;
+      document.getElementById('hex-erase-btn').classList.toggle('active-color', eraseActive);
+      if (e.data.activeColor !== undefined || e.data.eraseMode !== undefined) {
+        document.querySelectorAll('.hex-color-btn[data-color]').forEach(btn => {
+          btn.classList.toggle('active-color', !eraseActive && btn.dataset.color === e.data.activeColor);
+        });
+      }
+    }
+  });
+
+  // ── STATS ───────────────────────────────────────────────────────────────
+  // statsOpen is declared above (with the view toggle) so the initial
+  // _applyViewMode() call doesn't hit a temporal-dead-zone.
+  let statsEditing = false;
+  const statsPanelEl       = document.getElementById('stats-panel');
+  const charPanelsEl       = document.getElementById('char-panels');
+  const charFieldsEditBtn  = document.getElementById('char-fields-edit-btn');
+
+  function canEditCurrentChar() {
+    if (window._isDM) return true;
+    if (!currentUser || !currentCharId) return false;
+    return (allChars[currentCharId]?.ownerUid || '') === currentUser.uid;
+  }
+
+  function updateEditBtn() {
+    const canEdit = canEditCurrentChar();
+    charFieldsEditBtn.hidden = !canEdit;
+    statsPanelEl.classList.toggle('char-view-only', !canEdit);
+    const notesSectionEl = document.getElementById('cs-notes-section');
+    if (notesSectionEl) notesSectionEl.hidden = !canEdit;
+  }
+
+  function setStatsEditing(on) {
+    statsEditing = on;
+    statsPanelEl.classList.toggle('editing', on);
+    charFieldsEditBtn.classList.toggle('active', on);
+    charHeaderEl.classList.toggle('fields-open', on);
+    if (inv) inv.updateCs();
+    if (window._isDM) renderTabs();
+  }
+
+  function openStats() {
+    statsOpen = true;
+    charPanelsEl.classList.remove('show-inventory');
+    updateEditBtn();
+    updateHamburgerMenu();
+  }
+
+  function closeStats() {
+    statsOpen = false;
+    setStatsEditing(false);
+    charPanelsEl.classList.add('show-inventory');
+    updateHamburgerMenu();
+  }
+
+  charFieldsEditBtn.addEventListener('click', () => {
+    setStatsEditing(!statsEditing);
+  });
+
+  // ── CHARACTER / INVENTORY SWIPE ──────────────────────────────────────────
+  // Replaces the old tap-to-toggle button. Swipe left: sheet → inventory.
+  // Swipe right: inventory → sheet. Disabled entirely while any drag (item,
+  // feature reorder, container reorder, note reorder) is in progress.
+  // Not DM-exempt: a DM sees hidden characters in the tab bar (that
+  // exemption lives in the tab-list filters, keyed on CHAR_HIDDEN_STATES),
+  // but inventory-only/hidden-inventory-only hides the character SHEET for
+  // everyone, DM included — the DM just gets to reach the inventory-only
+  // character at all via the tab bar, the same as any other visible one.
+  function canOpenStats() {
+    if (!currentCharId) return true;
+    return !CHAR_SHEET_HIDDEN_STATES.has(allChars[currentCharId]?.charVisibility || 'visible');
+  }
+
+  (function () {
+    const SWIPE_MIN_DX    = 60;  // minimum horizontal travel to count as a swipe
+    const SWIPE_MAX_SLOPE = 0.6; // |dy| must stay under this fraction of |dx|
+    let startX = null, startY = null, tracking = false;
+
+    charPanelsEl.addEventListener('pointerdown', e => {
+      if (inv.isDragging()) { tracking = false; return; }
+      startX = e.clientX; startY = e.clientY; tracking = true;
+    });
+
+    charPanelsEl.addEventListener('pointerup', e => {
+      if (!tracking) return;
+      tracking = false;
+      if (inv.isDragging()) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.abs(dx) < SWIPE_MIN_DX || Math.abs(dy) > Math.abs(dx) * SWIPE_MAX_SLOPE) return;
+      if (dx < 0) {
+        if (statsOpen) closeStats();
+      } else if (!statsOpen && canOpenStats()) {
+        openStats();
+      }
+    });
+
+    charPanelsEl.addEventListener('pointercancel', () => { tracking = false; });
+  })();
+
+  // shopOpen declared above with the view toggle.
+  const shopTabBtn  = document.getElementById('shop-tab-btn');
+  const shopPanel   = document.getElementById('shop-panel');
+  const charHeaderEl= document.getElementById('char-header');
+
+
+  let shopVisibility = {};
+  let shopVisRef = null;
+  const DEFAULT_HIDDEN_SECTIONS = new Set(['Magical Weapons', 'Magical Curios', 'Consumable Magical Curios']);
+
+  function encodeFirebaseKey(str) {
+    return str
+      .replace(/%/g,  '%25')
+      .replace(/\./g, '%2E')
+      .replace(/#/g,  '%23')
+      .replace(/\$/g, '%24')
+      .replace(/\//g, '%2F')
+      .replace(/\[/g, '%5B')
+      .replace(/\]/g, '%5D');
+  }
+
+  function decodeFirebaseKey(str) {
+    return str
+      .replace(/%2E/gi, '.')
+      .replace(/%23/gi, '#')
+      .replace(/%24/gi, '$')
+      .replace(/%2F/gi, '/')
+      .replace(/%5B/gi, '[')
+      .replace(/%5D/gi, ']')
+      .replace(/%25/gi, '%');
+  }
+
+  function encodeVisObj(obj) {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) out[encodeFirebaseKey(k)] = v;
+    return out;
+  }
+
+  function decodeVisObj(raw) {
+    const out = {};
+    for (const [k, v] of Object.entries(raw)) out[decodeFirebaseKey(k)] = v;
+    return out;
+  }
+
+  function getItemSection(itemName) {
+    let section = null;
+    for (const item of window.ITEM_LIBRARY) {
+      if (item._section) section = item._section;
+      if (item.name && item.name === itemName) return section;
     }
     return null;
   }
 
-  document.getElementById("delete-bin").addEventListener("dragover", e => e.preventDefault());
-  document.getElementById("delete-bin").addEventListener("drop", e => {
-    e.preventDefault();
-    const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-    if (data.fromSearch) return;
-    const container = getContainerById(data.sourceContainerId);
-    const item = container?.getItem(data.originX, data.originY);
-    if (item) {
-      if (item.isContainer() && item.innerContainer) {
-        for (const key in item.innerContainer.items) {
-          const innerItem = item.innerContainer.items[key];
-          itemDivCache.delete(innerItem);
+  function isItemVisible(itemName, section) {
+    return Object.prototype.hasOwnProperty.call(shopVisibility, itemName)
+      ? shopVisibility[itemName]
+      : !DEFAULT_HIDDEN_SECTIONS.has(section);
+  }
+
+  // Writes only the given item name(s) via update() (a Firebase multi-path
+  // merge at this ref, touching just those children) instead of set()-ing
+  // the whole map — two DMs toggling different items around the same time
+  // would otherwise have one toggle silently overwritten by the other's
+  // full-map snapshot. Defaults to the full local map only as a fallback
+  // for callers that don't know exactly which keys changed.
+  function saveShopVisibility(names) {
+    if (!shopVisRef) return;
+    const keys = names && names.length ? names : Object.keys(shopVisibility);
+    const updates = {};
+    keys.forEach(name => { updates[encodeFirebaseKey(name)] = shopVisibility[name]; });
+    shopVisRef.update(updates);
+  }
+
+  function subscribeToShopVisibility() {
+    if (shopVisRef) shopVisRef.off('value');
+    shopVisRef = database.ref('/inventory_shop_visibility');
+    shopVisRef.on('value', snap => {
+      shopVisibility = decodeVisObj(snap.val() || {});
+      if (shopOpen) buildShop();
+    });
+  }
+
+  // Per-viewer feature/notes fold state, scoped to this user's uid so it
+  // follows them across devices without ever being visible to other viewers
+  // of the same character. InventorySystem has no real Firebase connection
+  // of its own — it reports changes via onUiChange and receives the loaded
+  // blob via applyLocalUi(), both wired up below.
+  let userUiCache = {};
+  let userUiRef   = null;
+
+  function subscribeUserUi(uid) {
+    if (userUiRef) userUiRef.off('value');
+    userUiCache = {};
+    if (!uid) { userUiRef = null; return; }
+    userUiRef = database.ref(`/inventory_user_ui/${uid}`);
+    userUiRef.on('value', snap => {
+      userUiCache = snap.val() || {};
+      if (currentCharId) inv.applyLocalUi(userUiCache[currentCharId] || {});
+    });
+  }
+
+  function saveUserUiBlob(blob) {
+    if (!currentUser || !currentCharId) return;
+    database.ref(`/inventory_user_ui/${currentUser.uid}/${currentCharId}`).update(blob);
+  }
+
+  let shopAvailability = {};
+  let shopAvailRef = null;
+
+  function isItemAvailable(itemName) {
+    return Object.prototype.hasOwnProperty.call(shopAvailability, itemName)
+      ? shopAvailability[itemName]
+      : true;
+  }
+
+  // Same reasoning as saveShopVisibility() above.
+  function saveShopAvailability(names) {
+    if (!shopAvailRef) return;
+    const keys = names && names.length ? names : Object.keys(shopAvailability);
+    const updates = {};
+    keys.forEach(name => { updates[encodeFirebaseKey(name)] = shopAvailability[name]; });
+    shopAvailRef.update(updates);
+  }
+
+  function subscribeToShopAvailability() {
+    if (shopAvailRef) shopAvailRef.off('value');
+    shopAvailRef = database.ref('/inventory_shop_availability');
+    shopAvailRef.on('value', snap => {
+      shopAvailability = decodeVisObj(snap.val() || {});
+      if (shopOpen) buildShop();
+    });
+  }
+
+  let dmListings = [];
+  let dmListingsRef = null;
+  let dmListingsCollapsed = localStorage.getItem('dmListingsCollapsed') === 'true';
+
+  // Re-saves every listing currently known locally via update() — a
+  // multi-path merge at /inventory_dm_listings that only touches the keys
+  // it's given. Two DMs adding/editing *different* listings around the same
+  // time therefore both survive: neither client's snapshot mentions the
+  // other's key, so neither write can erase it. (This used to set() the
+  // whole list as one JSON blob, so whichever save landed last silently
+  // discarded any listing the other client had just added.) Removal is
+  // deliberately NOT handled here — silence must never mean delete under
+  // this model, so removing a listing calls dmListingsRef.child(key).remove()
+  // directly at its own call site instead.
+  function saveDmListings() {
+    if (!dmListingsRef) return;
+    const updates = {};
+    dmListings.forEach(item => {
+      if (!item._dmKey) return;
+      const compact = compactSlotData(item);
+      if (compact) updates[item._dmKey] = compact;
+    });
+    if (Object.keys(updates).length) dmListingsRef.update(updates);
+  }
+  window.saveDmListings = saveDmListings;
+
+  // One-time upgrade from the old single-JSON-string format to one Firebase
+  // child per listing (keyed by Firebase push id), so future adds/edits/
+  // removes can target just their own listing instead of the whole list.
+  // Transaction-guarded: if multiple clients see the legacy string at once,
+  // only the winning attempt actually converts it (and generates the new
+  // keys) — every retry sees the already-migrated object and no-ops,
+  // instead of each client minting its own duplicate set of keys.
+  function migrateDmListingsFormat() {
+    database.ref('/inventory_dm_listings').transaction(current => {
+      if (typeof current !== 'string') return current; // already migrated (or empty)
+      let arr;
+      try { arr = JSON.parse(current) || []; } catch { arr = []; }
+      if (!Array.isArray(arr) || !arr.length) return null;
+      const obj = {};
+      arr.forEach(item => { obj[database.ref('/inventory_dm_listings').push().key] = item; });
+      return obj;
+    });
+  }
+
+  function subscribeToDmListings() {
+    if (dmListingsRef) dmListingsRef.off('value');
+    dmListingsRef = database.ref('/inventory_dm_listings');
+    dmListingsRef.on('value', snap => {
+      const raw = snap.val();
+      if (typeof raw === 'string') {
+        migrateDmListingsFormat(); // triggers this same listener again once converted
+        return;
+      }
+      dmListings = Object.entries(raw || {})
+        .map(([key, item]) => {
+          const resolved = resolveSlotData(item);
+          if (resolved) resolved._dmKey = key;
+          return resolved;
+        })
+        .filter(Boolean);
+      if (shopOpen) buildShop();
+    });
+  }
+
+  function renderCostHtml(totalCp, suffix) {
+    const parts = [];
+    let r = totalCp;
+    // Cap at GP — never show PP in cost display
+    const gp = Math.floor(r / 100); r %= 100;
+    const sp = Math.floor(r / 10);  r %= 10;
+    if (gp) parts.push(`<span class="cost-gp">${gp}gp</span>`);
+    if (sp) parts.push(`<span class="cost-sp">${sp}sp</span>`);
+    if (r)  parts.push(`<span class="cost-cp">${r}cp</span>`);
+    const base = parts.join(' ') || (totalCp === 0 ? '' : '');
+    return base + (suffix ? `<span class="cost-suffix">${suffix}</span>` : '');
+  }
+
+  function shopCostToCp(costStr) {
+    if (!costStr || /^free$/i.test(costStr.trim())) return 0;
+    let total = 0;
+    const pp = costStr.match(/(\d+(?:\.\d+)?)\s*pp/i);
+    const gp = costStr.match(/(\d+(?:\.\d+)?)\s*gp/i);
+    const sp = costStr.match(/(\d+(?:\.\d+)?)\s*sp/i);
+    const cp = costStr.match(/(\d+(?:\.\d+)?)\s*cp/i);
+    if (pp) total += Math.round(parseFloat(pp[1]) * 1000);
+    if (gp) total += Math.round(parseFloat(gp[1]) * 100);
+    if (sp) total += Math.round(parseFloat(sp[1]) * 10);
+    if (cp) total += Math.round(parseFloat(cp[1]));
+    return total;
+  }
+
+  // Session-only memory of the last randomizer roll (cleared on page reload)
+  let _randLastRoll = []; // [{ item, itemSection, itemRarity }]
+
+  const WEAPON_WEIGHTS = {
+    "Longsword": 10, "Rapier": 6,
+    "Shortsword": 8, "Greatsword": 6, "Greataxe": 6,
+    "Dagger": 4, "Handaxe": 1, "Longbow": 8,
+    "Glaive": 3, "Halberd": 3, "Maul": 3, "Battleaxe": 6,
+    "Warhammer": 6, "Scimitar": 3, "Hand Crossbow": 1,
+    "Flail": 3, "Morningstar": 3, "Trident": 3, "Spear": 1, "Quarterstaff": 1,
+    "Light Crossbow": 1, "Shortbow": 1, "Whip": 1,
+    "Heavy Crossbow": 1, "War Pick": 1, "Lance": 1, "Pike": 1,
+    "Club": 1, "Greatclub": 1, "Sickle": 1, "Mace": 1,
+    "Javelin": 1, "Light Hammer": 1, "Sling": 1, "Dart": 1, "Blowgun": 1,
+  };
+
+  const ARMOR_WEIGHTS = {
+    "Chain Mail": 8,
+    "Full Plate": 1, "Half Plate": 2, "Studded Leather Armor": 8,
+    "Breastplate": 2,
+    "Splint Armor": 2, "Scale Mail": 4, "Leather Armor": 4, "Chain Shirt": 4,
+    "Hide Armor": 3, "Ring Mail": 3,
+    "Padded Armor": 1,
+  };
+
+  function weightedPick(options, weights) {
+    const total = options.reduce((s, o) => s + (weights[o] || 1), 0);
+    let r = Math.random() * total;
+    for (const o of options) {
+      r -= (weights[o] || 1);
+      if (r <= 0) return o;
+    }
+    return options[options.length - 1];
+  }
+
+  function randomizeItemSelectVars(item) {
+    const result = {};
+    for (const [key, meta] of Object.entries(item.variables || {})) {
+      if (meta.control !== 'select' || !meta.options?.length) continue;
+      if (key === 'weapon') result[key] = weightedPick(meta.options, WEAPON_WEIGHTS);
+      else if (key === 'armor') result[key] = weightedPick(meta.options, ARMOR_WEIGHTS);
+      else result[key] = meta.options[Math.floor(Math.random() * meta.options.length)];
+    }
+    return result;
+  }
+
+  function buildShop() {
+    const scroll = document.getElementById('shop-scroll');
+    const savedScrollTop = scroll.scrollTop;
+    scroll.innerHTML = '';
+    let currentSection = null;
+    let currentRarity  = null;
+    const SHOP_HIDDEN_SECTIONS = new Set(['Valuables', 'Currency']);
+    const visibleSections = [];
+
+    // ── DM RANDOMIZER PANEL ───────────────────────────────────────────────────
+    if (window._isDM) {
+      const RAND_EXCLUDED = new Set(['Currency', 'Valuables']);
+      const sectionItems = {};
+      const randItemSectionMap = new Map();
+      const randItemRarityMap = new Map();
+      let _rs = null, _rr = null;
+      ITEM_LIBRARY.forEach(li => {
+        if (li._section) { _rs = li._section; _rr = null; return; }
+        if (li._rarity)  { _rr = li._rarity; return; }
+        if (!li.name || li.shopHidden || RAND_EXCLUDED.has(_rs)) return;
+        if (!_rs) return;
+        if (!sectionItems[_rs]) sectionItems[_rs] = {};
+        const rKey = _rr || '';
+        if (!sectionItems[_rs][rKey]) sectionItems[_rs][rKey] = [];
+        sectionItems[_rs][rKey].push(li);
+        randItemSectionMap.set(li, _rs);
+        randItemRarityMap.set(li, _rr || '');
+      });
+
+      const panel = document.createElement('div');
+      panel.className = 'dm-randomizer';
+
+      const heading = document.createElement('div');
+      heading.className = 'dm-randomizer-heading';
+      heading.textContent = 'Random Item';
+      panel.appendChild(heading);
+
+      const controls = document.createElement('div');
+      controls.className = 'dm-randomizer-controls';
+
+      // Count stepper — first in row
+      let randCount = 1;
+      const countWrap = document.createElement('div');
+      countWrap.className = 'dm-rand-label';
+      const countLabel = document.createElement('span');
+      countLabel.textContent = 'Count';
+      countWrap.appendChild(countLabel);
+      const countStepper = document.createElement('div');
+      countStepper.className = 'dm-rand-stepper';
+      const countDecBtn = document.createElement('button');
+      countDecBtn.type = 'button';
+      countDecBtn.className = 'dm-rand-stepper-btn';
+      countDecBtn.textContent = '−';
+      const countValSpan = document.createElement('span');
+      countValSpan.className = 'dm-rand-stepper-val';
+      countValSpan.textContent = '1';
+      const countIncBtn = document.createElement('button');
+      countIncBtn.type = 'button';
+      countIncBtn.className = 'dm-rand-stepper-btn';
+      countIncBtn.textContent = '+';
+      const updateCountBtns = () => {
+        countDecBtn.disabled = randCount <= 1;
+        countIncBtn.disabled = randCount >= 20;
+      };
+      countDecBtn.addEventListener('click', () => { randCount = Math.max(1, randCount - 1); countValSpan.textContent = randCount; updateCountBtns(); });
+      countIncBtn.addEventListener('click', () => { randCount = Math.min(20, randCount + 1); countValSpan.textContent = randCount; updateCountBtns(); });
+      updateCountBtns();
+      countStepper.appendChild(countDecBtn);
+      countStepper.appendChild(countValSpan);
+      countStepper.appendChild(countIncBtn);
+      countWrap.appendChild(countStepper);
+      controls.appendChild(countWrap);
+
+      const tableWrap = document.createElement('label');
+      tableWrap.className = 'dm-rand-label';
+      tableWrap.textContent = 'Table';
+      const tableSelect = document.createElement('select');
+      tableSelect.className = 'dm-rand-select';
+      Object.keys(sectionItems).forEach(sec => {
+        const opt = document.createElement('option');
+        opt.value = sec; opt.textContent = sec;
+        tableSelect.appendChild(opt);
+      });
+      if ([...tableSelect.options].some(o => o.value === 'Magical Items')) tableSelect.value = 'Magical Items';
+      tableWrap.appendChild(tableSelect);
+      controls.appendChild(tableWrap);
+
+      const rarityWrap = document.createElement('label');
+      rarityWrap.className = 'dm-rand-label';
+      rarityWrap.textContent = 'Rarity';
+      const raritySelect = document.createElement('select');
+      raritySelect.className = 'dm-rand-select';
+      rarityWrap.appendChild(raritySelect);
+      controls.appendChild(rarityWrap);
+
+      const randResult = document.createElement('div');
+      randResult.className = 'dm-rand-result';
+
+      function updateRarities() {
+        raritySelect.innerHTML = '';
+        const map = sectionItems[tableSelect.value] || {};
+        const rarities = Object.keys(map).filter(r => r !== '');
+        rarityWrap.hidden = rarities.length === 0;
+        if (rarities.length) {
+          [['__all__', 'Any'], ...rarities.map(r => [r, r])].forEach(([v, t]) => {
+            const o = document.createElement('option'); o.value = v; o.textContent = t; raritySelect.appendChild(o);
+          });
         }
-        delete dynamicContainers[item.id];
+      }
+      tableSelect.addEventListener('change', () => { updateRarities(); randResult.innerHTML = ''; });
+      updateRarities();
+
+      let randMetalEnabled  = true;
+      let randSilverEnabled = false;
+
+      const makeRandToggle = (labelText, checked, onChange) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'dm-rand-label';
+        const lbl = document.createElement('span');
+        lbl.textContent = labelText;
+        const toggleLabel = document.createElement('label');
+        toggleLabel.className = 'dm-rand-toggle-wrap';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = checked;
+        checkbox.addEventListener('change', () => onChange(checkbox.checked));
+        const track = document.createElement('span');
+        track.className = 'dm-rand-toggle-track';
+        toggleLabel.appendChild(checkbox);
+        toggleLabel.appendChild(track);
+        wrap.appendChild(lbl);
+        wrap.appendChild(toggleLabel);
+        return wrap;
+      };
+
+      controls.appendChild(makeRandToggle('Metal',    randMetalEnabled,  v => { randMetalEnabled  = v; }));
+      controls.appendChild(makeRandToggle('Silvered', randSilverEnabled, v => { randSilverEnabled = v; }));
+
+      const btn = document.createElement('button');
+      btn.className = 'dm-rand-btn';
+      btn.textContent = 'Randomize';
+      const btnWrap = document.createElement('div');
+      btnWrap.className = 'dm-rand-label';
+      const btnSpacer = document.createElement('span');
+      btnSpacer.className = 'dm-rand-label-spacer';
+      btnSpacer.textContent = ' ';
+      btnWrap.appendChild(btnSpacer);
+      btnWrap.appendChild(btn);
+      controls.appendChild(btnWrap);
+
+      panel.appendChild(controls);
+      panel.appendChild(randResult);
+
+      const rollRandSlotData = (item, itemSection) => {
+        const randVars = randomizeItemSelectVars(item);
+        const _randCat = item.category
+          || (item.variables?.weapon?.control === 'select' ? 'weapon'
+            : item.variables?.armor?.control  === 'select' ? 'armor'
+            : ['Simple Weapons', 'Martial Weapons', 'Magical Weapons'].includes(itemSection) ? 'weapon'
+            : itemSection === 'Armor & Shields' ? (item.name === 'Shield' ? 'shield' : 'armor')
+            : null);
+        const canMetal  = ['weapon','armor','shield','ammunition'].includes(_randCat);
+        const canSilver = ['weapon','ammunition'].includes(_randCat);
+        const randMaterial = randMetalEnabled && canMetal && Math.random() < 0.10
+          ? (Math.random() < 0.5 ? 'mithral' : 'adamantine')
+          : null;
+        const randSilvered = !randMaterial && randSilverEnabled && canSilver && Math.random() < 0.10;
+        const slotData = buildShopSlotData(
+          item,
+          randVars.weapon || randVars.armor || null,
+          randSilvered, randMaterial,
+          randVars.element || null,
+          shopCostToCp(item.cost)
+        );
+        Object.entries(randVars).forEach(([k, v]) => {
+          if (slotData.variables?.[k]?.control === 'select') slotData.variables[k].value = v;
+        });
+        return slotData;
+      };
+
+      const buildRandResultRow = (item, itemSection, itemRarity, slotData) => {
+        if (!slotData) slotData = rollRandSlotData(item, itemSection);
+
+        const row = document.createElement('div');
+        row.className = 'shop-item-row';
+        row.dataset.itemName = item.name;
+        row.dataset.section = itemSection || '';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'shop-item-name';
+        const _refreshRandName = () => {
+          const _sPfx = slotData.silvered ? 'Silvered ' : '';
+          const _mMat = (slotData.material === 'mithral' || slotData.material === 'adamantine') ? slotData.material : null;
+          const _mPfx = _mMat ? _mMat.charAt(0).toUpperCase() + _mMat.slice(1) + ' ' : '';
+          nameSpan.textContent = _sPfx + _mPfx + inv.computeDisplayName(slotData);
+        };
+        row._applyRowState = _refreshRandName;
+        _refreshRandName();
+        row.appendChild(nameSpan);
+
+        if (itemRarity) {
+          const raritySpan = document.createElement('span');
+          raritySpan.className = 'dm-rand-row-rarity';
+          raritySpan.textContent = itemRarity;
+          row.appendChild(raritySpan);
+        }
+
+        const availBtn = document.createElement('button');
+        availBtn.className = 'shop-item-avail-btn';
+        const updateAvailBtn = () => {
+          const avail = isItemAvailable(item.name);
+          availBtn.innerHTML = avail ? '<i class="fas fa-check"></i>' : '<i class="fas fa-ban"></i>';
+          availBtn.title = avail ? 'Mark as unavailable' : 'Mark as available';
+          availBtn.classList.toggle('unavailable', !avail);
+          row.classList.toggle('shop-item-unavailable', !avail);
+        };
+        updateAvailBtn();
+        availBtn.addEventListener('pointerdown', e => e.stopPropagation());
+        availBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          shopAvailability[item.name] = !isItemAvailable(item.name);
+          saveShopAvailability([item.name]);
+          buildShop();
+        });
+        row.appendChild(availBtn);
+
+        const visBtn = document.createElement('button');
+        visBtn.className = 'shop-item-vis-btn';
+        const updateVisBtn = () => {
+          const visible = isItemVisible(item.name, itemSection);
+          visBtn.innerHTML = visible ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+          visBtn.title = visible ? 'Hide from players' : 'Show to players';
+          row.classList.toggle('shop-item-hidden', !visible);
+        };
+        updateVisBtn();
+        visBtn.addEventListener('pointerdown', e => e.stopPropagation());
+        visBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          shopVisibility[item.name] = !isItemVisible(item.name, itemSection);
+          saveShopVisibility([item.name]);
+          buildShop();
+        });
+        row.appendChild(visBtn);
+
+        row.addEventListener('click', e => {
+          if (row._shopDragging
+            || e.target.closest('.shop-item-vis-btn')
+            || e.target.closest('.shop-item-avail-btn')) return;
+          inv.toggleShopItem(slotData, `rand-${item.name}`);
+        });
+
+        row.style.touchAction = 'none';
+        let lpTimer = null, lpX, lpY, lpPointerId, lpTracking = false;
+        row.addEventListener('pointerdown', e => {
+          if (e.button !== 0) return;
+          lpX = e.clientX; lpY = e.clientY; lpPointerId = e.pointerId; lpTracking = true;
+          lpTimer = setTimeout(() => {
+            lpTimer = null;
+            row._shopDragging = true;
+            row.classList.add('shop-item-dragging');
+            document.documentElement.setPointerCapture(lpPointerId);
+            inv.startRandItemDrag(slotData, e.clientX, e.clientY, () => {
+              const i = _randLastRoll.findIndex(r => r.slotData === slotData);
+              if (i !== -1) {
+                _randLastRoll.splice(i, 1);
+                randResult.innerHTML = '';
+                _randLastRoll.forEach(({ item, itemSection, itemRarity, slotData: sd }) => {
+                  randResult.appendChild(buildRandResultRow(item, itemSection, itemRarity, sd));
+                });
+                if (!_randLastRoll.length) randResult.style.visibility = 'hidden';
+              }
+            });
+            const cleanup = () => {
+              row._shopDragging = false;
+              row.classList.remove('shop-item-dragging');
+              document.removeEventListener('pointerup', cleanup);
+              document.removeEventListener('pointercancel', cleanup);
+            };
+            document.addEventListener('pointerup', cleanup);
+            document.addEventListener('pointercancel', cleanup);
+          }, 380);
+        });
+        row.addEventListener('pointermove', e => {
+          if (!lpTracking) return;
+          if ((e.clientX - lpX) ** 2 + (e.clientY - lpY) ** 2 > 64) {
+            if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+            lpTracking = false;
+          }
+        });
+        const cancelLP = () => {
+          if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+          lpTracking = false;
+          row._shopDragging = false;
+          row.classList.remove('shop-item-dragging');
+        };
+        row.addEventListener('pointerup', cancelLP);
+        row.addEventListener('pointercancel', cancelLP);
+
+        return row;
+      };
+
+      btn.addEventListener('click', () => {
+        const map = sectionItems[tableSelect.value] || {};
+        const rarity = rarityWrap.hidden ? '' : raritySelect.value;
+        const pool = [];
+        if (rarity === '__all__' || rarity === '') {
+          Object.values(map).forEach(arr => pool.push(...arr));
+        } else {
+          pool.push(...(map[rarity] || []));
+        }
+        if (!pool.length) { randResult.innerHTML = '<em>No items in this selection.</em>'; randResult.style.visibility = ''; return; }
+
+        const shuffled = [...pool].sort(() => Math.random() - 0.5);
+        const picked = shuffled.slice(0, randCount);
+
+        // Dice cycling animation
+        btn.disabled = true;
+        btn.style.width  = btn.offsetWidth  + 'px';
+        btn.style.height = btn.offsetHeight + 'px';
+        randResult.style.visibility = 'hidden';
+        const diceIcons = ['fa-dice-one','fa-dice-two','fa-dice-three','fa-dice-four','fa-dice-five','fa-dice-six'];
+        const step = Math.floor(Math.random() * 5) + 1; // 1–5, never repeats same face
+        let iconIdx = Math.floor(Math.random() * diceIcons.length);
+        const nextIcon = () => { iconIdx = (iconIdx + step) % diceIcons.length; return diceIcons[iconIdx]; };
+        const diceHtml = () => `<span class="dm-rand-dice-wrap"><i class="fas ${nextIcon()} dm-rand-dice-jump"></i><span class="dm-rand-dice-ground"></span></span>`;
+        btn.innerHTML = diceHtml();
+        const cycleInterval = setInterval(() => {
+          btn.innerHTML = diceHtml();
+        }, 350);
+
+        setTimeout(() => {
+          clearInterval(cycleInterval);
+          btn.querySelector('.dm-rand-dice-jump')?.classList.remove('dm-rand-dice-jump');
+        }, 1000);
+
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.style.width  = '';
+          btn.style.height = '';
+          btn.textContent = 'Randomize';
+
+          _randLastRoll = picked.map(item => {
+            const itemSection = randItemSectionMap.get(item) || '';
+            const itemRarity  = randItemRarityMap.get(item) || '';
+            return { item, itemSection, itemRarity, slotData: rollRandSlotData(item, itemSection) };
+          });
+          randResult.innerHTML = '';
+          _randLastRoll.forEach(({ item, itemSection, itemRarity, slotData }) => {
+            randResult.appendChild(buildRandResultRow(item, itemSection, itemRarity, slotData));
+          });
+          randResult.style.visibility = '';
+        }, 1250); // end setTimeout
+      });
+
+      scroll.appendChild(panel);
+
+      if (_randLastRoll.length) {
+        _randLastRoll.forEach(({ item, itemSection, itemRarity, slotData }) => {
+          randResult.appendChild(buildRandResultRow(item, itemSection, itemRarity, slotData));
+        });
+        randResult.style.visibility = '';
+      }
+    }
+    // ── END DM RANDOMIZER ─────────────────────────────────────────────────────
+
+    // ── DM LISTINGS SECTION ───────────────────────────────────────────────────
+    if (dmListings.length > 0 || window._isDM) {
+      const listSection = document.createElement('div');
+      listSection.className = 'dm-listings-section';
+      if (window._isDM) listSection.dataset.dmListingsDrop = 'true';
+
+      const listHeading = document.createElement('button');
+      listHeading.className = 'dm-listings-toggle';
+      const _listCount = dmListings.length;
+      listHeading.innerHTML = `For Sale${_listCount ? ` <span class="dm-listings-count">${_listCount}</span>` : ''}<i class="fas fa-chevron-${dmListingsCollapsed ? 'down' : 'up'} dm-listings-chevron"></i>`;
+      listHeading.addEventListener('click', () => {
+        dmListingsCollapsed = !dmListingsCollapsed;
+        localStorage.setItem('dmListingsCollapsed', dmListingsCollapsed);
+        buildShop();
+      });
+      listSection.appendChild(listHeading);
+
+      if (!dmListingsCollapsed) {
+      if (dmListings.length === 0) {
+        const emptyEl = document.createElement('div');
+        emptyEl.className = 'dm-listings-empty';
+        emptyEl.textContent = 'Drag items here to list for sale';
+        listSection.appendChild(emptyEl);
       }
 
-      container.removeItem(item);
-      itemDivCache.delete(item);
-      drawInventory(inventory);
-    }
-  });
+      dmListings.forEach((listingData, listIdx) => {
+        // Marks this instance as a persisted DM listing (vs. a catalog/random
+        // row) so the inspector's variable-edit handlers know to save changes
+        // (e.g. remaining charges) back to /inventory_dm_listings.
+        listingData._isDmListing = true;
+        const listRow = document.createElement('div');
+        // Visibility/availability are keyed by item name, same as the main
+        // catalog — a listing of an item already in the catalog shares that
+        // item's toggle state rather than having its own per-instance one.
+        const listVisible = isItemVisible(listingData.name, '');
+        const listAvail   = isItemAvailable(listingData.name);
+        if (!listVisible) listRow.dataset.playerHidden = 'true';
 
-  const inventory = new Inventory();
+        const listNameSpan = document.createElement('span');
+        listNameSpan.className = 'shop-item-name';
+        const _ls = listingData.silvered ? 'Silvered ' : '';
+        const _lm = (listingData.material === 'mithral' || listingData.material === 'adamantine')
+          ? listingData.material.charAt(0).toUpperCase() + listingData.material.slice(1) + ' ' : '';
+        listNameSpan.textContent = _ls + _lm + inv.computeDisplayName(listingData);
+        listRow.appendChild(listNameSpan);
 
-  function createPouch() {
-    const pouch = new InventoryItem({
-      name: "Pouch",
-      bulk: Bulk.HANDHELD,
-      container: { col: 1, row: 5 },
-      displayText: containerDisplayText
-    });
-    return pouch;
-  }
+        // hasUses:'coins' items (Waning Wands, Tonic of Potency, etc.) price
+        // per remaining charge — without this multiplier a listing always
+        // showed the flat per-charge cost regardless of how many charges
+        // the actual instance has left. Only the base cost scales with
+        // charges; type/material surcharges are one-time, not per-use.
+        const _listBaseCp = listingData.cost ? shopCostToCp(listingData.cost) : 0;
+        const _listTypeCp = inv.getSlotTypeCostCp(listingData);
+        const _listMatCp = inv.getSlotMaterialCostCp(listingData, listingData.category === 'ammunition');
+        const _listCostBaseCp = listingData.costBase ? shopCostToCp(listingData.costBase) : 0;
+        const _listMult = inv.getSlotCoinUsesMultiplier(listingData);
+        const listTotalCp = _listCostBaseCp > 0
+          ? _listBaseCp * _listMult + _listTypeCp + _listCostBaseCp + _listMatCp
+          : _listBaseCp * _listMult + _listTypeCp + _listMatCp;
+        const listCostEl = document.createElement('span');
+        listCostEl.className = 'shop-item-cost';
+        if (listTotalCp > 0) listCostEl.innerHTML = renderCostHtml(listTotalCp, '');
+        listRow.appendChild(listCostEl);
 
+        // Same affordability gating the general catalog already has (see
+        // applyRowState()/updateShopAffordability() below) — a "For Sale"
+        // listing is still a purchase, and used to have no affordability
+        // check of its own at all: buying one with insufficient funds (or
+        // with no coin-purse item in your inventory to deduct from) always
+        // silently succeeded for free. dataset.costCp lets the shared
+        // updateShopAffordability() sweep keep this in sync after later
+        // wallet changes too, exactly like a catalog row.
+        const listCoins  = getCharCoins(inv.getState());
+        const listWallet = listCoins.pp * 1000 + listCoins.gp * 100 + listCoins.sp * 10 + listCoins.cp;
+        const listCantAfford = !window._isDM && listTotalCp > 0 && listTotalCp > listWallet;
+        listRow.dataset.costCp = listTotalCp;
+        listRow.className = 'shop-item-row'
+          + (!listVisible && window._isDM ? ' shop-item-hidden' : '')
+          + (!listAvail ? ' shop-item-unavailable' : '')
+          + (listCantAfford ? ' shop-item-unaffordable' : '');
 
-  const input = document.getElementById("search-input");
-  const results = document.getElementById("search-results");
-  results.style.display = "flex";
-  results.style.flexDirection = "column";
-  results.style.gap = "4px";
+        if (window._isDM) {
+          const listAvailBtn = document.createElement('button');
+          listAvailBtn.className = 'shop-item-avail-btn' + (!listAvail ? ' unavailable' : '');
+          listAvailBtn.innerHTML = listAvail ? '<i class="fas fa-check"></i>' : '<i class="fas fa-ban"></i>';
+          listAvailBtn.title = listAvail ? 'Mark as unavailable' : 'Mark as available';
+          listAvailBtn.addEventListener('pointerdown', e => e.stopPropagation());
+          listAvailBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            shopAvailability[listingData.name] = !isItemAvailable(listingData.name);
+            saveShopAvailability([listingData.name]);
+            buildShop();
+          });
+          listRow.appendChild(listAvailBtn);
 
-  input.addEventListener("input", () => {
-    const query = input.value.toLowerCase();
-    results.innerHTML = "";
-    if (!query) return;
+          const listVisBtn = document.createElement('button');
+          listVisBtn.className = 'shop-item-vis-btn';
+          listVisBtn.innerHTML = listVisible ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+          listVisBtn.title = listVisible ? 'Hide from players' : 'Show to players';
+          listVisBtn.addEventListener('pointerdown', e => e.stopPropagation());
+          listVisBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            shopVisibility[listingData.name] = !isItemVisible(listingData.name, '');
+            saveShopVisibility([listingData.name]);
+            buildShop();
+          });
+          listRow.appendChild(listVisBtn);
+        }
 
-    ITEM_LIBRARY
-      .filter(i => i.name.toLowerCase().includes(query))
-      .forEach(itemData => {
-        const div = drawItem(new InventoryItem(itemData), 0, 0, "search", true);
-        div.style.width = `${itemData.bulk.width * CELL_WIDTH}px`;
-        div.style.height = `${itemData.bulk.height * CELL_HEIGHT}px`;
-        results.appendChild(div);
+        listRow.addEventListener('click', e => {
+          if (listRow._dragging
+            || e.target.closest('.shop-item-vis-btn')
+            || e.target.closest('.shop-item-avail-btn')) return;
+          inv.toggleShopItem(listingData, `dm-listing-${listingData._dmKey || listIdx}`);
+        });
+
+        listRow.style.touchAction = 'none';
+        let _lt = null, _lx, _ly, _lpid, _ltrk = false;
+        listRow.addEventListener('pointerdown', e => {
+          if (e.button !== 0) return;
+          _lx = e.clientX; _ly = e.clientY; _lpid = e.pointerId; _ltrk = true;
+          // Unlike the general catalog, a "For Sale" listing is never
+          // blocked by the availability toggle — it's keyed by item name
+          // and shared with that item's catalog entry (see the comment
+          // above), but a DM listing is a specific, individually-placed
+          // item meant to be bought; the shared unavailable flag still
+          // shows visually here, it just shouldn't stop the purchase.
+          _lt = setTimeout(() => {
+            _lt = null;
+            // Affordability, unlike availability, DOES block a purchase —
+            // same rule as the general catalog (see cantAfford there).
+            if (!window._isDM && listRow.classList.contains('shop-item-unaffordable')) {
+              [listNameSpan, ...Array.from(listCostEl.children)].forEach(el => {
+                el.classList.remove('shop-item-flash');
+                void el.offsetWidth;
+                el.classList.add('shop-item-flash');
+                setTimeout(() => el.classList.remove('shop-item-flash'), 900);
+              });
+              return;
+            }
+            listRow._dragging = true;
+            listRow.classList.add('shop-item-dragging');
+            document.documentElement.setPointerCapture(_lpid);
+            // Same fully-calculated price shown in the "For Sale" row (base +
+            // type + material, scaled by remaining charges) — without this the
+            // deducted cost fell back to the item's flat catalog price instead.
+            listingData._shopCostCp = listTotalCp;
+            // Catalog items get this set in buildShopSlotData(); DM listings
+            // never did, so buying one fell through to the generic "moved
+            // from {whoever's currently open} to {buyer}" path instead of
+            // being recognized as a purchase.
+            listingData._shopItem = true;
+            inv.startDmListingDrag(listingData, e.clientX, e.clientY, () => {
+              dmListings.splice(listIdx, 1);
+              // Explicit remove() for this one key — saveDmListings() deliberately
+              // never deletes (see its comment), so removal has to say so directly.
+              if (listingData._dmKey && dmListingsRef) dmListingsRef.child(listingData._dmKey).remove();
+            });
+            const _lclean = () => {
+              listRow._dragging = false;
+              listRow.classList.remove('shop-item-dragging');
+              document.removeEventListener('pointerup', _lclean);
+              document.removeEventListener('pointercancel', _lclean);
+            };
+            document.addEventListener('pointerup', _lclean);
+            document.addEventListener('pointercancel', _lclean);
+          }, 380);
+        });
+        listRow.addEventListener('pointermove', e => {
+          if (!_ltrk) return;
+          if ((e.clientX - _lx) ** 2 + (e.clientY - _ly) ** 2 > 64) {
+            if (_lt) { clearTimeout(_lt); _lt = null; }
+            _ltrk = false;
+          }
+        });
+        const _lcancel = () => {
+          if (_lt) { clearTimeout(_lt); _lt = null; }
+          _ltrk = false;
+          listRow._dragging = false;
+          listRow.classList.remove('shop-item-dragging');
+        };
+        listRow.addEventListener('pointerup', _lcancel);
+        listRow.addEventListener('pointercancel', _lcancel);
+
+        listSection.appendChild(listRow);
       });
+      } // end !dmListingsCollapsed
+
+      scroll.appendChild(listSection);
+    }
+    // ── END DM LISTINGS ───────────────────────────────────────────────────────
+
+    // Calculate current character's total wealth in cp for affordability display
+    const charCoins = getCharCoins(currentCharId ? allChars[currentCharId]?.state : null);
+    const walletCp  = charCoins.pp * 1000 + charCoins.gp * 100 + charCoins.sp * 10 + charCoins.cp;
+
+    ITEM_LIBRARY.forEach(item => {
+      if (item._section) {
+        currentSection = item._section;
+        currentRarity  = null;
+        if (SHOP_HIDDEN_SECTIONS.has(currentSection)) return;
+        visibleSections.push(currentSection);
+        const h = document.createElement('div');
+        h.className = 'shop-section-heading';
+        h.textContent = item._section;
+        scroll.appendChild(h);
+        return;
+      }
+
+      if (item._rarity) {
+        currentRarity = item._rarity;
+        if (SHOP_HIDDEN_SECTIONS.has(currentSection)) return;
+        const div = document.createElement('div');
+        div.className = 'shop-rarity-divider';
+        div.dataset.section = currentSection;
+        div.dataset.rarity  = currentRarity;
+        const label = document.createElement('span');
+        label.className = 'shop-rarity-label';
+        label.textContent = currentRarity;
+        div.appendChild(label);
+        if (window._isDM) {
+          const btn = document.createElement('button');
+          btn.className = 'shop-rarity-toggle';
+          btn.dataset.section = currentSection;
+          btn.dataset.rarity  = currentRarity;
+          div.appendChild(btn);
+        }
+        scroll.appendChild(div);
+        return;
+      }
+
+      if (!item.name) return;
+      if (item.shopHidden) return;
+      if (SHOP_HIDDEN_SECTIONS.has(currentSection)) return;
+
+      const visible    = isItemVisible(item.name, currentSection);
+      const avail      = isItemAvailable(item.name);
+      const baseCostCp = shopCostToCp(item.cost);
+      const costSuffix = (item.cost || '').match(/\/\S+/)?.[0] || '';
+
+      // Effective category for material toggle eligibility
+      const shopCat = item.category
+        || (item.variables?.weapon?.control === 'select' ? 'weapon'
+          : item.variables?.armor?.control  === 'select' ? 'armor'
+          : ['Simple Weapons','Martial Weapons','Magical Weapons'].includes(currentSection) ? 'weapon'
+          : currentSection === 'Armor & Shields' ? (item.name === 'Shield' ? 'shield' : 'armor')
+          : null);
+      const canSilver = ['weapon','ammunition'].includes(shopCat);
+      const canMetal  = ['weapon','armor','shield','ammunition'].includes(shopCat);
+
+      // Weapon/armor type select variable
+      const typeVar    = item.variables?.weapon?.control  === 'select' ? item.variables.weapon
+                       : item.variables?.armor?.control   === 'select' ? item.variables.armor
+                       : null;
+      const elementVar = item.variables?.element?.control === 'select' ? item.variables.element : null;
+      const spellVar    = item.variables?.spell?.control    === 'select' ? item.variables.spell    : null;
+      const creatureVar = item.variables?.creature?.control === 'select' ? item.variables.creature : null;
+
+      // Persistent slotData for this row — mutated by the inspector, read by getSlotData()
+      // Type/element start as '' (unselected placeholder) so user must pick before purchasing
+      const cachedSlotData = buildShopSlotData(
+        item, typeVar?.value, false, null, elementVar?.value, 0
+      );
+      const typeNeedsChoice = typeVar && (typeVar.options || []).length > 1;
+      if (typeNeedsChoice && cachedSlotData.variables?.weapon?.control === 'select') cachedSlotData.variables.weapon.value = '';
+      if (typeNeedsChoice && cachedSlotData.variables?.armor?.control  === 'select') cachedSlotData.variables.armor.value  = '';
+      if (elementVar && cachedSlotData.variables?.element?.control === 'select') cachedSlotData.variables.element.value = '';
+      if (spellVar    && cachedSlotData.variables?.spell?.control    === 'select') cachedSlotData.variables.spell.value    = '';
+      if (creatureVar && cachedSlotData.variables?.creature?.control === 'select') cachedSlotData.variables.creature.value = '';
+      // Explicit unresolved flag — more reliable than checking '' values at drag time
+      if (typeNeedsChoice || elementVar || spellVar || creatureVar) cachedSlotData._unresolved = true;
+      // Base Ammunition requires a material (silvered/mithral/adamantine) before purchase
+      if (item.name === 'Ammunition' && !cachedSlotData.silvered && !cachedSlotData.material) cachedSlotData._unresolved = true;
+
+      const getTypeCostCp = () => {
+        if (!typeNeedsChoice) return 0;
+        const typeName = cachedSlotData.variables?.weapon?.value
+                      ?? cachedSlotData.variables?.armor?.value;
+        if (typeName) {
+          const lib = ITEM_LIBRARY.find(i => i.name === typeName);
+          return lib?.cost ? shopCostToCp(lib.cost) : 0;
+        }
+        const spellName = cachedSlotData.variables?.spell?.value;
+        if (spellName) return window.SPELL_STORING_COSTS?.[spellName] || 0;
+        return 0;
+      };
+
+      const getTotalCostCp = () => {
+        const isAmmo = shopCat === 'ammunition';
+        const silverCp = isAmmo ? 1000 : 10000;
+        const metalCp  = isAmmo ? 5000 : 50000;
+        const typeCostCp = getTypeCostCp();
+        const materialExtra = (cachedSlotData.silvered ? silverCp : 0)
+                            + (cachedSlotData.material ? metalCp  : 0);
+        const costBaseCp = item.costBase ? shopCostToCp(item.costBase) : 0;
+        let base;
+        if (item.hasUses === 'coins') {
+          const cv = cachedSlotData.variables || {};
+          const charges = Math.max(0, cv.uses?.value ?? cv.count?.value ?? 1);
+          base = costBaseCp > 0
+            ? baseCostCp * charges + typeCostCp + costBaseCp + materialExtra
+            : baseCostCp * charges + typeCostCp + materialExtra;
+        } else {
+          base = baseCostCp + typeCostCp + materialExtra + costBaseCp;
+        }
+        return base * Math.max(1, cachedSlotData.variables?.qty?.value || 1);
+      };
+
+      const getDisplayName = () => {
+        let name = item.name;
+        const wv = cachedSlotData.variables?.weapon;
+        const av = cachedSlotData.variables?.armor;
+        const ev = cachedSlotData.variables?.element;
+        if (wv?.control === 'select' && wv.value) name = name.replace('Weapon', wv.value);
+        if (av?.control === 'select' && av.value) name = name.replace('Armor',  av.value);
+        if (ev?.control === 'select' && ev.value) name = name.replace('Elemental', ev.value);
+        const sv = cachedSlotData.variables?.spell;
+        if (sv?.control === 'select' && sv.value) name = name.replace('Spell Storing', sv.value);
+        const crv = cachedSlotData.variables?.creature;
+        if (crv?.control === 'select' && crv.value) name = name.replace('Creature', crv.value);
+        const silverPfx = cachedSlotData.silvered ? 'Silvered ' : '';
+        const metal = (cachedSlotData.material === 'mithral' || cachedSlotData.material === 'adamantine')
+          ? cachedSlotData.material : null;
+        const qty = cachedSlotData.variables?.qty?.value || 1;
+        const qtyPfx = qty > 1 ? `${qty} × ` : '';
+        return qtyPfx + silverPfx + (metal ? metal.charAt(0).toUpperCase() + metal.slice(1) + ' ' : '') + name;
+      };
+
+      const row = document.createElement('div');
+      row.dataset.section  = currentSection;
+      row.dataset.rarity   = currentRarity || '';
+      row.dataset.itemName = item.name;
+      if (!visible) row.dataset.playerHidden = 'true';
+
+      const applyRowState = () => {
+        const totalCp = getTotalCostCp();
+        row.dataset.costCp = totalCp;
+        const coins  = getCharCoins(inv.getState());
+        const wallet = coins.pp * 1000 + coins.gp * 100 + coins.sp * 10 + coins.cp;
+        const cantAfford = !window._isDM && totalCp > 0 && totalCp > wallet;
+        row.className = 'shop-item-row'
+          + (!visible && window._isDM ? ' shop-item-hidden' : '')
+          + (!avail ? ' shop-item-unavailable' : '')
+          + (cantAfford ? ' shop-item-unaffordable' : '');
+        costSpan.innerHTML = item.cost ? renderCostHtml(totalCp, costSuffix) : '';
+        nameSpan.textContent = getDisplayName();
+      };
+
+      const costSpan = document.createElement('span');
+      costSpan.className = 'shop-item-cost';
+
+      const infoIcon = document.createElement('span');
+      infoIcon.className = 'shop-item-info-icon';
+      infoIcon.innerHTML = '<i class="fas fa-circle-info"></i>';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'shop-item-name';
+      nameSpan.textContent = item.name;
+
+      row.appendChild(infoIcon);
+      row.appendChild(nameSpan);
+
+      row.appendChild(costSpan);
+
+      if (window._isDM) {
+        const availBtn = document.createElement('button');
+        availBtn.className = 'shop-item-avail-btn' + (!avail ? ' unavailable' : '');
+        availBtn.innerHTML = avail ? '<i class="fas fa-check"></i>' : '<i class="fas fa-ban"></i>';
+        availBtn.title = avail ? 'Mark as unavailable' : 'Mark as available';
+        availBtn.addEventListener('pointerdown', e => e.stopPropagation());
+        availBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          shopAvailability[row.dataset.itemName] = !isItemAvailable(row.dataset.itemName);
+          saveShopAvailability([row.dataset.itemName]);
+          buildShop();
+        });
+        row.appendChild(availBtn);
+
+        const visBtn = document.createElement('button');
+        visBtn.className = 'shop-item-vis-btn';
+        visBtn.innerHTML  = visible ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+        visBtn.title = visible ? 'Hide from players' : 'Show to players';
+        visBtn.addEventListener('pointerdown', e => e.stopPropagation());
+        visBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          shopVisibility[row.dataset.itemName] = !isItemVisible(row.dataset.itemName, row.dataset.section);
+          saveShopVisibility([row.dataset.itemName]);
+          buildShop();
+        });
+        row.appendChild(visBtn);
+      }
+
+      // Initial state
+      applyRowState();
+      row._applyRowState = applyRowState;
+
+      const getSlotData = () => {
+        cachedSlotData._shopCostCp = getTotalCostCp();
+        return cachedSlotData;
+      };
+
+      row.addEventListener('click', e => {
+        if (row._shopDragging
+          || e.target.closest('.shop-item-vis-btn')
+          || e.target.closest('.shop-item-avail-btn')) return;
+        inv.toggleShopItem(getSlotData(), `shop-${item.name}`);
+      });
+
+      row.style.touchAction = 'none';
+      let lpTimer = null, lpX, lpY, lpPointerId, lpScrolling = false, lpLastY = 0;
+      const shopScrollEl = document.getElementById('shop-scroll');
+
+      // Bound to `document`, not `row`, and explicitly detached once the
+      // gesture ends — see the identical fix (and full reasoning) on the
+      // main inventory grid's slot drag/scroll handling above.
+      const onShopScrollMove = e => {
+        if (lpScrolling) {
+          shopScrollEl.scrollTop += lpLastY - e.clientY;
+          lpLastY = e.clientY;
+          return;
+        }
+        if ((e.clientX - lpX) ** 2 + (e.clientY - lpY) ** 2 > 64) {
+          if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+          lpScrolling = true;
+          lpLastY = e.clientY;
+        }
+      };
+      const detachShopScrollTracking = () => {
+        document.removeEventListener('pointermove', onShopScrollMove);
+        document.removeEventListener('pointerup', onShopScrollUp);
+        document.removeEventListener('pointercancel', onShopScrollUp);
+      };
+      const onShopScrollUp = () => {
+        if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+        lpScrolling = false;
+        row._shopDragging = false;
+        row.classList.remove('shop-item-dragging');
+        detachShopScrollTracking();
+      };
+
+      row.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        lpX = e.clientX; lpY = e.clientY; lpPointerId = e.pointerId;
+        lpScrolling = false;
+        document.addEventListener('pointermove', onShopScrollMove);
+        document.addEventListener('pointerup', onShopScrollUp);
+        document.addEventListener('pointercancel', onShopScrollUp);
+        const blocked = !window._isDM && !isItemAvailable(item.name);
+        const flashText = () => {
+          [nameSpan, ...Array.from(costSpan.children)].forEach(el => {
+            el.classList.remove('shop-item-flash');
+            void el.offsetWidth;
+            el.classList.add('shop-item-flash');
+            setTimeout(() => el.classList.remove('shop-item-flash'), 900);
+          });
+        };
+        if (blocked) {
+          flashText();
+          return; // scroll tracking stays attached; onShopScrollUp detaches it on release
+        }
+        lpTimer = setTimeout(() => {
+          lpTimer = null;
+          lpScrolling = false;
+          detachShopScrollTracking(); // real drag confirmed — startShopDrag() has its own document-level cleanup below
+          if (!window._isDM && row.classList.contains('shop-item-unaffordable')) {
+            flashText();
+            return;
+          }
+          if (cachedSlotData._unresolved) {
+            flashText();
+            inv.showShopItem(getSlotData(), `shop-${item.name}`);
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+              document.querySelectorAll('#insp-props .insp-select').forEach(sel => {
+                if (sel.value !== '') return;
+                sel.classList.remove('flash-required');
+                void sel.offsetWidth;
+                sel.classList.add('flash-required');
+                setTimeout(() => sel.classList.remove('flash-required'), 900);
+              });
+              if (item.name === 'Ammunition') {
+                document.querySelectorAll('#insp-props [data-mat-chip]').forEach(btn => {
+                  btn.classList.remove('chip-flash-required');
+                  void btn.offsetWidth;
+                  btn.classList.add('chip-flash-required');
+                  setTimeout(() => btn.classList.remove('chip-flash-required'), 900);
+                });
+              }
+            }));
+            return;
+          }
+          row._shopDragging = true;
+          row.classList.add('shop-item-dragging');
+          document.documentElement.setPointerCapture(lpPointerId);
+          inv.startShopDrag(getSlotData(), e.clientX, e.clientY);
+          const cleanup = () => {
+            row._shopDragging = false;
+            row.classList.remove('shop-item-dragging');
+            document.removeEventListener('pointerup',     cleanup);
+            document.removeEventListener('pointercancel', cleanup);
+          };
+          document.addEventListener('pointerup',     cleanup);
+          document.addEventListener('pointercancel', cleanup);
+        }, 380);
+      });
+
+      scroll.appendChild(row);
+    });
+
+    // Wire rarity toggle buttons after all rows exist
+    if (window._isDM) {
+      scroll.querySelectorAll('.shop-rarity-toggle').forEach(btn => {
+        const sec  = btn.dataset.section;
+        const rar  = btn.dataset.rarity;
+        const rows = [...scroll.querySelectorAll(`.shop-item-row[data-section="${sec}"][data-rarity="${rar}"]`)];
+        const allHidden = rows.length > 0 && rows.every(r => r.dataset.playerHidden === 'true');
+        btn.innerHTML = allHidden ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+        btn.title = allHidden ? 'Show all to players' : 'Hide all from players';
+        btn.addEventListener('click', () => {
+          const itemRows = [...scroll.querySelectorAll(
+            `.shop-item-row[data-section="${btn.dataset.section}"][data-rarity="${btn.dataset.rarity}"]`
+          )];
+          const nowAllHidden = itemRows.every(r => r.dataset.playerHidden === 'true');
+          itemRows.forEach(r => { shopVisibility[r.dataset.itemName] = nowAllHidden; });
+          saveShopVisibility(itemRows.map(r => r.dataset.itemName));
+          buildShop();
+        });
+      });
+    }
+
+    // Populate category dropdown (preserve selection)
+    const categorySelect = document.getElementById('shop-category');
+    const prevVal = categorySelect.value;
+    categorySelect.innerHTML = '<option value="">All categories</option>';
+    [...visibleSections].sort((a, b) => a.localeCompare(b)).forEach(section => {
+      const opt = document.createElement('option');
+      opt.value = section;
+      opt.textContent = section;
+      categorySelect.appendChild(opt);
+    });
+    if (prevVal) categorySelect.value = prevVal;
+
+    filterShop();
+
+    // Restore scroll position after DOM rebuild
+    scroll.scrollTop = savedScrollTop;
+  }
+
+  function buildShopSlotData(libItem, selectedType, silvered, material, selectedElement, totalCostCp) {
+    const vars = JSON.parse(JSON.stringify(libItem.variables || {}));
+    if (selectedType) {
+      if (vars.weapon?.control  === 'select') vars.weapon.value  = selectedType;
+      if (vars.armor?.control   === 'select') vars.armor.value   = selectedType;
+    }
+    if (selectedElement && vars.element?.control === 'select') vars.element.value = selectedElement;
+    if (!vars.qty) vars.qty = { value: 1, control: 'both', min: 1, max: 99 };
+    const slotData = { name: libItem.name, variables: vars, _shopItem: true };
+    if (libItem.hasUses)  slotData.hasUses   = libItem.hasUses;
+    if (silvered)         slotData.silvered  = true;
+    if (material)         slotData.material  = material;
+    if (totalCostCp != null) slotData._shopCostCp = totalCostCp;
+    return slotData;
+  }
+
+  function filterShop() {
+    const query    = (document.getElementById('shop-search').value || '').trim().toLowerCase();
+    const category = document.getElementById('shop-category').value;
+    const scroll   = document.getElementById('shop-scroll');
+    scroll.querySelectorAll('.shop-item-row').forEach(row => {
+      const visMatch = window._isDM || row.dataset.playerHidden !== 'true';
+      // "For Sale" listings aren't part of the searchable/categorized catalog,
+      // but they still need to respect the same hide-from-players toggle.
+      if (row.closest('.dm-listings-section')) {
+        row.hidden = !visMatch;
+        return;
+      }
+      const nameMatch = !query    || row.querySelector('.shop-item-name').textContent.toLowerCase().includes(query);
+      const catMatch  = !category || row.dataset.section === category;
+      row.hidden = !(nameMatch && catMatch && visMatch);
+    });
+    scroll.querySelectorAll('.shop-rarity-divider').forEach(divider => {
+      let sib = divider.nextElementSibling, has = false;
+      while (sib && !sib.classList.contains('shop-rarity-divider') && !sib.classList.contains('shop-section-heading')) {
+        if (!sib.hidden && sib.classList.contains('shop-item-row')) { has = true; break; }
+        sib = sib.nextElementSibling;
+      }
+      divider.hidden = !has;
+    });
+    scroll.querySelectorAll('.shop-section-heading').forEach(heading => {
+      let sib = heading.nextElementSibling, has = false;
+      while (sib && !sib.classList.contains('shop-section-heading')) {
+        if (!sib.hidden && sib.classList.contains('shop-item-row')) { has = true; break; }
+        sib = sib.nextElementSibling;
+      }
+      heading.hidden = !has;
+    });
+  }
+
+  document.getElementById('shop-search').addEventListener('input', filterShop);
+  document.getElementById('shop-category').addEventListener('change', filterShop);
+
+  function updateShopWallet() {
+    updateShopAffordability();
+  }
+
+  function updateShopAffordability() {
+    if (!shopOpen || window._isDM) return;
+    const coins   = getCharCoins(inv.getState());
+    const walletCp = coins.pp * 1000 + coins.gp * 100 + coins.sp * 10 + coins.cp;
+    document.querySelectorAll('.shop-item-row').forEach(row => {
+      const costCp = parseInt(row.dataset.costCp || '0');
+      row.classList.toggle('shop-item-unaffordable', costCp > 0 && costCp > walletCp);
+    });
+  }
+
+  function openShop() {
+    closeRules(); // pops its history entry first, if it was open
+    closeHistoryPanel(); // ditto for the DM history panel
+    shopOpen = true;
+    updateHamburgerMenu();
+    setStatsEditing(false);
+    shopTabBtn.classList.add('active');
+    charPanelsEl.hidden         = true;
+    charFieldsEditBtn.hidden    = true;
+    shopPanel.hidden            = false;
+    inv.collapsePanelInstant();
+    if (_hexmapMode) {
+      _shopFromHexmap = true;
+      _hexmapMode = false;
+      _applyViewMode();
+      window.hexOnGoToInventory && window.hexOnGoToInventory();
+    }
+    // Not just the hexmap-transition case: Rules also leaves currentCharId
+    // null, and that can be reached here without ever passing through the
+    // branch above.
+    restoreCharSelection();
+    // Purchases (and anything else that happens while the shop is open) are
+    // always charged to whichever character is currently selected — correct
+    // for buying for yourself, and also correct for the drag-onto-another-
+    // tab "buy as a gift" flow (that deducts from the giver, the character
+    // selected *before* the drop, not the receiver). The one gap was
+    // arriving here with a non-owned character still selected from earlier
+    // navigation (e.g. browsing another player's sheet), which would
+    // silently spend from their wallet instead. Force your own character
+    // here so that can't happen — for everyone, DMs included: a DM's
+    // purchase should come from a character *they* own the same as a
+    // player's, not from whichever player's sheet they last happened to
+    // have open. Only switches if the currently selected character isn't
+    // already one you own, so owning more than one character doesn't cause
+    // an unnecessary switch away from whichever of your own you were on.
+    if (currentUser && allChars[currentCharId]?.ownerUid !== currentUser.uid) {
+      const myChar = Object.values(allChars).find(c => c.ownerUid === currentUser.uid);
+      if (myChar) switchToChar(myChar.id, false);
+    }
+    inv.closeInspector();
+    document.getElementById('shop-search').value = '';
+    document.getElementById('shop-category').value = '';
+    updateShopWallet();
+    buildShop();
+    if (!_handlingPopstate) history.pushState({ view: 'shop' }, '');
+  }
+
+  function closeShop(replaceHistory = false) {
+    shopOpen = false;
+    updateHamburgerMenu();
+    shopTabBtn.classList.remove('active');
+    shopPanel.hidden          = true;
+    charPanelsEl.hidden         = false;
+    updateEditBtn();
+    if (_shopFromHexmap) {
+      _shopFromHexmap = false;
+      deselectChar();
+      _hexmapMode = true;
+      inv.collapsePanelInstant();
+      _applyViewMode();
+      window.hexOnGoToHexmap && window.hexOnGoToHexmap();
+    } else {
+      inv.collapsePanelInstant();
+      inv.closeInspector();
+    }
+    if (!_handlingPopstate) {
+      if (replaceHistory) {
+        history.replaceState({ view: 'inventory' }, '');
+      } else {
+        _suppressPopstate = true;
+        history.back();
+      }
+    }
+  }
+
+  shopTabBtn.addEventListener('click', () => {
+    if (shopOpen) closeShop(); else openShop();
   });
 
-  function updateInspector(item) {
-    inspectorDiv.innerHTML = `
-      <h2>${item.name}</h2>
-      <p>${item.description || "No description provided."}</p>
-      <div class="variables">
-        ${Object.entries(item.variables).map(([key, meta]) => {
-          const { value, control, min, max } = meta;
+  // ── ROLE (DM / PLAYER) ──────────────────────────────────────────────────
+  const menuRoleBtn   = document.getElementById('menu-role-btn');
+  let userCanBeDM = false;
 
-          const minus = (control === "plusminus" || control === "both")
-            ? `<button onclick="changeVariable('${item.id}', '${key}', -1)">-</button>`
-            : "";
+  // ── ASSIGN CHARACTER TO PLAYER ───────────────────────────────────────────
+  const charAssignBtn = document.getElementById('char-assign-btn');
 
-          const plus = (control === "plusminus" || control === "both")
-            ? `<button onclick="changeVariable('${item.id}', '${key}', 1)">+</button>`
-            : "";
+  charAssignBtn.addEventListener('click', () => {
+    if (!currentCharId || !allChars[currentCharId]) return;
+    const char = allChars[currentCharId];
 
-          const minAttr = (typeof min === "number") ? `min="${min}"` : "";
-          const maxAttr = (typeof max === "number") ? `max="${max}"` : "";
+    const raw = prompt(
+      `Assign "${char.state.charName || 'this character'}" to player (@bytespritegames.com):\nLeave blank to unassign.`,
+      char.ownerName || ''
+    );
+    if (raw === null) return; // cancelled
 
-          const set = (control === "set" || control === "both")
-            ? `<input type="number" value="${value}" ${minAttr} ${maxAttr} onchange="setVariable('${item.id}', '${key}', this.value)" />`
-            : `<span>${value}</span>`;
+    // Strip domain if the user typed the full email
+    const username = raw.trim().toLowerCase().replace(/@bytespritegames\.com$/i, '');
 
-          return `
-            <div class="variable">
-              <label>${key}:</label>
-              ${minus}
-              ${set}
-              ${plus}
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
+    if (!username) {
+      // Unassign
+      allChars[currentCharId].ownerUid  = '';
+      allChars[currentCharId].ownerName = '';
+      database.ref(`/inventory_characters/${currentCharId}`).update({ ownerUid: '', ownerName: '' });
+      renderTabs();
+      return;
+    }
+
+    database.ref(`/inventory_user_lookup/${username}`).once('value', snap => {
+      const uid = snap.val();
+      if (!uid) { alert(`No player found with username "${username}@bytespritegames.com".`); return; }
+      allChars[currentCharId].ownerUid  = uid;
+      allChars[currentCharId].ownerName = username;
+      database.ref(`/inventory_characters/${currentCharId}`).update({ ownerUid: uid, ownerName: username });
+      renderTabs();
+    });
+  });
+
+  const charHideBtn = document.getElementById('char-hide-btn');
+
+  // hidden-inventory-only combines 'hidden' (not listed in the tab bar at
+  // all) with 'inventory-only' (character sheet closed if a player already
+  // has it open) — a DM convenience so both don't need setting separately.
+  // It reuses inventory-only's icon (same concept: sheet hidden) but in red,
+  // matching how 'hidden' already uses red on this button to signal
+  // "nothing is visible to players" (see char-hide-fully below).
+  const VISIBILITY_CYCLE = ['visible', 'inventory-only', 'hidden', 'hidden-inventory-only'];
+  const VISIBILITY_ICON  = {
+    'visible':               'fa-eye',
+    'inventory-only':        'fa-eye-low-vision',
+    'hidden':                'fa-eye-slash',
+    'hidden-inventory-only': 'fa-eye-low-vision',
+  };
+  const VISIBILITY_TITLE = {
+    'visible':               'Fully visible — click to hide character sheet',
+    'inventory-only':        'Inventory only — character sheet hidden from players — click to hide entirely',
+    'hidden':                'Hidden entirely — click to also hide the character sheet',
+    'hidden-inventory-only': 'Hidden entirely, character sheet also hidden — click to make fully visible',
+  };
+  // States that keep a character out of the tab bar entirely for players —
+  // used everywhere a "should this character be selectable by a player at
+  // all" check is needed, so hidden-inventory-only doesn't need adding
+  // separately at each call site.
+  const CHAR_HIDDEN_STATES = new Set(['hidden', 'hidden-inventory-only']);
+  // States that hide the character sheet from players (inventory stays
+  // reachable) — used by canOpenStats() and enforceCharVisibility().
+  const CHAR_SHEET_HIDDEN_STATES = new Set(['inventory-only', 'hidden-inventory-only']);
+
+  charHideBtn.addEventListener('click', () => {
+    if (!currentCharId || !allChars[currentCharId]) return;
+    const char = allChars[currentCharId];
+    const idx  = VISIBILITY_CYCLE.indexOf(char.charVisibility || 'visible');
+    char.charVisibility = VISIBILITY_CYCLE[(idx + 1) % VISIBILITY_CYCLE.length];
+    database.ref(`/inventory_characters/${currentCharId}`).update({ charVisibility: char.charVisibility });
+    updateCharHideBtn();
+    renderTabs();
+    enforceCharVisibility();
+  });
+
+  function updateCharHideBtn() {
+    if (!window._isDM) return;
+    const vis = (currentCharId && allChars[currentCharId]?.charVisibility) || 'visible';
+    charHideBtn.innerHTML = `<i class="fas ${VISIBILITY_ICON[vis]}"></i>`;
+    charHideBtn.classList.toggle('char-hide-active', vis === 'inventory-only');
+    charHideBtn.classList.toggle('char-hide-fully',  vis === 'hidden' || vis === 'hidden-inventory-only');
+    charHideBtn.title = VISIBILITY_TITLE[vis];
   }
 
-  function changeVariable(itemId, key, delta) {
-    const item = findItemById(itemId);
-    if (!item) return;
-
-    const meta = item.variables?.[key];
-    if (!meta || typeof meta.value !== "number") return;
-
-    let newValue = meta.value + delta;
-
-    if (typeof meta.min === "number" && newValue < meta.min) {
-      newValue = meta.min;
-    }
-    if (typeof meta.max === "number" && newValue > meta.max) {
-      newValue = meta.max;
-    }
-
-    meta.value = newValue;
-    updateInspector(item);
-    drawInventory(inventory);
+  // Not DM-exempt — see canOpenStats() above for why.
+  function enforceCharVisibility() {
+    if (!currentCharId) return;
+    const vis = allChars[currentCharId]?.charVisibility || 'visible';
+    if (CHAR_SHEET_HIDDEN_STATES.has(vis) && statsOpen) closeStats();
   }
 
-  function setVariable(itemId, key, value) {
-    const item = findItemById(itemId);
-    if (!item) return;
-
-    const parsed = parseInt(value, 10);
-    if (isNaN(parsed)) return;
-
-    const meta = item.variables?.[key];
-    if (!meta) return;
-
-    let newValue = parsed;
-    if (typeof meta.min === "number" && newValue < meta.min) {
-      newValue = meta.min;
-    }
-    if (typeof meta.max === "number" && newValue > meta.max) {
-      newValue = meta.max;
-    }
-
-    meta.value = newValue;
-    updateInspector(item);
-    drawInventory(inventory);
+  function applyRole(role) {
+    const isDM = (role === 'dm') && userCanBeDM;
+    window._isDM         = isDM;
+    menuRoleBtn.hidden   = !userCanBeDM;
+    charAssignBtn.hidden = !isDM;
+    charHideBtn.hidden   = !isDM;
+    _hexClearBtn.hidden  = !isDM;
+    menuHistoryBtn.hidden = !isDM;
+    if (!isDM && historyOpen) closeHistoryPanel();
+    window.hexSetDmStatus && window.hexSetDmStatus(isDM);
+    menuRoleBtn.dataset.role = isDM ? 'dm' : 'player';
+    menuRoleBtn.title = isDM ? 'You are DM — click to switch to Player' : 'You are Player — click to switch to DM';
+    hamburgerBtn.dataset.role = isDM ? 'dm' : 'player';
+    if (isDM) updateCharHideBtn();
+    updateEditBtn();
+    if (shopOpen) buildShop();
+    // Re-render tabs now that DM status is known (subscribeToChars fires before this resolves)
+    if (Object.keys(allChars).length) renderTabs();
   }
 
-  window.changeVariable = changeVariable;
-  window.setVariable = setVariable;
+  menuRoleBtn.addEventListener('click', () => {
+    if (!currentUser || !userCanBeDM) return;
+    closeHamburgerMenu();
+    const next = window._isDM ? 'player' : 'dm';
+    database.ref(`/inventory_roles/${currentUser.uid}`).set(next);
+    applyRole(next);
+  });
 
-  const ITEM_LIBRARY = [
-    { name: "Platinum Coins", bulk: Bulk.PACKABLE, description: `1 platinum coin = 10 gold coins`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
-    { name: "Gold Coins", bulk: Bulk.PACKABLE, description: `1 gold coin = 10 silver coins`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
-    { name: "Silver Coins", bulk: Bulk.PACKABLE, description: `1 silver coin = 10 copper coins`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
-    { name: "Copper Coins", bulk: Bulk.PACKABLE, description: `Basic currency unit`, displayText: variableDisplayText, variables: {charges: { value: 50, control: "both", min: 0, max: 50} } },
+  auth.onAuthStateChanged(user => {
+    currentUser = user;
+    if (user) {
+      database.ref(`/inventory_dm_users/${user.uid}`).once('value', snap => {
+        userCanBeDM = snap.val() === true;
+        database.ref(`/inventory_roles/${user.uid}`).once('value', snap2 => {
+          applyRole(userCanBeDM ? (snap2.val() || 'player') : 'player');
+        });
+      });
+      // Register username → uid so DMs can assign characters by username
+      const username = (user.displayName || user.email || '').split('@')[0];
+      if (username) database.ref(`/inventory_user_lookup/${username}`).set(user.uid);
+      subscribeToChars();
+      subscribeToShopVisibility();
+      subscribeToShopAvailability();
+      subscribeToDmListings();
+      subscribeUserUi(user.uid);
+    } else {
+      if (charsRef)      { charsRef.off('value');      charsRef      = null; }
+      if (shopVisRef)    { shopVisRef.off('value');    shopVisRef    = null; }
+      if (shopAvailRef)  { shopAvailRef.off('value');  shopAvailRef  = null; }
+      if (dmListingsRef) { dmListingsRef.off('value'); dmListingsRef = null; }
+      subscribeUserUi(null);
+      dmListings = [];
+      userCanBeDM    = false;
+      window._isDM   = false;
+      currentCharId  = null;
+      pendingNewChar = null;
+      pendingDeletes.clear();
+      allChars       = {};
+    }
+  });
 
-    { name: "Bagpipes", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Drum", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Dulcimer", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Flute", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Lute", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Lyre", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Pan Flute", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Shawm", bulk: Bulk.HANDHELD, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    { name: "Viol", bulk: Bulk.BULKY, description: `Play a known tune (DC 10), or improvise a song (DC 15)` },
-    
-    { name: "Club", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 bludgeoning damage<br>light` },
-    { name: "Dagger", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 piercing damage<br>finesse, light, thrown (range 20/60)` },
-    { name: "Greatclub", bulk: Bulk.BULKY, description: `<i>simple weapon</i><br>1d8 bludgeoning damage<br>two-handed, heavy` },
-    { name: "Handaxe", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 slashing damage<br>light, thrown (range 20/60)` },
-    { name: "Javelin", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 piercing damage<br>thrown (range 30/120)` },
-    { name: "Light Hammer", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 bludgeoning damage<br>light, thrown (range 20/60)` },
-    { name: "Mace", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 bludgeoning damage` },
-    { name: "Quarterstaff", bulk: Bulk.BULKY, description: `<i>simple weapon</i><br>1d6 bludgeoning damage<br>versatile (1d8)` },
-    { name: "Sickle", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 slashing damage<br>light` },
-    { name: "Spear", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 piercing damage<br>thrown (range 20/60), versatile (1d8)` },
-    { name: "Light Crossbow", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d8 piercing damage<br>range 80/320, loading, two-handed` },
-    { name: "Dart", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 piercing damage<br>finesse, thrown (range 20/60)` },
-    { name: "Shortbow", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d6 piercing damage<br>range 80/320, two-handed` },
-    { name: "Sling", bulk: Bulk.HANDHELD, description: `<i>simple weapon</i><br>1d4 bludgeoning damage<br>range 30/120` },
-    { name: "Battleaxe", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 slashing damage<br>versatile (1d10)` },
-    { name: "Flail", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 bludgeoning damage` },
-    { name: "Glaive", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 slashing damage<br>heavy, reach, two-handed` },
-    { name: "Greataxe", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d12 slashing damage<br>heavy, two-handed` },
-    { name: "Greatsword", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>2d6 slashing damage<br>heavy, two-handed` },
-    { name: "Halberd", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 slashing damage<br>heavy, reach, two-handed` },
-    { name: "Lance", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d12 piercing damage<br>reach, special` },
-    { name: "Longsword", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 slashing damage<br>versatile (1d10)` },
-    { name: "Maul", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>2d6 bludgeoning damage<br>heavy, two-handed` },
-    { name: "Morningstar", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 piercing damage` },
-    { name: "Pike", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 piercing damage<br>heavy, reach, two-handed` },
-    { name: "Rapier", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 piercing damage<br>finesse` },
-    { name: "Scimitar", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 slashing damage<br>finesse, light` },
-    { name: "Shortsword", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 piercing damage<br>finesse, light` },
-    { name: "Trident", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 piercing damage<br>thrown (range 20/60), versatile (1d8)` },
-    { name: "War Pick", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 piercing damage` },
-    { name: "Warhammer", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d8 bludgeoning damage<br>versatile (1d10)` },
-    { name: "Whip", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d4 slashing damage<br>finesse, reach` },
-    { name: "Blowgun", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1 piercing damage<br>range 25/100, loading` },
-    { name: "Hand Crossbow", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>1d6 piercing damage<br>range 30/120, light, loading` },
-    { name: "Heavy Crossbow", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d10 piercing damage<br>range 100/400, heavy, loading, two-handed` },
-    { name: "Longbow", bulk: Bulk.BULKY, description: `<i>martial weapon</i><br>1d8 piercing damage<br>range 150/600, heavy, two-handed` },
-    { name: "Net", bulk: Bulk.HANDHELD, description: `<i>martial weapon</i><br>special, thrown (range 5/15)` },
+  // ── FIREBASE ────────────────────────────────────────────────────────────
+  let charsRef = null;
 
-    { name: "Shield", bulk: Bulk.BULKY, description: `<i>shield</i><br>+2 AC` },
-    { name: "Light Armor", bulk: Bulk.HANDHELD, description: `<i>light armor</i><br>AC 12 + Dex modifier. <br> <i>leather, or other simple padding.</i>` },
-    { name: "Medium Armor", bulk: Bulk.BULKY, description: `<i>medium armor</i><br>AC 14 + max 2 Dex modifier. Disadvantage on stealth checks. <br> <i>scale mail, partial chainmail, or similarly mildly cumbersome armor.</i>` },
-    { name: "Heavy Armor", bulk: Bulk.BULKY, description: `<i>heavy armor</i><br>AC 16 <br> <i>full chain mail, or similarly cumbersome armor.</i>` },
-    { name: "Half Plate", bulk: Bulk.BULKY, description: `<i>medium armor</i><br>AC 15 + max 2 Dex modifier. Disadvantage on stealth checks. <br> <i>this armor can be made into full plate for the difference in cost.</i>` },
-    { name: "Splint Armor", bulk: Bulk.BULKY, description: `<i>heavy armor</i><br>AC 17 <br> <i>full leather with rivited strips of metal.</i>` },
-    { name: "Plate Armor", bulk: Bulk.VERYBULKY, description: `<i>heavy armor</i><br>AC 18 <br> <i>complete plate armor.</i>` },
+  function subscribeToChars() {
+    if (charsRef) charsRef.off('value');
+    charsRef = database.ref('/inventory_characters');
+    charsRef.on('value', snap => {
+      const raw = snap.val() || {};
 
-    // Adventuring Gear
-    { name: "Rations", bulk: Bulk.PACKABLE, description: `A days rations.` },
-    { name: "Mirror", bulk: Bulk.PACKABLE, description: `A steel mirror used for grooming, peeking around corners, or signaling with reflected light.` },
-    { name: "Tinderbox", bulk: Bulk.PACKABLE, description: `Use as a bonus action to light exposed fuel (e.g., candle, torch); 1 minute to light covered material.` },
-    { name: "Waterskin", bulk: Bulk.HANDHELD, description: `Holds 4 pints of water. Essential for avoiding dehydration during travel or exertion.` },
-    { name: "Chalk", bulk: Bulk.PACKABLE, variables: { charges: { value: 5, control: "plusminus", min: 0, max: 5 } }, description: `Expend 1 charge to mark a surface; expend 5 to leave a 50-ft trail. Useful for leaving notes and marking objects.` },
-    { name: "Rope", bulk: Bulk.BULKY, description: `50ft of rope. Use an action to tie a secure knot (DC 10 Sleight of Hand). Can bind a Grappled, Incapacitated, or Restrained creature. Bound creatures are Restrained. Escape (DC 15 Acrobatics); burst (DC 20 Athletics).` },
-    { name: "Shovel", bulk: Bulk.BULKY, description: `After 1 hour of digging, creates a 5-foot cube hole in dirt, sand, or loose material.` },
-    { name: "Whistle", bulk: Bulk.PACKABLE, description: `Blow as an action to emit a piercing sound audible up to 600 feet away.` },
-    { name: "Horn", bulk: Bulk.HANDHELD, description: `Blow as an action to emit a loud note audible up to 600 feet away.` },
-    { name: "Manacles", bulk: Bulk.HANDHELD, description: `As an action, bind an unwilling Small or Medium creature within 5ft that is Grappled, Incapacitated, or Restrained, with a successful DC 13 Dexterity (Sleight of Hand) check.<br>
-      A bound creature is Restrained.<br>
-      It can attempt a DC 25 Dexterity (Sleight of Hand) check to slip free, or a DC 25 Strength (Athletics) check to break them as an action.<br>
-      Another creature can pick the lock with a DC 15 Dexterity (Sleight of Hand) check.<br>
-      <i>AC 19, damage threshold 10, 10 hit points.</i>` },
-    { name: "Grappling Hook", bulk: Bulk.HANDHELD, description: `As an action, throw at a target within 50 ft. The hook catches on a DC 13 Dexterity (Acrobatics) or Strength (Athletics) check. If tied to Rope, can be climbed.` },
-    { name: "Crowbar", bulk: Bulk.HANDHELD, description: `Using a Crowbar gives you Advantage on Strength checks where the Crowbar's leverage can be applied.` },
-    { name: "Lantern", bulk: Bulk.HANDHELD, description: `Sheds bright light in a 30-foot radius and dim light for an additional 30 feet. As a bonus action you can lower the hood to reduce it to dim light in a 5-foot radius or raise the hood. Consumes 1 charge of oil per hour from an Oil Flask.` },
-    { name: "Oil Flask", bulk: Bulk.PACKABLE, displayText: variableDisplayText, variables: { charges: { value: 5, control: "plusminus", min: 0, max: 5 } }, description: `Used to fuel lanterns or coat objects, making them flammable when exposed to fire (burning condition).` },  
-    { name: "Torch", bulk: Bulk.PACKABLE, variables: { charges: { value: 6, control: "plusminus", min: 0, max: 6 } }, description: `Light the torch to expend a charge and cast 10 minutes of bright light in a 20-foot radius and dim light for an additional 20 feet. The torch can be used as a Simple Melee weapon. On a hit, the target takes 1d4 + Strength bludgeoning damage or fire damage when lit.`},
+      // Rebuild allChars, preserving the current char's live state so
+      // an incoming write from someone else doesn't overwrite local edits.
+      const liveState = currentCharId ? inv.getState() : null;
 
-    { name: "Satchel", bulk: Bulk.HANDHELD, container: { col: 2, row: 1 }, displayText: containerDisplayText, description: `It takes a bonus action or action to access an item in your satchel.` },
-    { name: "Backpack", bulk: Bulk.BULKY, container: { col: 2, row: 4 }, displayText: containerDisplayText, description: `It takes an action to access an item in your backpack. A creature can wear only one backpack.` },
-    
-    { name: "Saddlebag", bulk: Bulk.BULKY, description: `A mount's saddlebag for carrying gear.` },
-    { name: "Ammunition Cache", bulk: Bulk.HANDHELD, description: `A single weapon's ammunition. This must be accessed each time you reload the weapon.`  },
-    { name: "Basic Poison", bulk: Bulk.PACKABLE, description: `As a bonus action, coat one weapon or up to three pieces of ammunition. A target hit must succeed on a DC 13 Constitution saving throw or become poisoned. The poison lasts until the target saves at the end of their turns or 1 minute.` },
-    { name: "Antitoxin", bulk: Bulk.PACKABLE, description: `As a Bonus Action, you can drink a vial of Antitoxin to gain Advantage on saving throws to avoid or end the Poisoned condition for 1 hour.` },
-    { name: "Acid", bulk: Bulk.HANDHELD, description: `Replace one of your attacks to throw this at a creature or object within 20 ft, they must succeed on a DC 13 Dexterity saving throw or take 2d6 acid damage. This item is destroyed.` },
-    { name: "Alchemist's Fire", bulk: Bulk.HANDHELD, description: `Replace one of your attacks to throw this at a creature or object within 20 ft, they must succeed on a DC 13 Dexterity saving throw or take 1d4 fire damage and start burning. This item is destroyed.` },
-    { name: "Hunting Trap", bulk: Bulk.BULKY, description: `Spend 10 minutes setting and concealing this trap. When a creature steps on it, it must succeed on a DC 13 Dexterity save or take 2d10 piercing damage, and be grappled. The grapple requires a DC 13 Strength (Athletics) check to end.` },
-    { name: "Caltrops", bulk: Bulk.HANDHELD, description: `Scatter on the ground in a 5-ft square. Each creature entering must succeed on a DC13 Dexterity save or take 1d4 damage and their speed is 0 until the start of their next turn.` },
-    { name: "Ball Bearings", bulk: Bulk.HANDHELD, description: `Scatter on the ground in a 10-ft square. Each creature entering must succeed on a DC13 Dexterity save or fall prone.` },
-    { name: "Healing Potion", bulk: Bulk.HANDHELD, description: `Drink as an action to regain 2d4 + 2 hit points.` },
+      allChars = {};
+      Object.entries(raw).forEach(([id, data]) => {
+        if (pendingDeletes.has(id)) return; // skip until server confirms removal
+        allChars[id] = {
+          id,
+          ownerUid:          data.ownerUid  || '',
+          ownerName:         data.ownerName || '',
+          charVisibility: data.charVisibility || (data.hiddenFromPlayers ? 'hidden' : 'visible'),
+          state:             parseState(data.state),
+          createdAt:         data.createdAt || 0,
+          sortOrder:         data.sortOrder ?? data.createdAt ?? 0,
+        };
+        // Keep a baseline raw-state for every character we're *not* currently
+        // looking at, so that switching to one later (switchToChar) starts
+        // from an accurate "last known synced" value instead of leaving it
+        // undefined — an undefined baseline made the very first snapshot
+        // after switching (e.g. triggered by a completely different player's
+        // edit) look like a change, forcing a spurious loadState() that
+        // orphans whatever inspector panel is already open on the newly
+        // selected character. currentCharId's own baseline is maintained
+        // below (and by saveChar()) instead, since it's guarded by dirty/
+        // localWriteInFlight and must not be clobbered with an in-flight value.
+        if (id !== currentCharId) lastSyncedStateJson[id] = data.state;
+      });
 
-    // Tools & Kits
-    { name: "Climber's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Smith's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Mason's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Woodcarver's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Leatherworker's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Weaver's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Scribe's Supplies", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Painter's Supplies", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Jeweler's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Cook's Utensils", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Healer's Kit", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Poisoner's Kit", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Herbalism Kit", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Glassblower's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Potter's Tools", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Thieves' Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Tinker's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Alchemist's Supplies", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Disguise Kit", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Navigator's Tools", bulk: Bulk.HANDHELD, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Brewer's Supplies", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
-    { name: "Camp Supplies", bulk: Bulk.BULKY, variables: { charges: { value: 3, control: "plusminus", min: 0, max: 3 } }, description: `Gain advantage on a relevant roll. Expend a charge to retrieve an item comprising the kit. All charges replenish after a long rest.` },
+      // Re-inject any locally-created char still awaiting Firebase confirmation
+      if (pendingNewChar && !allChars[pendingNewChar.id]) {
+        allChars[pendingNewChar.id] = pendingNewChar;
+      }
+
+      if (currentCharId && allChars[currentCharId]) {
+        if (dirty || localWriteInFlight) {
+          // Local edits in flight — keep them, don't let the Firebase echo overwrite them
+          if (liveState) allChars[currentCharId].state = liveState;
+        } else {
+          // This 'value' snapshot covers the whole /inventory_characters tree, so
+          // it fires here even when a *different* player's character is the one
+          // that actually changed. Only reload ours if its raw state actually
+          // differs from what we last synced — otherwise this is a no-op reload
+          // that would still call loadState() and orphan the slotData reference
+          // held by any inspector panel the local player currently has open
+          // (e.g. mid-edit on their own gold), silently dropping that edit.
+          const rawCharStr = raw[currentCharId] && raw[currentCharId].state;
+          if (rawCharStr !== lastSyncedStateJson[currentCharId]) {
+            // Actually changed (another user's edit) — apply it
+            applyRemoteCharState(currentCharId, rawCharStr, allChars[currentCharId].state);
+          }
+        }
+      }
+
+      renderTabs();
+
+      // Clean up surplus unnamed characters for this user (keep the most recent)
+      if (currentUser) {
+        const mine = Object.values(allChars).filter(c => c.ownerUid === currentUser.uid);
+        const unnamed = mine.filter(c => !c.state.charName)
+                            .sort((a, b) => b.createdAt - a.createdAt);
+        if (unnamed.length > 1) {
+          unnamed.slice(1).forEach(c => {
+            if (!pendingDeletes.has(c.id)) {
+              pendingDeletes.add(c.id);
+              database.ref(`/inventory_characters/${c.id}`).remove()
+                .then(() => pendingDeletes.delete(c.id));
+            }
+          });
+        }
+      }
+
+      if (!currentCharId || !allChars[currentCharId]) {
+        // Only auto-select when already in inventory mode; if in hexmap mode the
+        // user will open the inventory themselves and ensureCharSelected fires then.
+        if (!_hexmapMode) {
+          const mine = Object.values(allChars)
+            .filter(c => c.ownerUid === currentUser.uid)
+            .sort((a, b) => b.createdAt - a.createdAt);
+          if (mine.length) {
+            switchToChar(mine[0].id, true);
+          } else if (window._isDM) {
+            const any = Object.values(allChars).sort((a, b) => b.createdAt - a.createdAt);
+            if (any.length) switchToChar(any[0].id, true);
+            else            createChar();
+          }
+          // Players with no assigned character wait — DM assigns one
+        }
+      }
+    });
+  }
+
+  // ── COMPACT / RESOLVE (Firebase boundary) ───────────────────────────────
+
+  const SLOT_OVERRIDE_KEYS = [
+    'silvered','material','notes','costCoins','containerId','isContainer',
+    'containerRows','treasure','category','isWeapon','bulk','hasUses',
+    'conflict','conflictMsg',
   ];
 
-  return {};
+  const resolveSlotData = raw => {
+    if (!raw || raw.custom || raw._ref == null) return raw;
+    const lib = (window.ITEM_LIBRARY || []).find(i => i.id === raw._ref);
+    if (!lib) return raw;
+    const resolved = JSON.parse(JSON.stringify(lib));
+
+    // Apply scalar overrides (except material — validated below)
+    for (const k of SLOT_OVERRIDE_KEYS) {
+      if (k === 'silvered' || k === 'material') continue;
+      if (raw[k] !== undefined) resolved[k] = raw[k];
+    }
+
+    // Determine effective category after any category override
+    const effCat = resolved.category
+      || (resolved.variables?.weapon ? 'weapon' : resolved.variables?.armor ? 'armor' : null);
+    const canSilver = ['weapon','ammunition'].includes(effCat);
+    const canMetal  = ['weapon','armor','shield','ammunition'].includes(effCat);
+
+    // Only keep material overrides if the item still supports them
+    if (raw.silvered && canSilver) resolved.silvered = raw.silvered;
+    if (raw.material && canMetal)  resolved.material = raw.material;
+
+    // Apply variable overrides — only for keys still in schema, clamped to new limits
+    if (raw._vars) {
+      resolved.variables = resolved.variables || {};
+      for (const [k, v] of Object.entries(raw._vars)) {
+        if (k === 'qty') {
+          resolved.variables.qty = { value: Math.max(1, Math.min(99, v)), control: 'both', min: 1, max: 99 };
+          continue;
+        }
+        const schema = resolved.variables[k];
+        if (!schema) continue; // key no longer in schema — discard
+        let val = v;
+        if (typeof schema.min === 'number') val = Math.max(schema.min, val);
+        if (typeof schema.max === 'number') val = Math.min(schema.max, val);
+        schema.value = val;
+      }
+    }
+
+    if (raw._varLocked) {
+      for (const [k, locked] of Object.entries(raw._varLocked)) {
+        if (resolved.variables?.[k] && locked) resolved.variables[k].locked = true;
+      }
+    }
+
+    return resolved;
+  };
+  window.resolveSlotData = resolveSlotData;
+
+  const compactSlotData = slotData => {
+    if (!slotData || slotData.custom) return slotData;
+    // Already compact (wire form: has _ref, no .variables to read overrides
+    // from) — compacting it again would find nothing in .variables and
+    // silently drop any existing _vars/_varLocked. Mirrors resolveSlotData's
+    // own early-return for already-resolved input.
+    if (slotData._ref != null && !slotData.variables) return slotData;
+    const lib = (window.ITEM_LIBRARY || []).find(i =>
+      slotData._ref != null ? i.id === slotData._ref : i.name === slotData.name
+    );
+    if (!lib) return slotData;
+    const compact = { _ref: lib.id };
+    for (const k of SLOT_OVERRIDE_KEYS)
+      if (slotData[k] !== undefined) compact[k] = slotData[k];
+    if (slotData.variables) {
+      const vars = {};
+      const lockedVars = {};
+      for (const [k, v] of Object.entries(slotData.variables)) {
+        const libVal = lib.variables?.[k]?.value;
+        if (libVal === undefined || v.value !== libVal) vars[k] = v.value;
+        if (v.locked) lockedVars[k] = true;
+      }
+      if (Object.keys(vars).length) compact._vars = vars;
+      if (Object.keys(lockedVars).length) compact._varLocked = lockedVars;
+    }
+    return compact;
+  };
+  window.compactSlotData = compactSlotData;
+
+  const resolveContainerSlots = containers => {
+    for (const container of containers || [])
+      for (const row of container.slots || [])
+        for (let c = 0; c < row.length; c++)
+          if (row[c]) row[c] = resolveSlotData(row[c]);
+  };
+
+  const compactContainerSlots = containers => {
+    for (const container of containers || [])
+      for (const row of container.slots || [])
+        for (let c = 0; c < row.length; c++)
+          if (row[c]) row[c] = compactSlotData(row[c]);
+  };
+
+  function parseState(str) {
+    try {
+      const s = JSON.parse(str || 'null');
+      if (!s) return blankState();
+      if (!s.containers || !s.containers.length) s.containers = defaultContainers();
+      inv.flattenGroups(s.containers);
+      resolveContainerSlots(s.containers);
+      return s;
+    } catch { return blankState(); }
+  }
+
+  function blankState() {
+    return { charName: '', carryCapacity: '', containers: defaultContainers() };
+  }
+
+  // Applies a raw state JSON string we now know is authoritative for charId
+  // (someone else's edit, or the merged outcome of our own — see saveChar())
+  // to the live UI if that character is currently open, and records it as
+  // the synced baseline either way. Shared by the /inventory_characters
+  // listener and saveChar()'s post-write reconciliation so both "apply a
+  // remote change" paths stay in sync with each other.
+  function applyRemoteCharState(charId, rawJson, parsedState) {
+    if (allChars[charId]) allChars[charId].state = parsedState;
+    lastSyncedStateJson[charId] = rawJson;
+    if (charId !== currentCharId) return;
+    suppressSave = true;
+    flushCharDiff();
+    try { inv.loadState(parsedState, { charId, keepInspector: true }); } catch (e) { console.warn('loadState error:', e); }
+    inv.applyLocalUi(userUiCache[charId] || {});
+    suppressSave = false;
+    // A remote edit, not a local one — reset the diff baseline instead of
+    // logging it, since we can't reliably attribute it to this user.
+    // Post-render state, same reasoning as switchToChar() below.
+    resetCharSnapshot(charId, inv.getState());
+  }
+
+  function safeParseJson(str) {
+    if (typeof str !== 'string') return null;
+    try { return JSON.parse(str); } catch { return null; }
+  }
+
+  // Recursively sorts object keys before stringifying, so two values that
+  // are structurally identical compare equal even if their key order
+  // differs — which routinely happens here: `mine` comes from a fresh
+  // JSON.parse(JSON.stringify(state)), `baseline`/`server` come from
+  // parsing a JSON string that was itself built by a *different* merge
+  // pass (Object.assign({}, server) followed by overwriting specific
+  // keys, which reorders them). A plain JSON.stringify comparison would
+  // call that "changed" on reordering alone — which matters a lot more
+  // than cosmetics here: every jsonEq() call below decides "did I touch
+  // this, or should the merge keep the server's copy," so a false
+  // "changed" reads as "keep mine," silently discarding whatever someone
+  // else concurrently changed in that same field/slot/entry.
+  function canonicalJson(value) {
+    if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
+    if (value && typeof value === 'object') {
+      return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + canonicalJson(value[k])).join(',') + '}';
+    }
+    return JSON.stringify(value);
+  }
+  const jsonEq = (a, b) => canonicalJson(a) === canonicalJson(b);
+
+  // Generic 3-way merge for an array of objects (or plain values) that have
+  // a stable identity — notes/attacks by their .id, activeFeatures/
+  // hiddenFeatures by the id string itself (idFn = x => x, in which case
+  // this degenerates to ordinary set union/difference). `server` is what's
+  // actually on Firebase right now, `baseline` is what we last knew to be
+  // true, `mine` is what we're about to save.
+  //   - present in mine but not baseline  -> we added it, keep ours
+  //   - present in baseline but not mine  -> we deleted it, stays deleted
+  //     (even if server still has an edit to it — an explicit removal is
+  //     treated as decisive rather than risking resurrecting something the
+  //     other side may have just removed too)
+  //   - present in both, changed from baseline -> keep ours
+  //   - present in both, unchanged -> keep server's (may hold someone
+  //     else's edit we never touched), or drop it if server no longer
+  //     has it (someone else deleted it and we didn't touch it either)
+  //   - present only in server -> a brand new entry from someone else
+  function mergeById(serverArr, baselineArr, mineArr, idFn) {
+    const toMap = arr => {
+      const map = new Map();
+      (arr || []).forEach(item => map.set(idFn(item), item));
+      return map;
+    };
+    const s = toMap(serverArr), b = toMap(baselineArr), m = toMap(mineArr);
+    const order = [
+      ...(serverArr || []).map(idFn),
+      ...(mineArr || []).map(idFn).filter(id => !s.has(id)),
+    ];
+    const seen = new Set();
+    const result = [];
+    order.forEach(id => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const inS = s.has(id), inB = b.has(id), inM = m.has(id);
+      if (inM && !inB) { result.push(m.get(id)); return; }
+      if (!inM && inB) { return; }
+      if (inM && inB) {
+        if (!jsonEq(m.get(id), b.get(id))) { result.push(m.get(id)); return; }
+        if (inS) result.push(s.get(id));
+        return;
+      }
+      if (inS) result.push(s.get(id));
+    });
+    return result;
+  }
+
+  // Same 3-way logic as mergeById, one level deeper: for a single container
+  // that exists on both sides, merge its non-grid fields (rows, name, ...)
+  // the usual way, then merge the slot grid itself by exact [row][col]
+  // position. growContainer()/shrinkContainer() only ever push a new empty
+  // row at the end or pop an already-empty trailing row — they never
+  // reindex an existing occupied slot — so position is a stable identity
+  // here, including across concurrent grid growth on both sides (the grid
+  // is sized to the tallest of the three copies; a row one side trimmed as
+  // "empty" that the other side placed something into just re-expands to
+  // hold it instead of losing the item).
+  function mergeSlotGrid(serverSlots, baselineSlots, mineSlots) {
+    const rows = Math.max((serverSlots || []).length, (baselineSlots || []).length, (mineSlots || []).length);
+    const grid = [];
+    for (let r = 0; r < rows; r++) {
+      const sRow = (serverSlots || [])[r] || [];
+      const bRow = (baselineSlots || [])[r] || [];
+      const mRow = (mineSlots   || [])[r] || [];
+      const cols = Math.max(sRow.length, bRow.length, mRow.length, 2);
+      const row = [];
+      for (let c = 0; c < cols; c++) {
+        const sv = sRow[c] ?? null, bv = bRow[c] ?? null, mv = mRow[c] ?? null;
+        row.push(jsonEq(mv, bv) ? sv : mv);
+      }
+      grid.push(row);
+    }
+    return grid;
+  }
+
+  function mergeOneContainer(server, baseline, mine) {
+    const out = Object.assign({}, server);
+    Object.keys(mine).forEach(k => {
+      if (k === 'slots') return;
+      if (!jsonEq(mine[k], baseline[k]) || !(k in out)) out[k] = mine[k];
+    });
+    out.slots = mergeSlotGrid(server.slots, baseline.slots, mine.slots);
+    return out;
+  }
+
+  function mergeContainerList(serverArr, baselineArr, mineArr) {
+    const toMap = arr => { const map = new Map(); (arr || []).forEach(c => map.set(c.id, c)); return map; };
+    const s = toMap(serverArr), b = toMap(baselineArr), m = toMap(mineArr);
+    const order = [
+      ...(serverArr || []).map(c => c.id),
+      ...(mineArr || []).map(c => c.id).filter(id => !s.has(id)),
+    ];
+    const seen = new Set();
+    const result = [];
+    order.forEach(id => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const inS = s.has(id), inB = b.has(id), inM = m.has(id);
+      if (inM && !inB) { result.push(m.get(id)); return; }
+      if (!inM && inB) { return; }
+      if (inM && inB) {
+        if (inS) result.push(mergeOneContainer(s.get(id), b.get(id), m.get(id)));
+        return;
+      }
+      if (inS) result.push(s.get(id));
+    });
+    return result;
+  }
+
+  // Keys that hold a collection of independently-editable entries (items in
+  // a grid, class features, notes, attack rows, active/hidden feature ids)
+  // get merged entry-by-entry instead of as one all-or-nothing blob, so two
+  // edits to *different* entries in the same collection both survive.
+  // Everything else on the character (HP, name, every individual stat
+  // field, ...) is already its own top-level key and needs no special case.
+  const CHAR_COLLECTION_MERGERS = {
+    containers:      (s, b, m) => mergeContainerList(s, b, m),
+    featureData:      (s, b, m) => mergeById(
+      Object.entries(s || {}).map(([id, v]) => ({ id, v })),
+      Object.entries(b || {}).map(([id, v]) => ({ id, v })),
+      Object.entries(m || {}).map(([id, v]) => ({ id, v })),
+      x => x.id
+    ).reduce((acc, x) => { acc[x.id] = x.v; return acc; }, {}),
+    notes:            (s, b, m) => mergeById(s, b, m, x => x.id),
+    attacks:          (s, b, m) => mergeById(s, b, m, x => x.id),
+    activeFeatures:   (s, b, m) => mergeById(s, b, m, x => x),
+    hiddenFeatures:   (s, b, m) => mergeById(s, b, m, x => x),
+  };
+
+  // Top-level-field merge for a character's compact state, used by saveChar()
+  // so two edits to the *same* character from different sources (two tabs,
+  // a DM adjusting stats while the player manages inventory, phone + laptop)
+  // don't clobber each other outright the way a blind overwrite would.
+  // `server` is the freshest value actually on Firebase right now, `baseline`
+  // is what we last knew to be true, `mine` is what we're trying to save.
+  // For each top-level key: if it's one of CHAR_COLLECTION_MERGERS, merge it
+  // entry-by-entry (see above). Otherwise, if our copy differs from baseline,
+  // we touched it — keep ours; if not, keep the server's (which may hold
+  // someone else's change we never touched at all). Two edits to the exact
+  // same non-collection field (or the exact same entry within a collection)
+  // still resolve last-write-wins.
+  function mergeCharTopLevel(server, baseline, mine) {
+    const out = Object.assign({}, server || {});
+    const b = baseline || {};
+    const m = mine || {};
+    Object.keys(m).forEach(k => {
+      if (CHAR_COLLECTION_MERGERS[k]) {
+        out[k] = CHAR_COLLECTION_MERGERS[k](server ? server[k] : undefined, b[k], m[k]);
+        return;
+      }
+      const touchedByMe = !jsonEq(m[k], b[k]);
+      if (touchedByMe || !(k in out)) out[k] = m[k];
+    });
+    return out;
+  }
+
+  function defaultContainers() {
+    return [
+      { id:'equipped', name:'Equipped',      rows:1, collapsed:false, permanent:true, slots:[[null,null]] },
+      { id:'strapped', name:'Strapped Gear', rows:2, collapsed:false, permanent:true, slots:[[null,null],[null,null]] },
+    ];
+  }
+
+  // ── CHARACTER SWITCHING ──────────────────────────────────────────────────
+  function ensureCharSelected() {
+    if (currentCharId && allChars[currentCharId]) return;
+    const chars = Object.values(allChars)
+      .filter(c => window._isDM || !CHAR_HIDDEN_STATES.has(c.charVisibility || 'visible'))
+      .sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt));
+    const target = chars.find(c => c.ownerUid === currentUser?.uid) || chars[0];
+    if (target) switchToChar(target.id, true);
+  }
+
+  function deselectChar() {
+    if (currentCharId) saveChar(currentCharId, true);
+    dirty = false;
+    // Flush the outgoing character's pending diff while state/currentCharId
+    // still belong to it. Without this, a debounce timer armed by a recent
+    // edit fires ~900ms later — after loadState(blankState()) below has
+    // already wiped state — and diffs the old baseline against blank data,
+    // logging every tracked field as having changed to empty/zero. This is
+    // the same class of bug fixed in switchToChar/createChar, but this
+    // function (called from Map/Rules/History nav and same-tab re-clicks)
+    // was missed the first time since it doesn't go through switchToChar.
+    flushCharDiff();
+    // Invalidate the baseline now that there's no character selected to own
+    // it. Without this, a flush triggered late (e.g. a text field's blur
+    // event firing after this function returns — happens on some devices
+    // when tapping the tab dismisses a keyboard asynchronously) would still
+    // pass flushCharDiff()'s guard, using the stale pre-deselect baseline
+    // against the now-blanked live state and logging a bogus "everything
+    // reverted to blank" entry for a character that was never touched.
+    charSnapshotId = null;
+    charSnapshot = null;
+    currentCharId = null;
+    suppressSave = true;
+    try { inv.loadState(blankState(), { charId: null }); } catch(e) {}
+    inv.applyLocalUi({});
+    suppressSave = false;
+
+    updateCharHideBtn();
+    updateEditBtn();
+    renderTabs();
+  }
+
+  function switchToChar(charId, skipSave) {
+    inv.cancelDrag();
+    if (!skipSave && currentCharId) saveChar(currentCharId, true);
+    dirty = false;
+    currentCharId = charId;
+    suppressSave = true;
+    flushCharDiff();
+    try { inv.loadState(allChars[charId].state, { keepInspector: shopOpen, charId }); } catch (e) { console.warn('loadState error:', e); }
+    inv.applyLocalUi(userUiCache[charId] || {});
+    suppressSave = false;
+    // Snapshot the post-render state, not the raw stored state — loadState()
+    // calls renderFeatures() synchronously, and some feature renderers (e.g.
+    // Sorcery Points) lazily auto-fill fields like `current` the first time
+    // they're drawn. Baselining off the pre-render data would make that
+    // auto-fill look like a real edit the moment anything else changes.
+    resetCharSnapshot(charId, inv.getState());
+
+    updateCharHideBtn();
+    updateEditBtn();
+    enforceCharVisibility();
+    renderTabs();
+    if (shopOpen) {
+      document.querySelectorAll('.shop-item-row').forEach(row => {
+        if (row._applyRowState) row._applyRowState();
+      });
+    }
+  }
+
+  function createChar() {
+    if (!currentUser) return;
+    inv.cancelDrag();
+    if (currentCharId) saveChar(currentCharId, true);
+
+    const ref       = database.ref('/inventory_characters').push();
+    const blank     = blankState();
+    const newId     = ref.key;
+    const createdAt = Date.now();
+
+    // Add immediately to local state so tabs and inventory update without waiting for Firebase
+    const charData = {
+      id: newId,
+      ownerUid:  '',
+      ownerName: '',
+      state:     blank,
+      createdAt,
+      sortOrder: createdAt,
+    };
+    allChars[newId]  = charData;
+    pendingNewChar   = charData;
+    currentCharId    = newId;
+
+    ref.set({
+      ownerUid:  '',
+      ownerName: '',
+      state:     JSON.stringify(blank),
+      createdAt,
+      sortOrder: createdAt,
+    }).then(() => {
+      // Only clear if this specific creation is still the pending one
+      if (pendingNewChar === charData) pendingNewChar = null;
+    });
+    suppressSave = true;
+    flushCharDiff();
+    try { inv.loadState(blank, { charId: newId }); } catch (e) { console.warn('loadState error:', e); }
+    inv.applyLocalUi(userUiCache[newId] || {});
+    suppressSave = false;
+    resetCharSnapshot(newId, inv.getState());
+    renderTabs();
+  }
+
+  // Restoring a backup always creates a brand-new character rather than
+  // overwriting anything — the whole point of a backup is a safety net, so
+  // the restore action itself must never be able to destroy current data.
+  function restoreBackupAsNewChar(backupStateJson, backupTs) {
+    if (!currentUser || !window._isDM || !backupStateJson) return;
+    // parseState (not a raw JSON.parse) is required here — backup snapshots
+    // store containers in the same compact _ref/_vars form used everywhere
+    // else in Firebase, and parseState is what resolves that back into full
+    // item objects (name, variables, description) that the inventory UI and
+    // loadState() actually expect.
+    const restoredState = parseState(backupStateJson);
+
+    const origName = restoredState.charName || 'Character';
+    const stamp = backupTs ? new Date(backupTs).toLocaleString() : '';
+    restoredState.charName = `${origName} (Restored${stamp ? ' ' + stamp : ''})`;
+
+    inv.cancelDrag();
+    if (currentCharId) saveChar(currentCharId, true);
+
+    const ref       = database.ref('/inventory_characters').push();
+    const newId     = ref.key;
+    const createdAt = Date.now();
+    const charData  = {
+      id: newId,
+      ownerUid: '',
+      ownerName: '',
+      state: restoredState,
+      createdAt,
+      sortOrder: createdAt,
+    };
+    allChars[newId] = charData;
+    pendingNewChar  = charData;
+
+    // Compact before writing, same as every other character save — restoredState
+    // itself (resolved/full form) stays as the local live copy in allChars.
+    const saveState = JSON.parse(JSON.stringify(restoredState));
+    compactContainerSlots(saveState.containers);
+    ref.set({
+      ownerUid: '',
+      ownerName: '',
+      state: JSON.stringify(saveState),
+      createdAt,
+      sortOrder: createdAt,
+    }).then(() => {
+      if (pendingNewChar === charData) pendingNewChar = null;
+    });
+
+    closeHistoryPanel();
+    switchToChar(newId, true);
+  }
+
+  function deleteChar(charId) {
+    if (!window._isDM && allChars[charId]?.ownerUid !== currentUser?.uid) return;
+
+    // Remove locally immediately so Firebase echoes don't re-select this char
+    delete allChars[charId];
+    pendingDeletes.add(charId);
+    database.ref(`/inventory_characters/${charId}`).remove()
+      .then(() => pendingDeletes.delete(charId));
+
+    if (currentCharId === charId) {
+      currentCharId = null;
+      const mine = Object.values(allChars)
+        .filter(c => c.ownerUid === currentUser.uid)
+        .sort((a, b) => b.createdAt - a.createdAt);
+      const any  = Object.values(allChars).sort((a, b) => b.createdAt - a.createdAt);
+      if (mine.length) switchToChar(mine[0].id, true);
+      else if (any.length) switchToChar(any[0].id, true);
+      else createChar();
+    } else {
+      renderTabs();
+    }
+  }
+
+  function saveChar(charId, immediate) {
+    if (!currentUser || !charId) return;
+    // Non-immediate calls (every ordinary edit — handleInventoryChange()'s
+    // onChange, fired at the end of every render()) used to write straight
+    // to Firebase with no debounce at all. Typing a multi-digit number
+    // fires one render()/onChange()/saveChar() per keystroke, so typing
+    // "250" kicked off three independent, overlapping transactions. Once
+    // enough of them overlapped, an earlier one's completion could flip
+    // localWriteInFlight back to false while a later one was still
+    // legitimately in flight, letting the live-sync listener treat an
+    // incoming echo (possibly reflecting an EARLIER keystroke, not the
+    // latest one) as a real remote change — reloading the inspector,
+    // destroying and rebuilding the very input being typed into (losing
+    // focus) with a momentarily-stale value (the flicker). Debouncing
+    // coalesces a burst of edits into one trailing save; `dirty` is set
+    // immediately regardless, so the existing "don't apply an echo while
+    // we have unsaved local edits" protection covers the whole debounce
+    // window, not just the write itself. Every call site that genuinely
+    // needs a guaranteed synchronous flush (switching/leaving a character)
+    // already explicitly passes immediate=true and is unaffected.
+    if (!immediate) {
+      dirty = true;
+      clearTimeout(saveDebounceTimer);
+      saveDebounceTimer = setTimeout(() => {
+        saveDebounceTimer = null;
+        saveChar(charId, true);
+      }, SAVE_DEBOUNCE_MS);
+      return;
+    }
+    clearTimeout(saveDebounceTimer);
+    saveDebounceTimer = null;
+    dirty = false;
+    localWriteInFlight = true;
+    const state = inv.getState();
+    if (allChars[charId]) allChars[charId].state = state;
+    const saveState = JSON.parse(JSON.stringify(state));
+    if (!saveState.charName) saveState.charName = 'Unnamed';
+    compactContainerSlots(saveState.containers);
+    const saveStateJson = JSON.stringify(saveState);
+
+    // A transaction (not a blind update()) so a concurrent edit to a
+    // *different* top-level field of this same character — a DM adjusting
+    // HP while we manage inventory, the same character open on two devices
+    // — survives instead of being silently discarded by whichever save's
+    // round-trip happens to land last. mergeCharTopLevel() only merges at
+    // the top level; two edits to the same field still resolve last-write-
+    // wins, same as before.
+    const baseline = safeParseJson(lastSyncedStateJson[charId]);
+    database.ref(`/inventory_characters/${charId}/state`).transaction(currentRaw => {
+      const serverState = safeParseJson(currentRaw);
+      return JSON.stringify(mergeCharTopLevel(serverState, baseline, saveState));
+    }, (error, committed, snapshot) => {
+      setTimeout(() => { localWriteInFlight = false; }, 200);
+      if (error || !committed) return;
+      const finalJson = snapshot.val();
+      if (typeof finalJson !== 'string') return;
+      // Canonical (key-order-independent) comparison, not a raw string ===
+      // — mergeCharTopLevel() rebuilds the object via Object.assign() plus
+      // per-key overwrites, which reorders keys relative to saveStateJson's
+      // own order even when nothing was actually merged in. A raw string
+      // mismatch here used to misread "identical content, different key
+      // order" as "a field was merged in," triggering a full reload/re-
+      // render (with an open inspector re-targeted, or force-closed if it
+      // wasn't recognized as a container slot) after every single save.
+      if (jsonEq(safeParseJson(finalJson), saveState)) {
+        // Clean write, nothing merged in — our live UI already matches.
+        lastSyncedStateJson[charId] = finalJson;
+      } else if (dirty || localWriteInFlight) {
+        // The transaction pulled in a field we hadn't touched, but a NEWER
+        // local edit is already pending (or another save is mid-flight) by
+        // the time this particular save's round-trip completed — now more
+        // likely with debounced saves than the old per-keystroke ones,
+        // since the round-trip window is wider. Applying this now-stale
+        // merge result here would clobber that newer edit. Just record the
+        // baseline; the next save's own round-trip will merge in whatever
+        // this one pulled in, the same way any concurrent remote edit does.
+        lastSyncedStateJson[charId] = finalJson;
+      } else {
+        // The transaction pulled in a field we hadn't touched — apply the
+        // merged result the same way any other remote edit gets applied, so
+        // our own UI catches up to the full picture instead of just our part.
+        applyRemoteCharState(charId, finalJson, parseState(finalJson));
+      }
+    });
+    scheduleBackupCheck(charId, saveStateJson);
+  }
+
+  // ── CHARACTER BACKUPS ─────────────────────────────────────────────────────
+  // Rolling, time-gated snapshots of a character's full compacted state,
+  // independent of who's editing (any save counts as "activity") — separate
+  // from the DM-only History page's Backups tab that lets you browse/restore
+  // them, which is the part actually gated to DM.
+  // 5 min * 20 kept = at least 1h40m of rewind coverage during continuous
+  // activity (real sessions have lulls, so actual wall-clock coverage is
+  // typically longer still).
+  const BACKUP_MIN_INTERVAL_MS = 5 * 60 * 1000;
+  const BACKUP_RETENTION_COUNT = 20;
+  let backupDebounceTimer = null;
+  let pendingBackup = null; // { charId, stateJson } — always the *latest* save seen
+
+  // Debounced so a burst of saves (typing, dragging) only triggers one
+  // Firebase round-trip to check eligibility, using whichever save was most
+  // recent by the time things settle.
+  function scheduleBackupCheck(charId, stateJson) {
+    pendingBackup = { charId, stateJson };
+    clearTimeout(backupDebounceTimer);
+    backupDebounceTimer = setTimeout(() => {
+      const pending = pendingBackup;
+      pendingBackup = null;
+      if (pending) maybeBackupChar(pending.charId, pending.stateJson);
+    }, 3000);
+  }
+
+  // Checks Firebase's actual last-backup timestamp (not an in-memory timer)
+  // so the 10-minute gate holds up across page reloads and multiple devices
+  // editing the same character.
+  function maybeBackupChar(charId, stateJson) {
+    const ref = database.ref(`/inventory_backups/${charId}`);
+    ref.limitToLast(1).once('value').then(snap => {
+      let lastTs = 0;
+      snap.forEach(child => { lastTs = child.val()?.ts || 0; });
+      if (Date.now() - lastTs < BACKUP_MIN_INTERVAL_MS) return false;
+      return ref.push().set({ ts: firebase.database.ServerValue.TIMESTAMP, state: stateJson }).then(() => true);
+    }).then(created => { if (created) trimOldBackups(charId); }).catch(() => {});
+  }
+
+  function trimOldBackups(charId) {
+    const ref = database.ref(`/inventory_backups/${charId}`);
+    ref.once('value').then(snap => {
+      const keys = []; // unstarred only, oldest-first — starred snapshots are
+      // never a deletion candidate, at any age or count, which is the whole
+      // point of starring one.
+      snap.forEach(child => { if (!child.val()?.starred) keys.push(child.key); });
+      if (keys.length <= BACKUP_RETENTION_COUNT) return;
+      const updates = {};
+      keys.slice(0, keys.length - BACKUP_RETENTION_COUNT).forEach(k => { updates[k] = null; });
+      ref.update(updates);
+    }).catch(() => {});
+  }
+
+  // ── INVENTORY CALLBACKS ──────────────────────────────────────────────────
+  function getCharCoins(charState) {
+    let pp = 0, gp = 0, sp = 0, cp = 0;
+    if (!charState || !charState.containers) return { pp, gp, sp, cp };
+    for (const container of charState.containers) {
+      if (!container.slots) continue;
+      for (const row of container.slots) {
+        for (const slot of row) {
+          if (!slot || !slot.variables) continue;
+          const v = slot.variables;
+          if (v.pp) pp += v.pp.value || 0;
+          if (v.gp) gp += v.gp.value || 0;
+          if (v.sp) sp += v.sp.value || 0;
+          if (v.cp) cp += v.cp.value || 0;
+        }
+      }
+    }
+    return { pp, gp, sp, cp };
+  }
+
+  function setTabCoins(coinsEl, charState) {
+    const { pp, gp, sp, cp } = getCharCoins(charState);
+    coinsEl.innerHTML = '';
+    if (pp > 0) coinsEl.innerHTML += `<span class="coin-pp">${pp}pp</span>`;
+    if (gp > 0) coinsEl.innerHTML += `<span class="coin-gp">${gp}gp</span>`;
+    if (sp > 0) coinsEl.innerHTML += `<span class="coin-sp">${sp}sp</span>`;
+    if (cp > 0) coinsEl.innerHTML += `<span class="coin-cp">${cp}cp</span>`;
+  }
+
+  function confirmSpendingOtherWallet() {
+    const currentChar = allChars[currentCharId];
+    if (!currentChar || !currentUser || currentChar.ownerUid === currentUser.uid) return true;
+    const charName  = currentChar.state?.charName || 'this character';
+    const ownerName = currentChar.ownerName || 'another player';
+    return confirm(`This will spend coins from ${charName} (owned by ${ownerName}). Continue?`);
+  }
+
+  // ── HISTORY LOG (DM-only audit trail) ────────────────────────────────────
+  function getActorName() {
+    if (!currentUser) return 'Unknown';
+    return currentUser.displayName || (currentUser.email || '').split('@')[0] || 'Unknown';
+  }
+
+  function logHistoryEvent(entry) {
+    database.ref('/inventory_history').push(Object.assign({
+      ts: firebase.database.ServerValue.TIMESTAMP,
+      actorName: getActorName(),
+      actorUid:  currentUser ? currentUser.uid : '',
+    }, entry));
+  }
+
+  function handleItemSell(info) {
+    if (!currentCharId) return;
+    logHistoryEvent({
+      type: 'sell',
+      charId: currentCharId,
+      charName: allChars[currentCharId]?.state?.charName || 'Unnamed',
+      itemName: info.name,
+      qty: info.qty,
+      valueCp: info.valueCp,
+      detail: info.detail || null,
+      itemData: info.itemData || null,
+    });
+  }
+
+  function handleItemDestroy(info) {
+    if (!currentCharId) return;
+    logHistoryEvent({
+      type: 'destroy',
+      charId: currentCharId,
+      charName: allChars[currentCharId]?.state?.charName || 'Unnamed',
+      itemName: info.name,
+      qty: info.qty,
+      detail: info.detail || null,
+      itemData: info.itemData || null,
+    });
+  }
+
+  function handleDmListingDrop(slotData) {
+    const compact = compactSlotData(slotData);
+    const resolved = compact ? resolveSlotData(compact) : null;
+    if (!resolved) return;
+    const key = dmListingsRef ? dmListingsRef.push().key : null;
+    resolved._dmKey = key;
+    dmListings.push(resolved);
+    if (key && compact) dmListingsRef.update({ [key]: compact });
+    // currentCharId is reliable here (unlike handleCrossCharDrop) — nothing
+    // in this function writes to /inventory_characters, so there's no
+    // reentrant auto-select to race against. But it's only the right
+    // attribution when the item actually came from that character's
+    // inventory — catalog items, re-dragged listings, and rolled random
+    // items all carry _shopItem and never touched a character's inventory,
+    // so logging them as "listed from {whichever char is open}" would be
+    // just as misleading as the shop-purchase bug this mirrors.
+    if (currentCharId && !slotData._shopItem) {
+      logHistoryEvent({
+        type: 'list',
+        charId: currentCharId,
+        charName: allChars[currentCharId]?.state?.charName || 'Unnamed',
+        itemName: resolved.name,
+        qty: resolved.variables?.qty?.value || 1,
+        detail: (window.summarizeItemDetail && window.summarizeItemDetail(resolved)) || null,
+      });
+    }
+    if (shopOpen) buildShop();
+  }
+
+  // Shop purchases (catalog items or DM "For Sale" listings) go into a
+  // character's inventory but don't come FROM another character — logging
+  // them as a "move" implied one player's item was handed to another, when
+  // really the DM/player just bought it from the store.
+  function logShopBuy(item, charId, charName) {
+    const lib = window.ITEM_LIBRARY.find(i => i.name === item.name);
+    const valueCp = item._shopCostCp != null ? item._shopCostCp : (lib && lib.cost ? shopCostToCp(lib.cost) : 0);
+    logHistoryEvent({
+      type: 'buy',
+      charId,
+      charName,
+      itemName: item.name,
+      qty: item.variables?.qty?.value || 1,
+      valueCp,
+      detail: (window.summarizeItemDetail && window.summarizeItemDetail(item)) || null,
+    });
+  }
+
+  function handleShopPurchase(slotData, skipWalletConfirm = false) {
+    if (slotData._unresolved) return;
+    if (!skipWalletConfirm && !confirmSpendingOtherWallet()) {
+      inv.removeItem(slotData);
+      return;
+    }
+    if (slotData._shopCostCp != null) {
+      inv.deductCostCp(slotData._shopCostCp);
+    } else {
+      const lib = window.ITEM_LIBRARY.find(i => i.name === slotData.name);
+      if (lib && lib.cost) inv.deductCost(lib.cost);
+    }
+    playSound('coin');
+    if (shopOpen) updateShopWallet();
+  }
+
+  // ── CHARACTER-LEVEL HISTORY DIFF ─────────────────────────────────────────
+  const CHAR_TRACKED_FIELDS = ['hp', 'hpMax', 'tempHp', 'exhaustion', 'hitDiceRemaining', 'hitDiceCount', 'hitDiceType', 'inspiration'];
+  const CHAR_FIELD_LABELS = {
+    hp: 'HP', hpMax: 'Max HP', tempHp: 'Temp HP', exhaustion: 'Exhaustion',
+    hitDiceRemaining: 'Hit Dice Remaining', hitDiceCount: 'Hit Dice Count', hitDiceType: 'Hit Dice Type',
+    inspiration: 'Inspiration',
+  };
+  // Mirrors how inv.getState() itself normalizes these fields (CS_FIELDS
+  // default to '' via `state[k] || ''`; exhaustion/inspiration default to
+  // their own falsy value). Snapshots must use the same defaults on both
+  // sides of the diff — otherwise a never-touched field read as `undefined`
+  // from a raw/blank state object would show up as "changed" the moment
+  // getState() normalizes it on the very next edit, even though nothing
+  // actually changed.
+  const CHAR_FIELD_DEFAULTS = {
+    hp: '', hpMax: '', tempHp: '', exhaustion: 0,
+    hitDiceRemaining: '', hitDiceCount: '', hitDiceType: '', inspiration: false,
+  };
+
+  function snapshotCharFields(state) {
+    const snap = {};
+    CHAR_TRACKED_FIELDS.forEach(k => {
+      const v = state ? state[k] : undefined;
+      snap[k] = v != null ? v : CHAR_FIELD_DEFAULTS[k];
+    });
+    snap.featureData = state && state.featureData ? JSON.parse(JSON.stringify(state.featureData)) : {};
+    const ds = state && state.deathSaves;
+    snap.deathSaves = ds && typeof ds === 'object'
+      ? { successes: ds.successes || 0, failures: ds.failures || 0 }
+      : { successes: 0, failures: 0 };
+    return snap;
+  }
+
+  // Call whenever a character's state is loaded from outside the local user's
+  // own edits (switch, create, remote echo) so the next real edit diffs
+  // against a fresh baseline instead of comparing across characters or
+  // misattributing someone else's change to this user.
+  function resetCharSnapshot(charId, state) {
+    charSnapshot   = snapshotCharFields(state);
+    charSnapshotId = charId;
+  }
+
+  function describeFeatureChange(id, prevData, nextData) {
+    const label = (window.FEATURES_LIBRARY || []).find(f => f.id === id)?.name || id;
+    const a = prevData || {}, b = nextData || {};
+    if (typeof a.current === 'number' || typeof b.current === 'number') {
+      return `${label}: ${a.current ?? 0} → ${b.current ?? 0}`;
+    }
+    if (typeof a.used === 'number' || typeof b.used === 'number') {
+      return `${label} used: ${a.used ?? 0} → ${b.used ?? 0}`;
+    }
+    if (typeof a.active === 'boolean' || typeof b.active === 'boolean') {
+      return `${label}: ${b.active ? 'activated' : 'deactivated'}`;
+    }
+    return `${label} changed`;
+  }
+
+  // Treats a value as "not really there" — 0/false/''/null/undefined or an
+  // empty array/object. Feature data gets lazily stubbed the first time a
+  // feature is rendered (e.g. `if (!data.slots) data.slots = [];`), and that
+  // stubbing can land after one snapshot but before the next even though
+  // nothing the DM did actually changed — comparing raw JSON.stringify output
+  // treated "never existed" vs. "exists but still empty" as a real edit.
+  function isEmptyish(v) {
+    if (v == null || v === false || v === 0 || v === '') return true;
+    if (Array.isArray(v)) return v.length === 0;
+    if (typeof v === 'object') return Object.keys(v).length === 0;
+    return false;
+  }
+
+  function featureDataEqual(a, b) {
+    const ao = a || {}, bo = b || {};
+    const keys = new Set([...Object.keys(ao), ...Object.keys(bo)]);
+    for (const k of keys) {
+      const av = ao[k], bv = bo[k];
+      if (av === bv) continue;
+      if (av && bv && typeof av === 'object' && typeof bv === 'object') {
+        if (!featureDataEqual(av, bv)) return false;
+        continue;
+      }
+      if (isEmptyish(av) && isEmptyish(bv)) continue;
+      return false;
+    }
+    return true;
+  }
+
+  function diffCharFields(prev, next) {
+    const changes = [];
+    CHAR_TRACKED_FIELDS.forEach(k => {
+      const a = prev[k] ?? null, b = next[k] ?? null;
+      if (a !== b) changes.push({ kind: 'stat', field: k, label: CHAR_FIELD_LABELS[k] || k, from: a, to: b });
+    });
+
+    const prevFd = prev.featureData || {};
+    const nextFd = next.featureData || {};
+    const ids = new Set([...Object.keys(prevFd), ...Object.keys(nextFd)]);
+    ids.forEach(id => {
+      const a = prevFd[id], b = nextFd[id];
+      if (featureDataEqual(a, b)) return;
+      changes.push({ kind: 'feature', featureId: id, summary: describeFeatureChange(id, a, b) });
+    });
+
+    const prevDs = prev.deathSaves || { successes: 0, failures: 0 };
+    const nextDs = next.deathSaves || { successes: 0, failures: 0 };
+    if (prevDs.successes !== nextDs.successes || prevDs.failures !== nextDs.failures) {
+      changes.push({
+        kind: 'feature',
+        featureId: 'deathSaves',
+        summary: `Death Saves: ${prevDs.successes}✓/${prevDs.failures}✗ → ${nextDs.successes}✓/${nextDs.failures}✗`,
+      });
+    }
+
+    return changes;
+  }
+
+  // Character-field edits (HP/temp-HP/hit dice in particular) fire onChange on
+  // every keystroke, not just on commit — logging on each one would flood the
+  // history with intermediate values ("12" -> "1" -> "18" while typing "18").
+  // Debounce the diff+log so a burst of edits to the same character collapses
+  // into a single entry once the user pauses; flushCharDiff() forces that
+  // pending entry out immediately when the user navigates away (switch/create/
+  // remote echo) so it isn't silently dropped.
+  function flushCharDiff() {
+    // No early return on "no timer armed" — a focused text field deliberately
+    // skips arming the timer (see handleInventoryChange) and relies entirely
+    // on its blur handler calling this directly, so this must still check
+    // for real pending changes even when charDiffTimer was never set.
+    clearTimeout(charDiffTimer);
+    charDiffTimer = null;
+    if (!charSnapshotId || !charSnapshot || !allChars[charSnapshotId]) return;
+    const nextSnapshot = snapshotCharFields(inv.getState());
+    const changes = diffCharFields(charSnapshot, nextSnapshot);
+    if (changes.length) {
+      logHistoryEvent({
+        type: 'character',
+        charId: charSnapshotId,
+        charName: allChars[charSnapshotId]?.state?.charName || 'Unnamed',
+        changes,
+      });
+    }
+    charSnapshot = nextSnapshot;
+  }
+  // Exposed so InventorySystem can force an immediate flush at natural commit
+  // points (blur, calculator confirm) instead of waiting out the debounce —
+  // see the CS_FIELDS blur listener and the calculator's commit() below.
+  window.flushCharDiff = flushCharDiff;
+
+  // A long/short rest touches HP, temp HP, death saves, hit dice, exhaustion,
+  // and several featureData entries all in one click — the generic character
+  // diff still logs each of those, but a DM scanning the log benefits from an
+  // explicit marker explaining why so many fields changed at once.
+  function logCharRest(restType) {
+    if (!currentCharId) return;
+    logHistoryEvent({
+      type: 'rest',
+      charId: currentCharId,
+      charName: allChars[currentCharId]?.state?.charName || 'Unnamed',
+      restType,
+    });
+  }
+  window.logCharRest = logCharRest;
+
+  function handleInventoryChange() {
+    if (suppressSave || !currentCharId) return;
+    dirty = true;
+
+    if (charSnapshotId === currentCharId && charSnapshot) {
+      clearTimeout(charDiffTimer);
+      // Only arm the fallback timer while no tracked text field has focus —
+      // if one does, its blur handler is what flushes, however long the user
+      // takes (see the CS_FIELDS focus/blur wiring in InventorySystem).
+      if (!window.historyFieldFocused) charDiffTimer = setTimeout(flushCharDiff, 900);
+    }
+    const tab = document.querySelector(`[data-char-id="${currentCharId}"]`);
+    if (tab) {
+      const nameEl = tab.querySelector('.char-tab-name');
+      if (nameEl) {
+        const textNode = [...nameEl.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
+        const newName = inv.getState().charName || 'Unnamed';
+        if (textNode) textNode.textContent = newName;
+        else nameEl.appendChild(document.createTextNode(newName));
+      }
+    }
+    if (shopOpen) updateShopWallet();
+    saveDmListings();
+    saveChar(currentCharId);
+  }
+
+  function handleCrossCharDrop(item, targetCharId, linkedContainer) {
+    if (!targetCharId || !allChars[targetCharId]) return;
+
+    // Captured once up front: the Firebase write further down can trigger
+    // subscribeToChars' own "nothing selected, auto-pick a character" logic
+    // re-entrantly (its listener fires off the local write before this
+    // function returns), which would reassign currentCharId out from under
+    // us. Always attribute the move using this snapshot, not a later re-read.
+    const sourceCharId = currentCharId;
+
+    // Strip the shop marker before storing
+    const cleanItem = Object.assign({}, item);
+    delete cleanItem._shopItem;
+
+    // Drop onto the currently-open character's own tab
+    if (targetCharId === sourceCharId) {
+      inv.addItem(cleanItem);
+      if (item._shopItem && !item._unresolved) {
+        handleShopPurchase(cleanItem);
+        logShopBuy(item, sourceCharId, allChars[sourceCharId]?.state?.charName || 'Unnamed');
+      } else {
+        playSound('place');
+      }
+      const tabEl = document.querySelector(`[data-char-id="${sourceCharId}"]`);
+      if (tabEl) {
+        tabEl.classList.add('tab-received');
+        setTimeout(() => tabEl.classList.remove('tab-received'), 1200);
+      }
+      return;
+    }
+
+    // For shop items dropping onto another character's tab, confirm wallet spend first
+    if (item._shopItem && !item._unresolved && !confirmSpendingOtherWallet()) return;
+
+    // Placement is decided *inside* the transaction, recomputed from the
+    // actual current server value on every attempt (including Firebase's
+    // automatic retries) — never from a locally cached snapshot of the
+    // target character. It fills the first empty slot (row-major order),
+    // only appending a brand-new row if the grid is completely full.
+    //
+    // This does carry one narrow, accepted risk: if the receiving player is
+    // independently dragging their own item into that exact same empty slot
+    // at nearly the same instant, their own save's per-slot "did I touch
+    // this, mine wins" merge logic won't know the server also touched it,
+    // and one of the two items could be silently lost. Always appending a
+    // new row (the previous approach) avoided that specific race, but its
+    // real-world cost turned out to be worse: unconditional appends left
+    // permanently stranded empty rows behind every time (mergeSlotGrid can
+    // only safely grow/shrink from the true end of the grid, never reclaim
+    // gaps in the middle — see mergeSlotGrid's own comment), so gifts kept
+    // landing further and further down a grid that looked broken. That
+    // happens on every single gift; the same-slot race requires two people
+    // targeting the identical empty slot within the same save window, which
+    // is rare and, if it ever happens, obvious and easy to redo.
+    database.ref(`/inventory_characters/${targetCharId}/state`).transaction(currentRaw => {
+      const serverState = safeParseJson(currentRaw) || blankState();
+      const targetState = JSON.parse(JSON.stringify(serverState));
+      if (!targetState.containers || !targetState.containers.length) targetState.containers = defaultContainers();
+      // currentRaw comes straight off Firebase, so every pre-existing slot is
+      // still in compact wire form (_ref/_vars). compactSlotData() below only
+      // knows how to read overrides off the fully-resolved form (.variables)
+      // — fed compact input it finds nothing to copy and silently drops
+      // _vars/_varLocked (dropdown picks, uses/charges, coin-purse amounts)
+      // for every OTHER item in this character's inventory, not just the one
+      // being gifted. Resolve everything to full form first so the final
+      // compactContainerSlots() pass below has consistent, safe input.
+      resolveContainerSlots(targetState.containers);
+      const equipped = targetState.containers.find(c => c.id === 'equipped');
+      if (!equipped) return undefined; // abort — 'equipped' is a permanent container, shouldn't happen
+
+      const itemForThisAttempt = JSON.parse(JSON.stringify(cleanItem));
+      let finalR = -1, finalC = -1;
+      for (let r = 0; r < equipped.slots.length && finalR === -1; r++) {
+        for (let c = 0; c < equipped.slots[r].length; c++) {
+          if (equipped.slots[r][c] === null) { finalR = r; finalC = c; break; }
+        }
+      }
+      if (finalR === -1) {
+        // Completely full — nowhere to put it but a new row.
+        equipped.slots.push([null, null]);
+        equipped.rows = equipped.slots.length;
+        finalR = equipped.slots.length - 1;
+        finalC = 0;
+      }
+      equipped.slots[finalR][finalC] = itemForThisAttempt;
+
+      // Transfer the linked container and its contents to the target character
+      if (linkedContainer) {
+        const newId = `linked-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+        const linkedCopy = JSON.parse(JSON.stringify(linkedContainer));
+        linkedCopy.id = newId;
+        linkedCopy.linkedTo = { containerId: 'equipped', r: finalR, c: finalC };
+        itemForThisAttempt.containerId = newId;
+        targetState.containers.push(linkedCopy);
+      }
+
+      compactContainerSlots(targetState.containers);
+      return JSON.stringify(targetState);
+    }, (error, committed, snapshot) => {
+      if (error || !committed) return;
+      const finalJson = snapshot.val();
+      if (typeof finalJson !== 'string') return;
+      applyRemoteCharState(targetCharId, finalJson, parseState(finalJson));
+
+      if (item._shopItem && !item._unresolved) {
+        handleShopPurchase(cleanItem, true);
+        logShopBuy(item, targetCharId, allChars[targetCharId]?.state?.charName || 'Unnamed');
+      } else {
+        playSound('place');
+        if (sourceCharId) {
+          logHistoryEvent({
+            type: 'move',
+            charId: sourceCharId,
+            charName: allChars[sourceCharId]?.state?.charName || 'Unnamed',
+            toCharId: targetCharId,
+            toCharName: allChars[targetCharId]?.state?.charName || 'Unnamed',
+            itemName: item.name,
+            qty: item.variables?.qty?.value || 1,
+            detail: (window.summarizeItemDetail && window.summarizeItemDetail(item)) || null,
+          });
+        }
+      }
+
+      const tabEl = document.querySelector(`[data-char-id="${targetCharId}"]`);
+      if (tabEl) {
+        tabEl.classList.add('tab-received');
+        setTimeout(() => tabEl.classList.remove('tab-received'), 1200);
+      }
+    });
+  }
+
+  // ── TABS ────────────────────────────────────────────────────────────────
+  function renderTabs() {
+    const tabsEl = document.getElementById('char-tabs');
+    tabsEl.innerHTML = '';
+
+    Object.values(allChars)
+      .sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt))
+      .filter(char => window._isDM || !CHAR_HIDDEN_STATES.has(char.charVisibility || 'visible'))
+      .forEach(char => {
+        const isOwn = char.ownerUid === currentUser?.uid;
+        const vis   = char.charVisibility || 'visible';
+        const tab = document.createElement('button');
+        tab.className  = 'char-tab'
+          + (char.id === currentCharId ? ' active' : '')
+          + (isOwn ? ' tab-mine' : ' tab-other')
+          + (window._isDM && vis !== 'visible' ? ' tab-hidden' : '');
+        tab.dataset.charId = char.id;
+        tab.title = char.ownerName || '';
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'char-tab-info';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'char-tab-name';
+        // DM-only — a dimmed 'tab-hidden' background alone didn't tell a DM
+        // WHICH non-visible state a character was in (inventory-only,
+        // hidden, or both look identical) without selecting it and reading
+        // the separate hide-button's icon. This shows it directly per tab,
+        // inline with the name.
+        if (window._isDM && vis !== 'visible') {
+          const visIcon = document.createElement('i');
+          visIcon.className = `fas ${VISIBILITY_ICON[vis]} char-tab-vis-icon`
+            + (CHAR_HIDDEN_STATES.has(vis) ? ' char-tab-vis-icon-red' : '');
+          visIcon.title = VISIBILITY_TITLE[vis];
+          nameSpan.appendChild(visIcon);
+        }
+        nameSpan.appendChild(document.createTextNode(char.state.charName || 'Unnamed'));
+        infoDiv.appendChild(nameSpan);
+
+        tab.appendChild(infoDiv);
+
+        // DM-only controls
+        if (window._isDM && char.id === currentCharId && statsEditing) {
+
+          // Delete button
+          const del = document.createElement('button');
+          del.className   = 'char-tab-del';
+          del.textContent = '×';
+          del.title       = 'Delete character';
+          del.addEventListener('pointerdown', e => e.stopPropagation());
+          del.addEventListener('click', e => {
+            e.stopPropagation();
+            if (confirm(`Delete "${char.state.charName || 'this character'}"?`)) {
+              deleteChar(char.id);
+            }
+          });
+          tab.appendChild(del);
+        }
+
+        tab.addEventListener('click', () => {
+          closeRules(); // pops its history entry first, if it was open
+    closeHistoryPanel(); // ditto for the DM history panel
+          if (char.id === currentCharId) {
+            if (shopOpen) {
+              _shopFromHexmap = false;
+              closeShop(true);
+              if (_hexmapMode) {
+                _hexmapMode = false;
+                _applyViewMode();
+                window.hexOnGoToInventory && window.hexOnGoToInventory();
+              }
+            } else if (!_hexmapMode) {
+              inv.collapsePanelInstant();
+              deselectChar();
+              _hexmapMode = true;
+              _applyViewMode();
+              window.hexOnGoToHexmap && window.hexOnGoToHexmap();
+              if (!_handlingPopstate) { _suppressPopstate = true; history.back(); }
+            }
+          } else if (shopOpen && allChars[char.id]?.ownerUid !== currentUser?.uid) {
+            // Selecting a different character while the shop is open used to
+            // just swap which character's wallet subsequent shop actions
+            // applied to, while silently staying in the shop — the same
+            // "wrong wallet" risk openShop()'s auto-select closes for the
+            // initial-open case. Clicking a tab for a character you don't
+            // own now leaves the shop for that character's inventory
+            // instead, same as clicking your own already-active tab while
+            // the shop is open already does just above — for everyone,
+            // DMs included (a DM's shop purchase should come from a
+            // character they own, not whichever player's sheet they were
+            // last viewing). Switching to another character you *do* own
+            // (if you have more than one) falls through to the plain
+            // switchToChar below instead, and stays in the shop.
+            _shopFromHexmap = false;
+            closeShop(true);
+            if (_hexmapMode) {
+              _hexmapMode = false;
+              _applyViewMode();
+              window.hexOnGoToInventory && window.hexOnGoToInventory();
+            }
+            switchToChar(char.id, false);
+          } else {
+            if (!shopOpen) inv.collapsePanelInstant();
+            if (_hexmapMode) {
+              _hexmapMode = false;
+              _applyViewMode();
+              window.hexOnGoToInventory && window.hexOnGoToInventory();
+              if (!_handlingPopstate) history.pushState({ view: 'inventory' }, '');
+            }
+            switchToChar(char.id, false);
+          }
+        });
+
+        tabsEl.appendChild(tab);
+      });
+
+    const addBtn = document.getElementById('add-char-btn');
+    addBtn.hidden  = !window._isDM;
+    addBtn.onclick = createChar;
+
+    const activeTab = tabsEl.querySelector('.char-tab.active');
+    if (activeTab) activeTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  // Highlight tab on hover during inventory-item drag
+  document.addEventListener('pointermove', e => {
+    if (!document.body.classList.contains('is-dragging')) return;
+    const el  = document.elementFromPoint(e.clientX, e.clientY);
+    const tab = el && el.closest('[data-char-id]');
+    document.querySelectorAll('[data-char-id]').forEach(t => t.classList.remove('tab-drag-over'));
+    if (tab) tab.classList.add('tab-drag-over');
+  });
+
+  // ── TAB REORDER ────────────────────────────────────────────────────────────
+  (function setupTabDrag() {
+    const tabsEl = document.getElementById('char-tabs');
+    const indicator = document.createElement('div');
+    indicator.className = 'tab-drop-indicator';
+
+    let drag = null; // { el, charId, startX, insertBefore }
+
+    tabsEl.addEventListener('pointerdown', e => {
+      if (!window._isDM) return;
+      const tab = e.target.closest('.char-tab');
+      if (!tab || e.target.closest('.char-tab-del')) return;
+      if (e.button !== 0) return;
+      drag = { el: tab, charId: tab.dataset.charId, startX: e.clientX, active: false, insertBefore: null };
+    });
+
+    document.addEventListener('pointermove', e => {
+      if (!drag) return;
+      if (!drag.active && Math.abs(e.clientX - drag.startX) > 6) {
+        drag.active = true;
+        drag.el.classList.add('tab-reordering');
+      }
+      if (!drag.active) return;
+
+      const tabs = [...tabsEl.querySelectorAll('.char-tab:not(.tab-reordering)')];
+      let insertBefore = null;
+      for (const t of tabs) {
+        const r = t.getBoundingClientRect();
+        if (e.clientX < r.left + r.width / 2) { insertBefore = t; break; }
+      }
+      drag.insertBefore = insertBefore;
+      if (insertBefore) tabsEl.insertBefore(indicator, insertBefore);
+      else tabsEl.appendChild(indicator);
+    });
+
+    document.addEventListener('pointerup', () => {
+      if (!drag) return;
+      if (drag.active) {
+        drag.el.classList.remove('tab-reordering');
+        indicator.remove();
+
+        const allTabs = [...tabsEl.querySelectorAll('.char-tab')];
+        const others  = allTabs.filter(t => t !== drag.el);
+        let insertIdx = drag.insertBefore ? others.indexOf(drag.insertBefore) : -1;
+        if (insertIdx === -1) insertIdx = others.length;
+        others.splice(insertIdx, 0, drag.el);
+
+        others.forEach((t, i) => {
+          const id = t.dataset.charId;
+          const order = i * 1000;
+          if (allChars[id]) allChars[id].sortOrder = order;
+          database.ref(`/inventory_characters/${id}/sortOrder`).set(order);
+        });
+
+        renderTabs();
+      }
+      drag = null;
+    });
+
+    document.addEventListener('pointercancel', () => {
+      if (!drag) return;
+      if (drag.active) { drag.el.classList.remove('tab-reordering'); indicator.remove(); }
+      drag = null;
+    });
+  })();
+
+  window.invGoToHexmap = function() {
+    closeRules(); // pops its history entry first, if it was open
+    closeHistoryPanel(); // ditto for the DM history panel
+    inv.collapsePanelInstant();
+    _hexmapMode = true;
+    _applyViewMode();
+    _customEditKey = null;
+    _customEditOpen = false;
+    inv.closeInspector();
+  };
+
+  // ── SYSTEM BACK-BUTTON HANDLER ────────────────────────────────────────────
+  window.addEventListener('popstate', e => {
+    if (_suppressPopstate) { _suppressPopstate = false; return; }
+    if (window._navCalc.suppress) { window._navCalc.suppress = false; return; }
+    _handlingPopstate = true;
+    window._navCalc.handling = true;
+    try {
+      if (window._navCalc.open) { window._navCalc.hide?.(); return; }
+      if (rulesOpen) { goBackFromRules(); return; }
+      if (historyOpen) { goBackFromHistory(); return; }
+      const v = e.state?.view;
+      if (!v || v === 'hexmap') {
+        if (shopOpen) {
+          closeShop();
+        } else if (!_hexmapMode) {
+          _hexmapMode = true;
+          inv.collapsePanelInstant();
+          _applyViewMode();
+          window.hexOnGoToHexmap && window.hexOnGoToHexmap();
+          deselectChar();
+        }
+      } else if (v === 'inventory') {
+        if (shopOpen) closeShop();
+      }
+    } finally {
+      _handlingPopstate = false;
+      window._navCalc.handling = false;
+    }
+  });
 };

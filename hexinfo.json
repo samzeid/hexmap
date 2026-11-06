@@ -22,7 +22,7 @@
       "type": "environmental"
     },
     {
-      "hexes":["60,34", "61,33", "53,42", "52,42", "51,41", "49,41", "50,41", "51,40", "50,40", "49,40", "48,40", "47,40", "42,41", "43,41", "46,40", "43,40", "45,39", "44,39", "44,40", "43,39", "42,39"],
+      "hexes":["60,34", "61,33", "53,42", "52,42", "51,41", "49,41", "50,41", "51,40", "50,40", "49,40", "48,40", "47,40", "42,41", "43,41", "46,40", "43,40", "45,39", "44,39", "44,40", "43,39", "42,39", "60,34", "61,33"],
       "name": "Vessan Collective",
       "description": "The Vessan Collective is a powerful alliance of merchant guilds based on Vorsan Rest.",
       "color": "rgba(255,192,0,0.3)",
@@ -76,6 +76,20 @@
       "name": "Bogreach",
       "description": "",
       "color": "rgba(128,64,64,0.3)",
+      "type": "environmental"
+    },
+    {
+      "hexes": ["6,40", "6,39", "6,38", "5,37", "5,36", "4,36", "3,35", "2,35", "1,34"],
+      "name": "Storm's Way",
+      "description": "The sandstone chasm's underground tunnels flood with water during storms and dry rapidly. It's sheer cliffs and ever shifting geography makes it trecherous to navigate.",
+      "color": "rgba(128,128,128,0.3)",
+      "type": "environmental"
+    },
+    {
+      "hexes": ["10,40", "10,42", "9,40", "8,41", "9,41", "10,41", "11,40", "15,43", "15,42", "14,42", "13,41", "12,42", "11,41"],
+      "name": "Lake Carcho",
+      "description": "Carcho is named by the Koh tribes, they pay it great respect and hold its fresh water sacred.",
+      "color": "rgba(0,0,255,0.3)",
       "type": "environmental"
     },
     {
@@ -149,6 +163,13 @@
       "description": "The largest lake, Kraken Loch sees little merchant traffic. Northern and southern ports could link supply between Furstholm to Solis, but piracy and sea creatures make the waters perilous.",
       "color": "rgba(0,192,255,0.3)",
       "type": "environmental"
+    },
+    {
+      "hexes":["10,47","10,48", "9,47", "8,47","7,47","6,47","5,47","4,47","3,47","2,47","1,47","0,47","9,48", "8,48","7,48","6,48","5,48","4,48","3,48","2,48","1,48","0,48","9,49", "8,49","7,49","6,49","5,49","4,49","3,49","2,49","1,49","0,49","9,50", "8,50","7,50","6,50","5,50","4,50","3,50","2,50","1,50","0,50", "0,51","2,51", "4,51", "6,51", "8,51"],
+      "name": "The Steeplands",
+      "description": "The shadows of these mesas are used as cover from the harsh sun by the Koh tribes. It is said oases are hidden amongst them.",
+      "color": "rgba(128,128,128,0.3)",
+      "type": "environmental"
     }
   ],
   "locations": [ 
@@ -166,6 +187,16 @@
       "hexes": ["30,44"],
       "name": "Forkmouth",
       "description": "A vital trade hub at the river's mouth, Forkmouth sits far from the Godhold. With bandits thick along the Fork River, goods from Vorsan Rest arrive by sea and move inland under guard."
+    },
+    {
+      "hexes": ["21,39"],
+      "name": "Forkhold",
+      "description": "This stronghold was built to defend against the wilds and ferry prisoners and guards travelling to The Blackpit."
+    },
+    {
+      "hexes": ["22,36"],
+      "name": "The Blackpit",
+      "description": "Criminals turned slaves dig for exotic and precious metals. However, digging through the muk ridden, collapsing tunnels makes for deadly work."
     },
     {
       "hexes": ["23,44"],
@@ -382,6 +413,56 @@
       "hexes": ["12,36", "12,35"],
       "name": "Faithguard Tower",
       "description": "A tower built by the Custodiate to monitor the city and enforce law."
+    },
+    {
+      "hexes": ["43,40"],
+      "name": "Erenport",
+      "description": "The main trade port of the Vorsan Rest. A colourful and vibrant city where exotic goods are plentiful, as are blackmarkets and contraband."
+    },
+    {
+      "hexes": ["53,42"],
+      "name": "Faraland",
+      "description": "This town's lifeblood is exotic spices and rare produce, ill suited to other climates."
+    },
+    {
+      "hexes": ["13,27"],
+      "name": "Spiddle",
+      "description": "All but empty, this inhospitable little town offers lodging to those foolhardy enough to travel between Noxis and Calis."
+    },
+    {
+      "hexes": ["17,31"],
+      "name": "Spurn",
+      "description": "Those who travel with haste will sometimes take the path through Spurn. The roads are unforgiving and those who don't know better will lose their wagons to the bog."
+    },
+    {
+      "hexes": ["9,47"],
+      "name": "The Maiden",
+      "description": "An ancient face of a young woman carved into a large sandstone pillar."
+    },
+    {
+      "hexes": ["7,48","6,48","6,49"],
+      "name": "The Mortal",
+      "description": "The ancient face of a man and a skull carved into a large sandstone pillar."
+    },
+    {
+      "hexes": ["7,41"],
+      "name": "Markiel",
+      "description": "This small town is notable for its organised trade between Calis and the Koh tribes."
+    },
+    {
+      "hexes": ["8,40"],
+      "name": "Braken",
+      "description": "Arish, Braken and Kina struggle to support the surging population of Calis."
+    },
+    {
+      "hexes": ["13,40"],
+      "name": "Kina",
+      "description": "Arish, Braken and Kina struggle to support the surging population of Calis."
+    },
+    {
+      "hexes": ["17,38"],
+      "name": "Arish",
+      "description": "Arish, Braken and Kina struggle to support the surging population of Calis."
     }
   ]
 }
